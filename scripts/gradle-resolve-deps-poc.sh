@@ -9,20 +9,17 @@
 #
 # Task name: jvmOracleResolve (aligns with README 5.2).
 #
-# Limitations (POC):
+# Limitations:
 # - Configurations missing in a submodule are skipped (no error).
 # - Android/Kotlin MPP may use different configuration names; those are skipped.
-# - Interproject / external detection follows Gradle's resolution graph; edge cases
-#   may differ from the full product analyzer-init.gradle.
 # - Gradle may download to ~/.gradle; the project directory is not modified.
-# - Uses --no-configuration-cache: this POC's root task walks allprojects at
-#   execution time and captures init-script state; that is incompatible with the
-#   configuration cache (see Gradle "disallowed types" / cross-project access).
+# - Uses --no-configuration-cache: root jvmOracleResolve walks allprojects at
+#   execution time; incompatible with configuration cache for this task shape.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-INIT_SCRIPT="$REPO_ROOT/resources/poc-resolve-init.gradle"
+INIT_SCRIPT="$REPO_ROOT/resources/analyzer-init.gradle"
 
 PROJECT_ROOT="${1:-.}"
 if [[ ! -d "$PROJECT_ROOT" ]]; then

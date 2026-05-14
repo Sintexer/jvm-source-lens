@@ -85,7 +85,7 @@ The system is divided into four independent layers. Each layer communicates only
 │    GradleResolver │ MavenResolver* │ BazelResolver*      │
 │                        * future                         │
 └───────────────────────┬─────────────────────────────────┘
-                        │  ResolvedDependencyTree
+                        │  ResolutionOutput
 ┌───────────────────────▼─────────────────────────────────┐
 │            Extractor + Decompiler Layer                  │
 │   JAR lookup → source JAR preference → CFR fallback     │
@@ -94,42 +94,31 @@ The system is divided into four independent layers. Each layer communicates only
 
 ### 4.2 Core Interfaces (TypeScript)
 
-All resolver plugins implement the following contract. The downstream extraction layer depends only on `ResolvedArtifact` — it has zero knowledge of build systems.
+All resolver plugins implement the following contract. Resolution produces a **`ResolutionOutput`** document (stdout from Gradle today, and the same object persisted under `.jvm-oracle-cache/resolution.json` — see §5.5.2). The extractor chooses one `ResolvedConfiguration` per call using `ResolveOptions` (`configuration`, `includeTest`, `modulePath`); it does not re-invoke Gradle.
+
+Gradle failures, parse errors, or unsupported `schemaVersion` are returned as **`ResolutionResult` errors** (`ok: false`) rather than thrown, so callers can surface actionable messages. Unexpected bugs and process spawn failures follow the same `ok: false` path for Gradle exits; only corrupted installation (e.g. missing bundled init script) may throw from resource helpers.
 
 ```typescript
 interface DependencyResolver {
-  // Returns true if this resolver can handle the given project root
   detect(projectRoot: string): boolean;
-
-  // Resolves the full dependency tree for the project
-  resolve(projectRoot: string, options?: ResolveOptions): Promise<ResolvedDependencyTree>;
+  resolve(projectRoot: string, options?: ResolveOptions): Promise<ResolutionResult>;
 }
+
+type ResolutionResult =
+  | { ok: true; output: ResolutionOutput }
+  | { ok: false; message: string; stderr?: string };
 
 interface ResolveOptions {
-  modulePath?:    string;   // e.g. ':core:utils' — scope to one submodule
-  configuration?: string;   // e.g. 'compileClasspath' (default)
-  includeTest?:   boolean;  // include test-scoped deps (default: false)
+  modulePath?:    string;   // e.g. ':core:utils' — scope class lookup to one submodule
+  configuration?: string;   // e.g. 'compileClasspath' — which resolved configuration to read
+  includeTest?:   boolean;  // when defaulting configuration, include test classpaths (default: false)
 }
 
-interface ResolvedDependencyTree {
-  modules: ProjectModule[];
-}
-
-interface ProjectModule {
-  name:      string;            // e.g. ':app', ':core:utils', 'root'
-  path:      string;            // absolute filesystem path
-  artifacts: ResolvedArtifact[];
-}
-
-interface ResolvedArtifact {
-  group:           string;
-  name:            string;
-  version:         string;      // always the resolved version, not declared
-  jarPath:         string;      // absolute path to classes JAR
-  sourcesJarPath?: string;      // absolute path to sources JAR, if available
-  scope:           'compile' | 'runtime' | 'test' | 'provided';
-}
+// Full JSON shape: schemaVersion, resolvedAt, buildSystem, projectRoot, modules[], errors[]
+// and nested ResolvedModule / ResolvedConfiguration / ResolvedArtifact — see §5.5.2.
 ```
+
+The exhaustive TypeScript definitions in this repo live in `src/resolvers/resolution-output.ts` and match §5.5.2.
 
 ### 4.3 Resolver Registry
 
@@ -158,20 +147,23 @@ export function detectResolver(projectRoot: string): DependencyResolver {
 ### 4.4 Repository Structure
 
 ```
+resources/
+  cfr.jar                 ← bundled CFR (also validated in prepack)
+  analyzer-init.gradle    ← bundled Gradle init script (--init-script path)
 src/
   resolvers/
     index.ts              ← registry + detectResolver()
-    base.ts               ← DependencyResolver interface + shared types
+    base.ts               ← DependencyResolver + ResolutionResult types
+    resolution-output.ts  ← ResolutionOutput + JSON validators
     gradle/
-      index.ts            ← GradleResolver implementation
-      analyzer-init.gradle  ← bundled init script (injected at runtime)
+      index.ts            ← GradleResolver (Bun.spawn → Gradle)
     maven/                ← future
       index.ts
+  bundled-resources.ts    ← getBundledResource(), package-root resolution
   extractor/
     index.ts              ← JAR extraction, source-preference logic
   decompiler/
     index.ts              ← CFR subprocess wrapper
-    cfr.jar               ← bundled decompiler binary
   cache/
     index.ts              ← resolution cache with hash-based invalidation
   cli.ts                  ← CLI entry point
@@ -191,33 +183,41 @@ src/
 
 ### 5.2 Resolution Mechanism
 
-Resolution is performed by injecting a bundled Gradle init script at invocation time using the `--init-script` flag. This requires **zero project modification** and works regardless of the project's own Gradle configuration.
+Resolution is performed by injecting the bundled [`resources/analyzer-init.gradle`](resources/analyzer-init.gradle) with Gradle’s `--init-script` flag. Only the **absolute path** to that file is external; nothing is written under the target project’s tree for resolution itself.
+
+The Node implementation prefers **`./gradlew`** when present (correct Gradle version for the repo), otherwise **`gradle`** on `PATH`. It passes **`-PjvmOracleWrapper=true|false`** so the emitted JSON records whether the wrapper was used (`buildSystem.wrapper`).
+
+**Configuration cache:** v1 always passes **`--no-configuration-cache`**. The bundled task resolves every submodule in one root task that walks `allprojects` at execution time; that pattern is incompatible with Gradle’s configuration cache until a future redesign (e.g. per-project tasks). Real-world projects with configuration cache enabled in `gradle.properties` still work because this flag disables CC for this invocation only.
 
 ```typescript
-// Prefer the project's own wrapper for version correctness
-const gradleCmd = fs.existsSync(path.join(projectRoot, 'gradlew'))
-  ? './gradlew'
-  : 'gradle';
+const useWrapper = fs.existsSync(path.join(projectRoot, 'gradlew'));
+const initScript = getBundledResource('analyzer-init.gradle'); // package-root absolute path
 
-const result = execSync(
-  `${gradleCmd} jvmOracleResolve --init-script "${INIT_SCRIPT_PATH}" --quiet`,
-  { cwd: projectRoot, encoding: 'utf-8' }
-);
+const argv = [
+  ...(useWrapper ? [path.join(projectRoot, 'gradlew')] : ['gradle']),
+  `-PjvmOracleWrapper=${useWrapper}`,
+  '--no-configuration-cache',
+  '--init-script',
+  initScript,
+  '--quiet',
+  'jvmOracleResolve',
+];
 
-const tree: ResolvedDependencyTree = JSON.parse(result);
+const proc = Bun.spawn(argv, { cwd: projectRoot, stdout: 'pipe', stderr: 'pipe' });
+// await streams + exit code → parse stdout JSON → validate schemaVersion → ResolutionResult
 ```
 
 ### 5.3 Init Script Contract
 
-The bundled `analyzer-init.gradle` registers a task `jvmOracleResolve` on every subproject. When executed, each subproject emits a JSON blob to stdout describing its resolved artifacts. The Node process collects and merges these into a single `ResolvedDependencyTree`.
+The bundled `analyzer-init.gradle` registers a **single root task** named `jvmOracleResolve` from `gradle.projectsLoaded`. Running that task walks **all** Gradle subprojects once and prints **one** JSON document to stdout (the `ResolutionOutput` in §5.5.2). The Node side parses that single blob; there is no merge step for multiple per-project prints.
 
 **Critical design decisions baked into the init script:**
 
-- **Targets `compileClasspath` by default.** This is what the compiler sees — it is the most semantically meaningful configuration for an agent writing code. `runtimeClasspath` adds artifacts the agent cannot actually import.
-- **Outputs resolved versions, not declared versions.** When Gradle resolves a version conflict (e.g., `1.0` declared but `2.1` selected via conflict resolution), the output reflects `2.1` — what is actually on the classpath.
-- **Enumerates all subprojects independently.** Each subproject's configuration is resolved separately, enabling per-module queries.
-- **Recognizes inter-project dependencies.** `project(':core')` references are emitted as source pointers (absolute path to the subproject root), not as JARs.
-- **Suppresses all Gradle output except the JSON blob** using `--quiet` and `println` only for the structured result.
+- **Eager multi-scope output.** Each module lists `compileClasspath`, `runtimeClasspath`, `testCompileClasspath`, and `testRuntimeClasspath` when those configurations exist. Callers that only need compile scope still benefit from one Gradle invocation.
+- **Targets `compileClasspath` by default** for class lookup semantics — it is what the compiler sees. `runtimeClasspath` adds artifacts the agent cannot always import; both are still resolved and cached.
+- **Outputs resolved versions, not declared ranges.** Gradle’s resolution graph (including conflict resolution and BOMs) determines coordinates; the `direct` flag marks first-level vs transitive edges.
+- **Inter-project vs external.** Project components are emitted as `origin: "interproject"` with `interproject.modulePath`. External modules use resolved JAR paths. Artifact files under **other subprojects’ `buildDir`** are filtered out so the same logical dependency is not listed twice as both a project edge and a built JAR.
+- **Suppresses Gradle chatter** with `--quiet` and prints only the structured JSON via `println`.
 
 ### 5.4 Multimodule Handling
 
@@ -233,9 +233,9 @@ jvm-dependency-resolver get com.example.MyClass --project /path/to/project --mod
 
 When `--module` is omitted on a multimodule project, the tool uses the union of all modules' resolved artifacts. If the same class exists in multiple modules with different versions, the tool surfaces the conflict explicitly rather than picking silently.
 
-## Section 5.4 — Resolution Output Format (new, insert after 5.3)
+### 5.5 Resolution output format
 
-### 5.4.1 Eager Multi-Scope Resolution
+#### 5.5.1 Eager Multi-Scope Resolution
 
 The init script resolves **all configurations for every submodule in a single Gradle invocation**. This is a deliberate performance trade-off: Gradle's startup and configuration cost is paid once, and the resulting cache file is complete regardless of which configuration the caller later queries. Subsequent class lookups — regardless of scope — always hit the in-memory or disk cache rather than re-invoking Gradle.
 
@@ -248,7 +248,7 @@ Configurations resolved per module:
 
 Any configuration that cannot be resolved (e.g. does not exist in a given submodule) is silently skipped rather than treated as an error.
 
-### 5.4.2 JSON Schema
+#### 5.5.2 JSON Schema
 
 The init script emits a single JSON document to stdout. The Node process captures it, validates the `schemaVersion`, writes it to the resolution cache, and uses it for all subsequent lookups without re-invoking Gradle.
 
@@ -305,7 +305,7 @@ interface ResolutionError {
 }
 ```
 
-### 5.4.3 Canonical Example
+#### 5.5.3 Canonical Example
 
 ```json
 {
@@ -466,7 +466,7 @@ interface ResolutionError {
 }
 ```
 
-### 5.4.4 Field Rationale
+#### 5.5.4 Field Rationale
 
 | Field | Rationale |
 |---|---|
@@ -478,15 +478,26 @@ interface ResolutionError {
 | `direct: boolean` | Distinguishes declared from transitive deps; a class found in a `direct: true` artifact is a stronger match signal |
 | `origin` enum | Three fundamentally different artifact kinds require different downstream handling: `external` → JAR in cache, `interproject` → redirect to source dir, `local-file` → raw path |
 | `version: null` for interproject | Explicit null is better than omitting the field; the consumer knows the field exists but the concept does not apply |
-| `sourcesJarPath: null` | Means "checked and absent" — distinct from the field being omitted, which would mean "not checked" |
+| `sourcesJarPath: null` | On `compileClasspath` (and similar), Gradle usually resolves the main artifact only — **sources classifiers are often absent**, so `null` is expected unless the build adds sources or a separate resolution path. A future schema revision may add an explicit `sourcesResolvable` hint and on-demand Gradle steps. |
 | `errors` always present | Partial resolution failures (one unreachable submodule) should not discard results for the rest; non-empty errors array does not mean the output is unusable |
+| Artifact identity | Rows are unique by **`group` + `name` + `version`** (with `version: null` for inter-project). Multiple rows sharing the same `group` are normal (different artifact names). |
+| `buildDir` filtering | External JARs whose paths live under **another** subproject’s `buildDir` are skipped so a dependency is not double-counted as both an inter-project edge and a built output JAR. |
+| Configuration cache | Consumers must pass **`--no-configuration-cache`** for the current root-task design (see §5.2); Gradle may still write to `~/.gradle` as usual. |
 
+#### 5.5.5 Validated behavior (POC → product)
+
+The following behaviors were validated against real Gradle builds before folding the POC into `analyzer-init.gradle` and `GradleResolver`:
+
+- **Zero writes under the target repo** for resolution — only an external init script path is passed; Gradle may use global caches as always.
+- **True Gradle resolution** — coordinates are **resolved** (including transitives and conflict resolution), not guessed from `~/.gradle` directory listing.
+- **Single JSON document** per invocation, eager four-scope output per module, `errors[]` for partial failures.
+- **Inter-project vs external** — project dependencies carry `interproject`; sibling `buildDir` artifacts are filtered from the external list.
 
 ## 6. Caching Strategy
 
 ### 6.1 Resolution Cache
 
-Gradle invocation is expensive (1–10 seconds). The tool caches the `ResolvedDependencyTree` and invalidates it only when build files change.
+Gradle invocation is expensive (1–10 seconds). The tool caches the full **`ResolutionOutput`** JSON (same structure as §5.5.2 / Gradle stdout) and invalidates it only when build files change.
 
 **Cache key:** SHA-256 hash of all build-relevant files in the project:
 - `build.gradle` / `build.gradle.kts` (all subprojects)
@@ -496,7 +507,7 @@ Gradle invocation is expensive (1–10 seconds). The tool caches the `ResolvedDe
 
 **Cache location:** `<projectRoot>/.jvm-oracle-cache/resolution.json` — the one directory the tool does write, but inside the project's own cache space, not modifying any build files.
 
-When the hash matches, the cached tree is used immediately. When it differs, Gradle is re-invoked and the cache is refreshed.
+When the hash matches, the cached document is used immediately. When it differs, Gradle is re-invoked and the cache is refreshed.
 
 ### 6.2 Decompilation Cache
 
@@ -512,7 +523,7 @@ This means sequential agent calls for classes within the same dependency pay the
 
 ## 7. Class Extraction Logic
 
-Once a `ResolvedDependencyTree` is available, class lookup follows this priority order:
+Once a **`ResolutionOutput`** is loaded (from cache or a fresh Gradle run), the extractor picks the relevant `ResolvedConfiguration` using `ResolveOptions`, then class lookup follows this priority order:
 
 ```
 1. Is this class in an inter-project dependency?
@@ -611,7 +622,7 @@ resources/
   analyzer-init.gradle ← bundled Gradle init script
 ```
 
-The `files` array in `package.json` ensures `resources/` is included in the published tarball. Bundled resource paths are resolved from the **package root** (nearest `package.json` with `name: "jvm-dependency-resolver"`), not from the caller’s working directory, so `dist/` layout changes do not break resolution.
+The `files` array in `package.json` ensures `resources/` is included in the published tarball. **`bun run prepack`** runs typecheck, build, and [`scripts/validate-bundled-resources.ts`](scripts/validate-bundled-resources.ts) (minimum sizes for `cfr.jar` and `analyzer-init.gradle`). Bundled resource paths are resolved from the **package root** (nearest `package.json` with `name: "jvm-dependency-resolver"`), not from the caller’s working directory, so `dist/` layout changes do not break resolution.
 
 ### 9.2 Runtime Resource Resolution
 

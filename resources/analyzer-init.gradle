@@ -1,3 +1,180 @@
-// Placeholder for the bundled Gradle init script used by jvm-dependency-resolver.
-// Replace with the full implementation described in README.md (jvmOracleResolve / ResolutionOutput).
-// This file must remain non-trivial so `bun run prepack` validation passes before you wire the real script.
+import groovy.json.JsonBuilder
+import java.time.Instant
+import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.ResolvedArtifact
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+import org.gradle.api.artifacts.result.ResolvedComponentResult
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
+
+gradle.projectsLoaded { g ->
+    g.rootProject.tasks.register("jvmOracleResolve") {
+        group = "jvm-oracle"
+        description = "Emit full resolution JSON (README §5.4.2 schema)."
+        doLast {
+            def root = project
+            def errors = []
+            def projectRoot = root.rootDir.absolutePath
+            def wrapperProp = root.gradle.startParameter.projectProperties.get("jvmOracleWrapper")
+            def wrapper = wrapperProp != null && "true".equalsIgnoreCase(String.valueOf(wrapperProp))
+
+            def configSpecs = [
+                [name: "compileClasspath", scope: "compile"],
+                [name: "runtimeClasspath", scope: "runtime"],
+                [name: "testCompileClasspath", scope: "test-compile"],
+                [name: "testRuntimeClasspath", scope: "test-runtime"],
+            ]
+
+            def modules = []
+            root.allprojects { org.gradle.api.Project project ->
+                def configurationsOut = []
+                configSpecs.each { spec ->
+                    def cfgName = spec.name
+                    def cfg = project.configurations.findByName(cfgName)
+                    if (cfg == null) {
+                        return
+                    }
+                    try {
+                        def otherBuildDirs = root.allprojects.findAll { it != project }.collect { it.buildDir.absolutePath }
+                        def artifacts = collectArtifacts(project, cfg as Configuration, otherBuildDirs)
+                        configurationsOut << [
+                            name        : cfgName,
+                            scope       : spec.scope,
+                            artifacts   : artifacts,
+                        ]
+                    } catch (Exception e) {
+                        errors << [
+                            module         : (project.path == ":" ? "root" : project.path),
+                            configuration  : cfgName,
+                            message        : e.message ?: e.class.name,
+                            fatal          : false,
+                        ]
+                    }
+                }
+                modules << [
+                    name            : (project.path == ":" ? "root" : project.path),
+                    path            : project.projectDir.absolutePath,
+                    configurations: configurationsOut,
+                ]
+            }
+
+            def result = [
+                schemaVersion: "1.0",
+                resolvedAt   : Instant.now().toString(),
+                buildSystem  : [
+                    type   : "gradle",
+                    version: root.gradle.gradleVersion,
+                    wrapper: wrapper,
+                ],
+                projectRoot: projectRoot,
+                modules    : modules,
+                errors     : errors,
+            ]
+            println new JsonBuilder(result).toPrettyString()
+        }
+    }
+}
+
+@SuppressWarnings("GrMethodMayBeStatic")
+List<Map<String, Object>> collectArtifacts(org.gradle.api.Project project, Configuration config, List<String> otherBuildDirs) {
+    def rr = config.incoming.resolutionResult
+    def root = rr.root
+
+    def directSelected = new HashSet<ResolvedComponentResult>()
+    root.dependencies.each { dep ->
+        if (dep instanceof ResolvedDependencyResult && dep.from == root) {
+            directSelected.add(dep.selected)
+        }
+    }
+
+    def moduleKeyToComponent = [:] as Map<String, ResolvedComponentResult>
+    rr.allComponents.each { ResolvedComponentResult comp ->
+        if (comp.id instanceof ModuleComponentIdentifier) {
+            def m = (ModuleComponentIdentifier) comp.id
+            moduleKeyToComponent[moduleKeyFromId(m)] = comp
+        }
+    }
+
+    def list = []
+
+    rr.allComponents.each { ResolvedComponentResult comp ->
+        if (comp == root) {
+            return
+        }
+        def id = comp.id
+        if (!(id instanceof ProjectComponentIdentifier)) {
+            return
+        }
+        def pci = (ProjectComponentIdentifier) id
+        def direct = directSelected.contains(comp)
+        def other = project.rootProject.findProject(pci.projectPath.toString())
+        def group = other != null ? String.valueOf(other.group) : ""
+        def name = other != null ? other.name : pci.projectPath.toString()
+        def modulePath = other != null ? other.projectDir.absolutePath : pci.projectPath.toString()
+        list << [
+            group           : group,
+            name            : name,
+            version         : null,
+            type            : "project",
+            jarPath         : null,
+            sourcesJarPath  : null,
+            origin          : "interproject",
+            direct          : direct,
+            interproject    : [
+                moduleName: pci.projectPath.toString(),
+                modulePath: modulePath,
+            ],
+        ]
+    }
+
+    def byKey = [:].withDefault { [main: null, sources: null, mvi: null] }
+    config.resolvedConfiguration.resolvedArtifacts.each { ResolvedArtifact ra ->
+        def f = ra.file
+        if (f != null && otherBuildDirs.any { f.absolutePath.startsWith(it) }) {
+            return
+        }
+        def mvi = ra.moduleVersion.id
+        def key = "${mvi.group}:${mvi.name}:${mvi.version}"
+        def entry = byKey[key]
+        entry.mvi = mvi
+        def classifier = ra.classifier ?: ""
+        if ("sources".equals(classifier) || f.name.endsWith("-sources.jar")) {
+            entry.sources = f
+        } else if (!f.name.endsWith("-javadoc.jar")) {
+            if (entry.main == null || classifier.isEmpty()) {
+                entry.main = f
+            }
+        }
+    }
+
+    byKey.each { key, entry ->
+        if (entry.mvi == null) {
+            return
+        }
+        def mvi = entry.mvi
+        def comp = moduleKeyToComponent[moduleKeyFromMvi(mvi)]
+        boolean direct = comp != null && directSelected.contains(comp)
+        list << [
+            group          : mvi.group,
+            name           : mvi.name,
+            version        : mvi.version,
+            type           : "jar",
+            jarPath        : entry.main != null ? entry.main.absolutePath : null,
+            sourcesJarPath : entry.sources != null ? entry.sources.absolutePath : null,
+            origin         : "external",
+            direct         : direct,
+        ]
+    }
+
+    return list
+}
+
+@SuppressWarnings("GrMethodMayBeStatic")
+String moduleKeyFromId(ModuleComponentIdentifier m) {
+    return "${m.group}:${m.module}:${m.version}"
+}
+
+@SuppressWarnings("GrMethodMayBeStatic")
+String moduleKeyFromMvi(def mvi) {
+    return "${mvi.group}:${mvi.name}:${mvi.version}"
+}

@@ -2,11 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const BUNDLED_RESOURCE_NAMES = [
-  'cfr.jar',
-  'analyzer-init.gradle',
-  'poc-resolve-init.gradle',
-] as const;
+export const BUNDLED_RESOURCE_NAMES = ['cfr.jar', 'analyzer-init.gradle'] as const;
 
 export type BundledResourceName = (typeof BUNDLED_RESOURCE_NAMES)[number];
 
