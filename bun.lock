@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "jvm-dependency-resolver",
+      "name": "jvmsrc",
       "dependencies": {
         "commander": "^14.0.3",
       },

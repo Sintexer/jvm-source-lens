@@ -7,13 +7,13 @@
 # eager resolution of compileClasspath, runtimeClasspath, testCompileClasspath,
 # and testRuntimeClasspath per submodule; resolved versions; partial errors array.
 #
-# Task name: jvmOracleResolve (aligns with README 5.2).
+# Task name: jvmsrcResolve (aligns with README §5.2).
 #
 # Limitations:
 # - Configurations missing in a submodule are skipped (no error).
 # - Android/Kotlin MPP may use different configuration names; those are skipped.
 # - Gradle may download to ~/.gradle; the project directory is not modified.
-# - Uses --no-configuration-cache: root jvmOracleResolve walks allprojects at
+# - Uses --no-configuration-cache: root jvmsrcResolve walks allprojects at
 #   execution time; incompatible with configuration cache for this task shape.
 set -euo pipefail
 
@@ -48,10 +48,10 @@ if [[ -f ./gradlew ]]; then
   else
     GRADLE_CMD=(bash ./gradlew)
   fi
-  GRADLE_PROPS=(-PjvmOracleWrapper=true)
+  GRADLE_PROPS=(-PjvmsrcWrapper=true)
 elif command -v gradle >/dev/null 2>&1; then
   GRADLE_CMD=(gradle)
-  GRADLE_PROPS=(-PjvmOracleWrapper=false)
+  GRADLE_PROPS=(-PjvmsrcWrapper=false)
 else
   echo "Neither ./gradlew nor 'gradle' on PATH found in $PROJECT_ROOT" >&2
   exit 1
@@ -61,4 +61,4 @@ exec "${GRADLE_CMD[@]}" "${GRADLE_PROPS[@]}" \
   --no-configuration-cache \
   --init-script "$INIT_SCRIPT" \
   --quiet \
-  jvmOracleResolve
+  jvmsrcResolve

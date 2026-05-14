@@ -4,14 +4,30 @@ import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { resolveProjectRoot } from './project-path.js';
 
+/** `jvmsrc com.example.Foo` → same as `jvmsrc get com.example.Foo` */
+function injectImplicitGetSubcommand(): void {
+  const subcommands = new Set(['get', 'mcp', 'config']);
+  const raw = process.argv.slice(2);
+  if (raw.length === 0) {
+    return;
+  }
+  const first = raw[0];
+  if (!first || subcommands.has(first) || first.startsWith('-')) {
+    return;
+  }
+  process.argv.splice(2, 0, 'get');
+}
+
+injectImplicitGetSubcommand();
+
 const pkgPath = fileURLToPath(new URL('../package.json', import.meta.url));
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
 
 const program = new Command();
 
 program
-  .name('jvm-dependency-resolver')
-  .description('Resolve JVM build-tool dependencies and extract sources (Gradle first)')
+  .name('jvmsrc')
+  .description('JVM Source Lens — resolve JVM build-tool dependencies and extract sources (Gradle first)')
   .version(pkg.version ?? '0.0.0');
 
 program

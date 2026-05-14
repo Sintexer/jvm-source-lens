@@ -40,7 +40,7 @@ export class GradleResolver implements DependencyResolver {
 
     const initScript = getBundledResource('analyzer-init.gradle');
     const useWrapper = fs.existsSync(path.join(root, 'gradlew'));
-    const wrapperProp = `-PjvmOracleWrapper=${useWrapper ? 'true' : 'false'}`;
+    const wrapperProp = `-PjvmsrcWrapper=${useWrapper ? 'true' : 'false'}`;
 
     const argv: string[] = [];
     if (useWrapper) {
@@ -61,7 +61,7 @@ export class GradleResolver implements DependencyResolver {
       '--init-script',
       initScript,
       '--quiet',
-      'jvmOracleResolve',
+      'jvmsrcResolve',
     );
 
     let proc: ReturnType<typeof Bun.spawn>;

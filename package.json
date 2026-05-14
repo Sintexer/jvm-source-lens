@@ -1,5 +1,5 @@
 {
-  "name": "jvm-dependency-resolver",
+  "name": "jvmsrc",
   "version": "0.1.0",
   "main": "./dist/cli.js",
   "type": "module",
@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "bin": {
-    "jvm-dependency-resolver": "./dist/cli.js"
+    "jvmsrc": "./dist/cli.js"
   },
   "files": [
     "dist",

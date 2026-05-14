@@ -16,7 +16,7 @@ function findPackageRoot(startDir: string): string {
       try {
         const raw = fs.readFileSync(pkgPath, 'utf8');
         const name = JSON.parse(raw) as { name?: string };
-        if (name.name === 'jvm-dependency-resolver') {
+        if (name.name === 'jvmsrc') {
           return dir;
         }
       } catch {

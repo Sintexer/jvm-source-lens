@@ -8,14 +8,14 @@ import org.gradle.api.artifacts.result.ResolvedComponentResult
 import org.gradle.api.artifacts.result.ResolvedDependencyResult
 
 gradle.projectsLoaded { g ->
-    g.rootProject.tasks.register("jvmOracleResolve") {
-        group = "jvm-oracle"
-        description = "Emit full resolution JSON (README §5.4.2 schema)."
+    g.rootProject.tasks.register("jvmsrcResolve") {
+        group = "jvmsrc"
+        description = "Emit full resolution JSON (README §5.5.2 schema)."
         doLast {
             def root = project
             def errors = []
             def projectRoot = root.rootDir.absolutePath
-            def wrapperProp = root.gradle.startParameter.projectProperties.get("jvmOracleWrapper")
+            def wrapperProp = root.gradle.startParameter.projectProperties.get("jvmsrcWrapper")
             def wrapper = wrapperProp != null && "true".equalsIgnoreCase(String.valueOf(wrapperProp))
 
             def configSpecs = [

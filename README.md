@@ -1,5 +1,12 @@
-# JVM Class Oracle — Technical Specification
-**Version 2.0 · Extensible Multi-Build-System Architecture**
+# JVM Source Lens
+
+**Technical specification** — how the **`jvmsrc`** CLI and MCP server are supposed to work.
+
+If you work on a Java-style codebase (Java, Kotlin, Scala, Groovy) with agents or automation, agents often need the truth about a dependency: what version is *actually* on the classpath, what does a class look like, and can you read real source or only bytecode? **JVM Source Lens** answers that by **asking Gradle** for the resolved graph, then opening the right jar or subproject. Nothing gets written into your project for resolution — the tool injects an init script from the package instead of touching your tree. When there is no sources jar, the bundled CFR build still gives you readable Java.
+
+**What this repo covers:** Gradle first, offline-friendly packaging (`npm` / `npx`), resolution output you can cache, and class lookup (source preferred, decompile as backup). Maven, Bazel, and other resolvers are sketched in the architecture but not required for the first shipping path.
+
+**Why not just read `~/.gradle`?** Those folders hold lots of versions across lots of projects. Picking a jar by path or name alone is guesswork. The rule here is: **if it matters, ask the build tool**, then read files from the answer it gives you.
 
 ---
 
@@ -95,7 +102,7 @@ The system is divided into four independent layers. Each layer communicates only
 
 ### 4.2 Core Interfaces (TypeScript)
 
-All resolver plugins implement the following contract. Resolution produces a **`ResolutionOutput`** document (stdout from Gradle today, and the same object persisted under `.jvm-oracle-cache/resolution.json` — see §5.5.2). The extractor chooses one `ResolvedConfiguration` per call using `ResolveOptions` (`configuration`, `includeTest`, `modulePath`); it does not re-invoke Gradle.
+All resolver plugins implement the following contract. Resolution produces a **`ResolutionOutput`** document (stdout from Gradle today, and the same object persisted under `.jvmsrc-cache/resolution.json` — see §5.5.2). The extractor chooses one `ResolvedConfiguration` per call using `ResolveOptions` (`configuration`, `includeTest`, `modulePath`); it does not re-invoke Gradle.
 
 Gradle failures, parse errors, or unsupported `schemaVersion` are returned as **`ResolutionResult` errors** (`ok: false`) rather than thrown, so callers can surface actionable messages. Unexpected bugs and process spawn failures follow the same `ok: false` path for Gradle exits; only corrupted installation (e.g. missing bundled init script) may throw from resource helpers.
 
@@ -186,7 +193,7 @@ src/
 
 Resolution is performed by injecting the bundled [`resources/analyzer-init.gradle`](resources/analyzer-init.gradle) with Gradle’s `--init-script` flag. Only the **absolute path** to that file is external; nothing is written under the target project’s tree for resolution itself.
 
-The Node implementation prefers **`./gradlew`** when present (correct Gradle version for the repo), otherwise **`gradle`** on `PATH`. It passes **`-PjvmOracleWrapper=true|false`** so the emitted JSON records whether the wrapper was used (`buildSystem.wrapper`).
+The Node implementation prefers **`./gradlew`** when present (correct Gradle version for the repo), otherwise **`gradle`** on `PATH`. It passes **`-PjvmsrcWrapper=true|false`** so the emitted JSON records whether the wrapper was used (`buildSystem.wrapper`).
 
 **Configuration cache:** v1 always passes **`--no-configuration-cache`**. The bundled task resolves every submodule in one root task that walks `allprojects` at execution time; that pattern is incompatible with Gradle’s configuration cache until a future redesign (e.g. per-project tasks). Real-world projects with configuration cache enabled in `gradle.properties` still work because this flag disables CC for this invocation only.
 
@@ -196,12 +203,12 @@ const initScript = getBundledResource('analyzer-init.gradle'); // package-root a
 
 const argv = [
   ...(useWrapper ? [path.join(projectRoot, 'gradlew')] : ['gradle']),
-  `-PjvmOracleWrapper=${useWrapper}`,
+  `-PjvmsrcWrapper=${useWrapper}`,
   '--no-configuration-cache',
   '--init-script',
   initScript,
   '--quiet',
-  'jvmOracleResolve',
+  'jvmsrcResolve',
 ];
 
 const proc = Bun.spawn(argv, { cwd: projectRoot, stdout: 'pipe', stderr: 'pipe' });
@@ -210,7 +217,7 @@ const proc = Bun.spawn(argv, { cwd: projectRoot, stdout: 'pipe', stderr: 'pipe' 
 
 ### 5.3 Init Script Contract
 
-The bundled `analyzer-init.gradle` registers a **single root task** named `jvmOracleResolve` from `gradle.projectsLoaded`. Running that task walks **all** Gradle subprojects once and prints **one** JSON document to stdout (the `ResolutionOutput` in §5.5.2). The Node side parses that single blob; there is no merge step for multiple per-project prints.
+The bundled `analyzer-init.gradle` registers a **single root task** named `jvmsrcResolve` from `gradle.projectsLoaded`. Running that task walks **all** Gradle subprojects once and prints **one** JSON document to stdout (the `ResolutionOutput` in §5.5.2). The Node side parses that single blob; there is no merge step for multiple per-project prints.
 
 **Critical design decisions baked into the init script:**
 
@@ -226,10 +233,13 @@ For a multimodule Gradle project, the tool resolves and indexes all submodules i
 
 ```bash
 # Resolves against the root project (union of all modules)
-jvm-dependency-resolver get com.example.MyClass --project /path/to/project
+jvmsrc com.example.MyClass --project /path/to/project
+
+# Explicit get (equivalent)
+jvmsrc get com.example.MyClass --project /path/to/project
 
 # Resolves against a specific submodule
-jvm-dependency-resolver get com.example.MyClass --project /path/to/project --module :core:utils
+jvmsrc com.example.MyClass --project /path/to/project --module :core:utils
 ```
 
 When `--module` is omitted on a multimodule project, the tool uses the union of all modules' resolved artifacts. If the same class exists in multiple modules with different versions, the tool surfaces the conflict explicitly rather than picking silently.
@@ -506,18 +516,18 @@ Gradle invocation is expensive (1–10 seconds). The tool caches the full **`Res
 - `gradle/libs.versions.toml` (version catalog, if present)
 - `gradle/dependency-locks/*.lockfile` (if present)
 
-**Cache location:** `<projectRoot>/.jvm-oracle-cache/resolution.json` — the one directory the tool does write, but inside the project's own cache space, not modifying any build files.
+**Cache location:** `<projectRoot>/.jvmsrc-cache/resolution.json` — the one directory the tool does write, but inside the project's own cache space, not modifying any build files.
 
 When the hash matches, the cached document is used immediately. When it differs, Gradle is re-invoked and the cache is refreshed.
 
-**Escape hatch — `forceRefresh`:** Hash keys only cover tracked build inputs (`build.gradle*`, `settings.gradle*`, version catalogs, lockfiles). They do **not** detect SNAPSHOT bumps in a remote repo, a teammate clearing `~/.gradle`, or CI using a fresh dependency cache while build files are unchanged. **`resolve_dependencies`** (MCP) and **`--force-refresh`** (CLI) bypass the resolution cache and **always** re-invoke Gradle so the agent or developer can say “artifacts changed; re-resolve anyway” without manually deleting `.jvm-oracle-cache/`.
+**Escape hatch — `forceRefresh`:** Hash keys only cover tracked build inputs (`build.gradle*`, `settings.gradle*`, version catalogs, lockfiles). They do **not** detect SNAPSHOT bumps in a remote repo, a teammate clearing `~/.gradle`, or CI using a fresh dependency cache while build files are unchanged. **`resolve_dependencies`** (MCP) and **`--force-refresh`** (CLI) bypass the resolution cache and **always** re-invoke Gradle so the agent or developer can say “artifacts changed; re-resolve anyway” without manually deleting `.jvmsrc-cache/`.
 
 ### 6.2 Decompilation Cache
 
 CFR decompilation results are cached by artifact coordinates + class name:
 
 ```
-<projectRoot>/.jvm-oracle-cache/decompiled/<group>/<artifact>/<version>/<ClassName>.java
+<projectRoot>/.jvmsrc-cache/decompiled/<group>/<artifact>/<version>/<ClassName>.java
 ```
 
 This means sequential agent calls for classes within the same dependency pay the decompilation cost only once.
@@ -562,30 +572,35 @@ Agents should treat `sourceAvailable: false` as “trust types and control flow;
 
 ### 8.1 CLI
 
+The published executable is **`jvmsrc`**. Class lookup may be written as **`jvmsrc get <className>`** or the shorthand **`jvmsrc <className>`** — when the first argument is not `get`, `mcp`, or `config`, the CLI treats it as a class name and runs the `get` command (same flags: `--project`, `--module`, etc.).
+
 ```bash
 # Install globally
-npm install -g jvm-dependency-resolver
+npm install -g jvmsrc
 
 # Or run without installation
-npx jvm-dependency-resolver get com.example.MyClass
+npx jvmsrc get com.example.MyClass
 
 # With options
-jvm-dependency-resolver get com.example.MyClass \
+jvmsrc get com.example.MyClass \
   --project /path/to/project \
   --module :core:utils \
   --configuration compileClasspath \
   --include-test
 
+# Shorthand (equivalent to: jvmsrc get com.example.MyClass …)
+jvmsrc com.example.MyClass --project /path/to/project
+
 # Bypass resolution cache (hash unchanged but artifacts on disk changed — e.g. SNAPSHOT,
 # manual ~/.gradle cleanup, CI cold cache). Re-invokes Gradle unconditionally.
-jvm-dependency-resolver get com.example.MyClass --project /path/to/project --force-refresh
+jvmsrc get com.example.MyClass --project /path/to/project --force-refresh
 ```
 
 Output is the Java source code on `stdout` together with metadata (including **`sourceAvailable`**, see §7.1). Errors go to `stderr` with a non-zero exit code, making the tool composable in shell pipelines and agent tool calls.
 
 #### 8.1.1 `config` subcommand (planned)
 
-A **`jvm-dependency-resolver config`** command inspects the environment (build system markers, `JAVA_HOME` / detected JDK) and prints a **ready-to-paste** MCP server block for the user’s IDE (Claude Desktop, Cursor, Windsurf). Optional: copy to clipboard when supported.
+A **`jvmsrc config`** command inspects the environment (build system markers, `JAVA_HOME` / detected JDK) and prints a **ready-to-paste** MCP server block for the user’s IDE (Claude Desktop, Cursor, Windsurf). Optional: copy to clipboard when supported.
 
 Goals: remove hand-edited JSON mistakes (`command`, `args`, `env`) and improve first-run success rate. Low implementation cost, high UX leverage (same idea as dedicated MCP config-generator utilities in other ecosystems).
 
@@ -596,9 +611,9 @@ The same core logic is exposed as an MCP server, making the tool available to ID
 ```json
 {
   "mcpServers": {
-    "jvm-dependency-resolver": {
+    "jvmsrc": {
       "command": "npx",
-      "args": ["-y", "jvm-dependency-resolver", "mcp"]
+      "args": ["-y", "jvmsrc", "mcp"]
     }
   }
 }
@@ -649,7 +664,7 @@ The same core logic is exposed as an MCP server, making the tool available to ID
 Both interfaces are thin wrappers over the same TypeScript module. The core logic is importable as a library for agents that prefer native function calls over shell or MCP:
 
 ```typescript
-import { getClassSource } from 'jvm-dependency-resolver';
+import { getClassSource } from 'jvmsrc';
 
 // Library return type includes provenance (exact shape TBD; mirrors §7.1)
 const { source, sourceAvailable } = await getClassSource('com.example.MyClass', {
@@ -667,7 +682,7 @@ const { source, sourceAvailable } = await getClassSource('com.example.MyClass', 
 The package bundles all auxiliary files so the tool works offline immediately after installation:
 
 ```
-package.json           ← bin: { "jvm-dependency-resolver": "./dist/cli.js" }
+package.json           ← bin: { "jvmsrc": "./dist/cli.js" }
 dist/
   cli.js               ← compiled CLI entry point
   mcp.js               ← compiled MCP server entry point
@@ -677,7 +692,7 @@ resources/
   analyzer-init.gradle ← bundled Gradle init script
 ```
 
-The `files` array in `package.json` ensures `resources/` is included in the published tarball. **`bun run prepack`** runs typecheck, build, and [`scripts/validate-bundled-resources.ts`](scripts/validate-bundled-resources.ts) (minimum sizes for `cfr.jar` and `analyzer-init.gradle`). Bundled resource paths are resolved from the **package root** (nearest `package.json` with `name: "jvm-dependency-resolver"`), not from the caller’s working directory, so `dist/` layout changes do not break resolution.
+The `files` array in `package.json` ensures `resources/` is included in the published tarball. **`bun run prepack`** runs typecheck, build, and [`scripts/validate-bundled-resources.ts`](scripts/validate-bundled-resources.ts) (minimum sizes for `cfr.jar` and `analyzer-init.gradle`). Bundled resource paths are resolved from the **package root** (nearest `package.json` with `name: "jvmsrc"`), not from the caller’s working directory, so `dist/` layout changes do not break resolution.
 
 ### 9.2 Runtime Resource Resolution
 
@@ -696,13 +711,13 @@ function getBundledResource(filename: BundledResourceName): string {
 }
 
 const CFR_JAR_PATH =
-  process.env.JVM_ORACLE_CFR_PATH?.trim() || getBundledResource('cfr.jar');
+  process.env.JVMSRC_CFR_PATH?.trim() || getBundledResource('cfr.jar');
 const INIT_SCRIPT_PATH     = getBundledResource('analyzer-init.gradle');
 ```
 
 ### 9.3 CFR path override
 
-If the environment variable **`JVM_ORACLE_CFR_PATH`** is set to an absolute or relative path of a JAR file, the decompiler layer uses that JAR **instead of** the bundled `resources/cfr.jar`. Default remains the bundled artifact.
+If the environment variable **`JVMSRC_CFR_PATH`** is set to an absolute or relative path of a JAR file, the decompiler layer uses that JAR **instead of** the bundled `resources/cfr.jar`. Default remains the bundled artifact. Implementations may also honor legacy **`JVM_ORACLE_CFR_PATH`** when `JVMSRC_CFR_PATH` is unset.
 
 **Why:** Some organizations block arbitrary bundled binaries until security review. Supplying an internally vetted CFR build keeps the tool usable without forking the package. When unset, behavior is unchanged.
 
@@ -778,8 +793,8 @@ The following represents the minimum build that validates the architecture end-t
 | High | `sourceAvailable` on all source-bearing MCP/CLI/library responses | §7.1 |
 | Medium | `forceRefresh` on `resolve_dependencies` + `--force-refresh` on CLI | §6.1, §8.1 |
 | Medium | Class search by simple name / glob (disambiguation list) | §12 |
-| Low | `jvm-dependency-resolver config` MCP snippet generator | §8.1.1 |
-| Low | `JVM_ORACLE_CFR_PATH` CFR JAR override | §9.3 |
+| Low | `jvmsrc config` MCP snippet generator | §8.1.1 |
+| Low | `JVMSRC_CFR_PATH` CFR JAR override | §9.3 |
 
 Maven resolver is explicitly out of scope for v1 but the architecture accommodates it as a drop-in addition.
 
