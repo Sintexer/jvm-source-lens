@@ -225,10 +225,10 @@ For a multimodule Gradle project, the tool resolves and indexes all submodules i
 
 ```bash
 # Resolves against the root project (union of all modules)
-jvm-class-oracle com.example.MyClass --project /path/to/project
+jvm-dependency-resolver get com.example.MyClass --project /path/to/project
 
 # Resolves against a specific submodule
-jvm-class-oracle com.example.MyClass --project /path/to/project --module :core:utils
+jvm-dependency-resolver get com.example.MyClass --project /path/to/project --module :core:utils
 ```
 
 When `--module` is omitted on a multimodule project, the tool uses the union of all modules' resolved artifacts. If the same class exists in multiple modules with different versions, the tool surfaces the conflict explicitly rather than picking silently.
@@ -541,13 +541,13 @@ The tool **never falls back to scanning the global cache** without a resolved tr
 
 ```bash
 # Install globally
-npm install -g jvm-class-oracle
+npm install -g jvm-dependency-resolver
 
 # Or run without installation
-npx jvm-class-oracle com.example.MyClass
+npx jvm-dependency-resolver get com.example.MyClass
 
 # With options
-jvm-class-oracle com.example.MyClass \
+jvm-dependency-resolver get com.example.MyClass \
   --project /path/to/project \
   --module :core:utils \
   --configuration compileClasspath \
@@ -563,9 +563,9 @@ The same core logic is exposed as an MCP server, making the tool available to ID
 ```json
 {
   "mcpServers": {
-    "jvm-class-oracle": {
+    "jvm-dependency-resolver": {
       "command": "npx",
-      "args": ["-y", "jvm-class-oracle", "--mcp"]
+      "args": ["-y", "jvm-dependency-resolver", "mcp"]
     }
   }
 }
@@ -584,7 +584,7 @@ The same core logic is exposed as an MCP server, making the tool available to ID
 Both interfaces are thin wrappers over the same TypeScript module. The core logic is importable as a library for agents that prefer native function calls over shell or MCP:
 
 ```typescript
-import { getClassSource } from 'jvm-class-oracle';
+import { getClassSource } from 'jvm-dependency-resolver';
 
 const source = await getClassSource('com.example.MyClass', {
   projectRoot: '/path/to/project',
@@ -601,7 +601,7 @@ const source = await getClassSource('com.example.MyClass', {
 The package bundles all auxiliary files so the tool works offline immediately after installation:
 
 ```
-package.json           ← bin: { "jvm-class-oracle": "./dist/cli.js" }
+package.json           ← bin: { "jvm-dependency-resolver": "./dist/cli.js" }
 dist/
   cli.js               ← compiled CLI entry point
   mcp.js               ← compiled MCP server entry point
@@ -611,13 +611,15 @@ resources/
   analyzer-init.gradle ← bundled Gradle init script
 ```
 
-The `files` array in `package.json` ensures `resources/` is included in the published tarball. Bundled resource paths are resolved at runtime relative to `__dirname`.
+The `files` array in `package.json` ensures `resources/` is included in the published tarball. Bundled resource paths are resolved from the **package root** (nearest `package.json` with `name: "jvm-dependency-resolver"`), not from the caller’s working directory, so `dist/` layout changes do not break resolution.
 
 ### 9.2 Runtime Resource Resolution
 
 ```typescript
-function getBundledResource(filename: string): string {
-  const resourcePath = path.join(__dirname, '..', 'resources', filename);
+type BundledResourceName = 'cfr.jar' | 'analyzer-init.gradle';
+
+function getBundledResource(filename: BundledResourceName): string {
+  const resourcePath = path.join(packageRoot, 'resources', filename);
   if (!fs.existsSync(resourcePath)) {
     throw new Error(
       `Bundled resource '${filename}' not found at ${resourcePath}. ` +

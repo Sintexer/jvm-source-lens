@@ -1,5 +1,6 @@
 # Created by https://www.toptal.com/developers/gitignore/api/node,gradle,macos
 # Edit at https://www.toptal.com/developers/gitignore?templates=node,gradle,macos
+.cursor
 
 ### macOS ###
 # General

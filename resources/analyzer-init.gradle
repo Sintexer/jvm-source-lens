@@ -1,0 +1,3 @@
+// Placeholder for the bundled Gradle init script used by jvm-dependency-resolver.
+// Replace with the full implementation described in README.md (jvmOracleResolve / ResolutionOutput).
+// This file must remain non-trivial so `bun run prepack` validation passes before you wire the real script.
