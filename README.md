@@ -169,9 +169,17 @@ src/
       index.ts
   bundled-resources.ts    ← getBundledResource(), package-root resolution
   extractor/
-    index.ts              ← JAR extraction, source-preference logic
+    class-source-types.ts   ← lookup options + ClassSourceLookupResult / errors
+    fqn-paths.ts            ← FQN → ZIP entry paths
+    pick-classpath.ts       ← ResolvedModule + configuration selection
+    zip-entry.ts            ← single-entry ZIP reads (fflate)
+    extract-external-class-source.ts
+    index.ts                ← re-exports
+  get-class-source.ts       ← resolveWithResolutionCache + extract
+  public-api.ts             ← library entry (`package.json` `main` / `exports`)
+  cli-get-output.ts         ← `get` stdout/stderr JSON formatting
   decompiler/
-    index.ts              ← CFR subprocess wrapper
+    index.ts              ← CFR subprocess wrapper (stub)
   cache/
     paths.ts              ← global cache root (env-paths) + project bucket paths
     index.ts              ← build-input digest, read/write resolution cache files
@@ -541,7 +549,7 @@ The top-level `decompiled/` directory under the same cache root is reserved for 
 
 When the build-input digest matches `resolution.hash`, the cached document is used immediately (no Gradle). When it differs, Gradle is re-invoked and the bucket is overwritten. A future **classpath class index** may apply a diff-aware patch (Path 2) after Gradle so that only added/changed JARs are rescanned for FQNs; the full cold scan (Path 3) is avoided on small dependency bumps once that index exists.
 
-**Escape hatch — `forceRefresh`:** Hash keys only cover tracked build inputs (`build.gradle*`, `settings.gradle*`, version catalogs, lockfiles). They do **not** detect SNAPSHOT bumps in a remote repo, a teammate clearing `~/.gradle`, or CI using a fresh dependency cache while build files are unchanged. **`resolve_dependencies`** (MCP) and **`jvmsrc resolve --force-refresh`** (CLI today; **`jvmsrc get --force-refresh`** when `get` is implemented) bypass the resolution cache and **always** re-invoke Gradle so the agent or developer can re-resolve without manually deleting cache files.
+**Escape hatch — `forceRefresh`:** Hash keys only cover tracked build inputs (`build.gradle*`, `settings.gradle*`, version catalogs, lockfiles). They do **not** detect SNAPSHOT bumps in a remote repo, a teammate clearing `~/.gradle`, or CI using a fresh dependency cache while build files are unchanged. **`resolve_dependencies`** (MCP), **`jvmsrc resolve --force-refresh`**, and **`jvmsrc get --force-refresh`** bypass the resolution cache and **always** re-invoke Gradle so the agent or developer can re-resolve without manually deleting cache files.
 
 ### 6.2 Decompilation Cache
 
@@ -577,6 +585,10 @@ Once a **`ResolutionOutput`** is loaded (from cache or a fresh Gradle run), the 
         to verify the class name or check if the dependency is declared
 ```
 
+**Current `jvmsrc get` / library behavior (v0.1.x):** Steps **2** and **4** above are implemented for **`origin: external`** JAR artifacts only: the tool reads **`sourcesJarPath`** first, then checks **`jarPath`** for a matching **`.class`** entry. Step **1** (inter-project) and step **3** (decompilation cache + CFR) are **not implemented yet** — bytecode-only matches return structured error **`DECOMPILE_NOT_IMPLEMENTED`**. Classes that exist only on inter-project classpath lines are not discovered until inter-project extraction ships (you will see **`CLASS_NOT_FOUND`** even when the class compiles in-repo). The first match wins in Gradle’s resolved **`artifacts[]`** order.
+
+**Stable `code` values** on failures (library and CLI `stderr` JSON): **`RESOLUTION_FAILED`**, **`INVALID_FQN`**, **`MODULE_NOT_FOUND`**, **`CONFIGURATION_NOT_FOUND`**, **`ZIP_READ_ERROR`**, **`CLASS_NOT_FOUND`**, **`DECOMPILE_NOT_IMPLEMENTED`**.
+
 The tool **never falls back to scanning the global cache** without a resolved tree. If Gradle resolution fails, the tool reports the failure — it does not attempt to guess from `~/.gradle/caches`.
 
 ### 7.1 `sourceAvailable` on source-bearing responses
@@ -611,16 +623,19 @@ jvmsrc resolve --project /path/to/project --force-refresh
 jvmsrc get com.example.MyClass \
   --project /path/to/project \
   --module :core:utils \
-  --configuration compileClasspath \
-  --include-test
+  --configuration compileClasspath
+
+# Default configuration is compileClasspath; use testCompileClasspath when --configuration is omitted:
+jvmsrc get com.example.MyClass --project /path/to/project --include-test
+
+# Re-resolve Gradle graph (same as resolve --force-refresh)
+jvmsrc get com.example.MyClass --project /path/to/project --force-refresh
 
 # Shorthand (equivalent to: jvmsrc get com.example.MyClass …)
 jvmsrc com.example.MyClass --project /path/to/project
-
-# Planned on `get` when class lookup ships: --force-refresh to bypass resolution cache from class commands.
 ```
 
-Output depends on the subcommand: **`jvmsrc resolve`** writes pretty-printed **`ResolutionOutput`** JSON to `stdout`. For **`jvmsrc get`** (when implemented), output is Java source on `stdout` together with metadata (including **`sourceAvailable`**, see §7.1). Errors go to `stderr` with a non-zero exit code, making the tool composable in shell pipelines and agent tool calls.
+Output depends on the subcommand: **`jvmsrc resolve`** writes pretty-printed **`ResolutionOutput`** JSON to `stdout`. For **`jvmsrc get`**, **stdout** is the raw **`.java`** file body when source is found; **stderr** is one JSON object with **`sourceAvailable`**, **`className`**, and **`provenance`** (see §7.1). On failure, **stderr** is one JSON object with **`error: true`** and a stable **`code`** field (see §7 above); exit status is non-zero. This keeps `stdout` usable as pure source in shell pipelines.
 
 #### 8.1.1 `config` subcommand (planned)
 
@@ -690,11 +705,15 @@ Both interfaces are thin wrappers over the same TypeScript module. The core logi
 ```typescript
 import { getClassSource } from 'jvmsrc';
 
-// Library return type includes provenance (exact shape TBD; mirrors §7.1)
-const { source, sourceAvailable } = await getClassSource('com.example.MyClass', {
+const r = await getClassSource('com.example.MyClass', {
   projectRoot: '/path/to/project',
   modulePath: ':core:utils',
 });
+if (r.ok) {
+  const { source, sourceAvailable, provenance } = r;
+} else {
+  // r.error.code — see §7 stable codes
+}
 ```
 
 ---
@@ -706,10 +725,11 @@ const { source, sourceAvailable } = await getClassSource('com.example.MyClass', 
 The package bundles all auxiliary files so the tool works offline immediately after installation:
 
 ```
-package.json           ← bin: { "jvmsrc": "./dist/cli.js" }
+package.json           ← bin: { "jvmsrc": "./dist/cli.js" }; main + exports → dist/public-api.js
 dist/
   cli.js               ← compiled CLI entry point
   mcp.js               ← compiled MCP server entry point
+  public-api.js        ← compiled library entry (getClassSource, types, …)
   *.js                 ← compiled core modules
 resources/
   cfr.jar              ← bundled CFR decompiler

@@ -2,6 +2,8 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
+import { writeCliGetResult } from './cli-get-output.js';
+import { getClassSource } from './get-class-source.js';
 import { resolveProjectRoot } from './project-path.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 
@@ -33,23 +35,45 @@ program
 
 program
   .command('get')
-  .description('Look up a fully-qualified class name (not yet implemented)')
+  .description(
+    'Print Java source for a fully-qualified class from external dependency JARs (sources JAR only; interproject + CFR not implemented yet)',
+  )
   .argument('<className>', 'e.g. com.example.MyClass')
   .option('-p, --project <path>', 'Path to the project root', process.cwd())
-  .option('-m, --module <module>', 'Submodule path (e.g. :core:utils)')
-  .action(async (className: string, options: { project: string; module?: string }) => {
-    const root = resolveProjectRoot(options.project);
-    if (!root.ok) {
-      console.error(root.message);
-      process.exitCode = 1;
-      return;
-    }
-    console.log(`Searching for class: ${className}`);
-    console.log(`Project root: ${root.path}`);
-    if (options.module) {
-      console.log(`Module: ${options.module}`);
-    }
-  });
+  .option('-m, --module <module>', 'Gradle module path (e.g. :core:utils); defaults to root')
+  .option(
+    '-c, --configuration <name>',
+    'Resolved configuration name (default: compileClasspath, or testCompileClasspath with --include-test)',
+  )
+  .option('--include-test', 'When --configuration is omitted, use testCompileClasspath', false)
+  .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle', false)
+  .action(
+    async (
+      className: string,
+      options: {
+        project: string;
+        module?: string;
+        configuration?: string;
+        includeTest?: boolean;
+        forceRefresh?: boolean;
+      },
+    ) => {
+      const root = resolveProjectRoot(options.project);
+      if (!root.ok) {
+        console.error(root.message);
+        process.exitCode = 1;
+        return;
+      }
+      const result = await getClassSource(className, {
+        projectRoot: root.path,
+        modulePath: options.module,
+        configuration: options.configuration,
+        includeTest: Boolean(options.includeTest),
+        forceRefresh: Boolean(options.forceRefresh),
+      });
+      writeCliGetResult(result);
+    },
+  );
 
 program
   .command('resolve')
