@@ -102,7 +102,7 @@ The system is divided into four independent layers. Each layer communicates only
 
 ### 4.2 Core Interfaces (TypeScript)
 
-All resolver plugins implement the following contract. Resolution produces a **`ResolutionOutput`** document (stdout from Gradle today, and the same object persisted under `.jvmsrc-cache/resolution.json` — see §5.5.2). The extractor chooses one `ResolvedConfiguration` per call using `ResolveOptions` (`configuration`, `includeTest`, `modulePath`); it does not re-invoke Gradle.
+All resolver plugins implement the following contract. Resolution produces a **`ResolutionOutput`** document (stdout from Gradle today, and the same object persisted in the global resolution cache — see **§6.1** / §5.5.2). The extractor chooses one `ResolvedConfiguration` per call using `ResolveOptions` (`configuration`, `includeTest`, `modulePath`); it does not re-invoke Gradle.
 
 Gradle failures, parse errors, or unsupported `schemaVersion` are returned as **`ResolutionResult` errors** (`ok: false`) rather than thrown, so callers can surface actionable messages. Unexpected bugs and process spawn failures follow the same `ok: false` path for Gradle exits; only corrupted installation (e.g. missing bundled init script) may throw from resource helpers.
 
@@ -173,8 +173,10 @@ src/
   decompiler/
     index.ts              ← CFR subprocess wrapper
   cache/
-    index.ts              ← resolution cache with hash-based invalidation
-  cli.ts                  ← CLI entry point
+    paths.ts              ← global cache root (env-paths) + project bucket paths
+    index.ts              ← build-input digest, read/write resolution cache files
+  resolve-with-cache.ts   ← resolveWithResolutionCache() — cache gate + resolver on miss
+  cli.ts                  ← CLI entry point (`get`, `resolve`, `mcp`, …)
   mcp.ts                  ← MCP server entry point
 ```
 
@@ -508,29 +510,49 @@ The following behaviors were validated against real Gradle builds before folding
 
 ### 6.1 Resolution Cache
 
-Gradle invocation is expensive (1–10 seconds). The tool caches the full **`ResolutionOutput`** JSON (same structure as §5.5.2 / Gradle stdout) and invalidates it only when build files change.
+Gradle invocation is expensive (often ~5–10 seconds; less when the Gradle daemon is already warm). The tool caches the full **`ResolutionOutput`** JSON (same structure as §5.5.2 / Gradle stdout) and invalidates it when **declared build inputs** change.
 
-**Cache key:** SHA-256 hash of all build-relevant files in the project:
-- `build.gradle` / `build.gradle.kts` (all subprojects)
-- `settings.gradle` / `settings.gradle.kts`
+**Cache key:** SHA-256 digest over the content of all build-relevant files in the project (sorted paths, stable manifest — see implementation `computeBuildInputsDigest`):
+
+- `build.gradle` / `build.gradle.kts` (all submodules; common output directories such as `build/`, `.gradle/`, and `node_modules/` are excluded from the walk)
+- `settings.gradle` / `settings.gradle.kts` (project root)
 - `gradle/libs.versions.toml` (version catalog, if present)
 - `gradle/dependency-locks/*.lockfile` (if present)
 
-**Cache location:** `<projectRoot>/.jvmsrc-cache/resolution.json` — the one directory the tool does write, but inside the project's own cache space, not modifying any build files.
+**Cache location (nothing under the scanned project tree):** resolution data lives under the OS cache directory from [`env-paths`](https://github.com/sindresorhus/env-paths) with app name **`jvmsrc`** (same as the CLI binary) and **no** `nodejs` suffix (`suffix: ''`), so typical roots are:
 
-When the hash matches, the cached document is used immediately. When it differs, Gradle is re-invoked and the cache is refreshed.
+- Linux: `~/.cache/jvmsrc` (or `$XDG_CACHE_HOME/jvmsrc` when set)
+- macOS: `~/Library/Caches/jvmsrc`
+- Windows: `%LOCALAPPDATA%\jvmsrc\Cache`
 
-**Escape hatch — `forceRefresh`:** Hash keys only cover tracked build inputs (`build.gradle*`, `settings.gradle*`, version catalogs, lockfiles). They do **not** detect SNAPSHOT bumps in a remote repo, a teammate clearing `~/.gradle`, or CI using a fresh dependency cache while build files are unchanged. **`resolve_dependencies`** (MCP) and **`--force-refresh`** (CLI) bypass the resolution cache and **always** re-invoke Gradle so the agent or developer can say “artifacts changed; re-resolve anyway” without manually deleting `.jvmsrc-cache/`.
+**Per-project bucket:** under that root, `projects/<projectBucketId>/` where `projectBucketId` is the first **8** hexadecimal characters of SHA-256(UTF-8 of the **canonical absolute** project root). Files in the bucket:
+
+| File | Role |
+|------|------|
+| `resolution.json` | Strict `ResolutionOutput` only (no extra fields) |
+| `resolution.hash` | Single line: lowercase hex digest of the build-input set above |
+| `bucket-meta.json` | Small envelope: `cacheMetaVersion`, `projectRootAbsolute`, `projectRootDigestFull`, `writtenAt` (ISO UTC) |
+
+The top-level `decompiled/` directory under the same cache root is reserved for the shared decompile store (§6.2). A top-level `gc.json` is reserved for a future GC pass over stale project buckets.
+
+**Optional override:** if **`JVMSRC_CACHE_ROOT`** is set, it must be a **non-empty absolute** path; relative values are rejected with a structured error (they would depend on the process working directory). When valid, the tool uses that directory as the global cache root instead of the env-paths default (useful for tests and locked-down environments).
+
+**Durability:** bucket files (`resolution.json`, `resolution.hash`, `bucket-meta.json`) are each written via a **temporary file in the same directory followed by `rename`**, so concurrent readers are less likely to observe a torn combination than with in-place overwrites.
+
+When the build-input digest matches `resolution.hash`, the cached document is used immediately (no Gradle). When it differs, Gradle is re-invoked and the bucket is overwritten. A future **classpath class index** may apply a diff-aware patch (Path 2) after Gradle so that only added/changed JARs are rescanned for FQNs; the full cold scan (Path 3) is avoided on small dependency bumps once that index exists.
+
+**Escape hatch — `forceRefresh`:** Hash keys only cover tracked build inputs (`build.gradle*`, `settings.gradle*`, version catalogs, lockfiles). They do **not** detect SNAPSHOT bumps in a remote repo, a teammate clearing `~/.gradle`, or CI using a fresh dependency cache while build files are unchanged. **`resolve_dependencies`** (MCP) and **`jvmsrc resolve --force-refresh`** (CLI today; **`jvmsrc get --force-refresh`** when `get` is implemented) bypass the resolution cache and **always** re-invoke Gradle so the agent or developer can re-resolve without manually deleting cache files.
 
 ### 6.2 Decompilation Cache
 
-CFR decompilation results are cached by artifact coordinates + class name:
+CFR decompilation results are cached by artifact coordinates + class name under the **same global cache root** as §6.1 (not under the project directory):
 
 ```
-<projectRoot>/.jvmsrc-cache/decompiled/<group>/<artifact>/<version>/<ClassName>.java
+<env-paths cache for jvmsrc>/
+  decompiled/<group>/<artifact>/<version>/<ClassName>.java
 ```
 
-This means sequential agent calls for classes within the same dependency pay the decompilation cost only once.
+This means sequential agent calls for classes within the same dependency pay the decompilation cost only once, and the store can be shared across projects on one machine.
 
 ---
 
@@ -572,7 +594,7 @@ Agents should treat `sourceAvailable: false` as “trust types and control flow;
 
 ### 8.1 CLI
 
-The published executable is **`jvmsrc`**. Class lookup may be written as **`jvmsrc get <className>`** or the shorthand **`jvmsrc <className>`** — when the first argument is not `get`, `mcp`, or `config`, the CLI treats it as a class name and runs the `get` command (same flags: `--project`, `--module`, etc.).
+The published executable is **`jvmsrc`**. Class lookup may be written as **`jvmsrc get <className>`** or the shorthand **`jvmsrc <className>`** — when the first argument is not `get`, `mcp`, `config`, or **`resolve`**, the CLI treats it as a class name and runs the `get` command (same flags: `--project`, `--module`, etc.).
 
 ```bash
 # Install globally
@@ -580,6 +602,10 @@ npm install -g jvmsrc
 
 # Or run without installation
 npx jvmsrc get com.example.MyClass
+
+# Resolve Gradle graph to stdout (uses resolution cache; see §6.1)
+jvmsrc resolve --project /path/to/project
+jvmsrc resolve --project /path/to/project --force-refresh
 
 # With options
 jvmsrc get com.example.MyClass \
@@ -591,12 +617,10 @@ jvmsrc get com.example.MyClass \
 # Shorthand (equivalent to: jvmsrc get com.example.MyClass …)
 jvmsrc com.example.MyClass --project /path/to/project
 
-# Bypass resolution cache (hash unchanged but artifacts on disk changed — e.g. SNAPSHOT,
-# manual ~/.gradle cleanup, CI cold cache). Re-invokes Gradle unconditionally.
-jvmsrc get com.example.MyClass --project /path/to/project --force-refresh
+# Planned on `get` when class lookup ships: --force-refresh to bypass resolution cache from class commands.
 ```
 
-Output is the Java source code on `stdout` together with metadata (including **`sourceAvailable`**, see §7.1). Errors go to `stderr` with a non-zero exit code, making the tool composable in shell pipelines and agent tool calls.
+Output depends on the subcommand: **`jvmsrc resolve`** writes pretty-printed **`ResolutionOutput`** JSON to `stdout`. For **`jvmsrc get`** (when implemented), output is Java source on `stdout` together with metadata (including **`sourceAvailable`**, see §7.1). Errors go to `stderr` with a non-zero exit code, making the tool composable in shell pipelines and agent tool calls.
 
 #### 8.1.1 `config` subcommand (planned)
 

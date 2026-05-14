@@ -17,6 +17,7 @@
     "dev:cli": "bun run src/cli.ts",
     "dev:mcp": "bun run src/mcp.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test",
     "build": "bun build ./src/cli.ts ./src/mcp.ts --outdir ./dist --target node --format esm",
     "setup:cfr": "bun run scripts/fetch-cfr.ts",
     "prepack": "bun run typecheck && bun run build && bun run scripts/validate-bundled-resources.ts"
@@ -27,6 +28,7 @@
     "typescript": "^5.9.0"
   },
   "dependencies": {
-    "commander": "^14.0.3"
+    "commander": "^14.0.3",
+    "env-paths": "^4.0.0"
   }
 }
