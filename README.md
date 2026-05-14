@@ -44,6 +44,7 @@ The gap all of them share: **none invoke the build tool to get the actual resolv
 ### 3.1 Functional
 
 - Given a fully-qualified class name (e.g., `com.example.MyClass`), return its Java source code.
+- Optionally return **structured class metadata** (signatures, hierarchy, Javadoc when sources exist) without full source via MCP `get_class_structure` (§8.2) to reduce context use and latency.
 - Resolve the correct artifact version by querying the project's actual build tool — never by guessing from cache.
 - Support multimodule projects; resolve dependencies **per submodule** when a module path is specified.
 - Prefer original **source JARs** over decompilation when available.
@@ -55,7 +56,7 @@ The gap all of them share: **none invoke the build tool to get the actual resolv
 ### 3.2 Non-Functional
 
 - **Zero project modification:** no files written to the target project directory.
-- **Low latency for sequential calls:** build-tool resolution runs once per session; results are cached until build files change (hash-based invalidation).
+- **Low latency for sequential calls:** build-tool resolution runs once per session; results are cached until build files change (hash-based invalidation), with an explicit **force refresh** escape hatch when artifacts change without build-file edits (§6.1).
 - **Frictionless installation:** single command via `npm install -g` or `npx`.
 - **Dual interface:** usable as both a CLI shell command and an MCP server from the same package.
 - **Offline-capable:** all auxiliary tools (CFR decompiler, Gradle init script) bundled in the NPM package; no runtime downloads.
@@ -509,6 +510,8 @@ Gradle invocation is expensive (1–10 seconds). The tool caches the full **`Res
 
 When the hash matches, the cached document is used immediately. When it differs, Gradle is re-invoked and the cache is refreshed.
 
+**Escape hatch — `forceRefresh`:** Hash keys only cover tracked build inputs (`build.gradle*`, `settings.gradle*`, version catalogs, lockfiles). They do **not** detect SNAPSHOT bumps in a remote repo, a teammate clearing `~/.gradle`, or CI using a fresh dependency cache while build files are unchanged. **`resolve_dependencies`** (MCP) and **`--force-refresh`** (CLI) bypass the resolution cache and **always** re-invoke Gradle so the agent or developer can say “artifacts changed; re-resolve anyway” without manually deleting `.jvm-oracle-cache/`.
+
 ### 6.2 Decompilation Cache
 
 CFR decompilation results are cached by artifact coordinates + class name:
@@ -544,6 +547,15 @@ Once a **`ResolutionOutput`** is loaded (from cache or a fresh Gradle run), the 
 
 The tool **never falls back to scanning the global cache** without a resolved tree. If Gradle resolution fails, the tool reports the failure — it does not attempt to guess from `~/.gradle/caches`.
 
+### 7.1 `sourceAvailable` on source-bearing responses
+
+Every response that returns **Java source text** (CLI `get` stdout, MCP `get_class_source`, and any library API that returns a source string) includes a boolean **`sourceAvailable`** (or equivalent field in the structured envelope):
+
+- **`true`** — text came from **original source** (project sources, inter-project files, or a **sources JAR**). Javadoc, parameter names (as compiled), and generics match what the author shipped.
+- **`false`** — text came from **decompiled bytecode** (CFR). Structurally reliable, but Javadoc is absent, parameter names may be missing unless the dependency was built with `-parameters`, and complex generics can be approximated.
+
+Agents should treat `sourceAvailable: false` as “trust types and control flow; treat names and comments as best-effort.” Escalation to `get_class_structure` (signatures only) or re-resolution (`forceRefresh`) is a separate concern.
+
 ---
 
 ## 8. Interface Layer
@@ -563,9 +575,19 @@ jvm-dependency-resolver get com.example.MyClass \
   --module :core:utils \
   --configuration compileClasspath \
   --include-test
+
+# Bypass resolution cache (hash unchanged but artifacts on disk changed — e.g. SNAPSHOT,
+# manual ~/.gradle cleanup, CI cold cache). Re-invokes Gradle unconditionally.
+jvm-dependency-resolver get com.example.MyClass --project /path/to/project --force-refresh
 ```
 
-Output is the Java source code on `stdout`. Errors go to `stderr` with a non-zero exit code, making the tool composable in shell pipelines and agent tool calls.
+Output is the Java source code on `stdout` together with metadata (including **`sourceAvailable`**, see §7.1). Errors go to `stderr` with a non-zero exit code, making the tool composable in shell pipelines and agent tool calls.
+
+#### 8.1.1 `config` subcommand (planned)
+
+A **`jvm-dependency-resolver config`** command inspects the environment (build system markers, `JAVA_HOME` / detected JDK) and prints a **ready-to-paste** MCP server block for the user’s IDE (Claude Desktop, Cursor, Windsurf). Optional: copy to clipboard when supported.
+
+Goals: remove hand-edited JSON mistakes (`command`, `args`, `env`) and improve first-run success rate. Low implementation cost, high UX leverage (same idea as dedicated MCP config-generator utilities in other ecosystems).
 
 ### 8.2 MCP Server
 
@@ -586,9 +608,41 @@ The same core logic is exposed as an MCP server, making the tool available to ID
 
 | Tool | Description |
 |---|---|
-| `get_class_source` | Returns source or decompiled code for a fully-qualified class name |
+| `get_class_source` | Returns full Java source (original or CFR-decompiled) for a **fully-qualified** class name; response includes **`sourceAvailable`** (§7.1). |
+| `get_class_structure` | Returns **structured metadata only** — kind, superclass, interfaces, type parameters, fields (type + visibility), method signatures (parameters, return type, generics), Javadoc when a sources JAR exists — **not** full file body. Lets agents answer “does this method take `String` or `CharSequence`?” without burning context on hundreds of lines; escalate to `get_class_source` when implementation is needed. |
 | `list_modules` | Lists all submodules in a multimodule project with their dependency counts |
-| `resolve_dependencies` | Returns the full resolved dependency tree for a project or module |
+| `resolve_dependencies` | Returns **`ResolutionOutput`** (§5.5.2) for the project or scoped module. Supports **`forceRefresh: boolean`** — when `true`, skips hash-based resolution cache and re-invokes Gradle (see §6.1). |
+
+**`get_class_structure` output shape (illustrative):**
+
+```typescript
+// Tool: get_class_structure
+// Input: className (FQN), projectRoot, modulePath?
+{
+  "className": "org.springframework.data.jpa.repository.JpaRepository",
+  "kind": "interface",
+  "superclass": "org.springframework.data.repository.PagingAndSortingRepository",
+  "interfaces": ["org.springframework.data.repository.CrudRepository"],
+  "typeParameters": ["T", "ID"],
+  "fields": [],
+  "methods": [
+    {
+      "name": "saveAll",
+      "visibility": "public",
+      "returnType": "List<S>",
+      "parameters": [{ "name": "entities", "type": "Iterable<S>" }],
+      "typeParameters": ["S extends T"],
+      "javadoc": "Saves all given entities...",
+      "abstract": true
+    }
+  ],
+  "sourceAvailable": true
+}
+```
+
+`kind` is one of: `class` \| `interface` \| `enum` \| `annotation` \| `record`. **`sourceAvailable`** mirrors §7.1: `true` when Javadoc / parameter names in the structure come from real sources; `false` when derived from decompiled bytecode (structure still useful, prose less trustworthy). **`javadoc`** may be `null` when no sources JAR is available.
+
+**Implementation note:** Structure can be produced by parsing `.java` from a sources JAR, by analyzing `.class` bytes (e.g. ASM or similar bytecode libraries), or by consuming CFR output in a structured pipeline — without returning the full source file to the client.
 
 ### 8.3 Dual-Entry Architecture
 
@@ -597,7 +651,8 @@ Both interfaces are thin wrappers over the same TypeScript module. The core logi
 ```typescript
 import { getClassSource } from 'jvm-dependency-resolver';
 
-const source = await getClassSource('com.example.MyClass', {
+// Library return type includes provenance (exact shape TBD; mirrors §7.1)
+const { source, sourceAvailable } = await getClassSource('com.example.MyClass', {
   projectRoot: '/path/to/project',
   modulePath: ':core:utils',
 });
@@ -640,11 +695,18 @@ function getBundledResource(filename: BundledResourceName): string {
   return resourcePath;
 }
 
-const CFR_JAR_PATH         = getBundledResource('cfr.jar');
+const CFR_JAR_PATH =
+  process.env.JVM_ORACLE_CFR_PATH?.trim() || getBundledResource('cfr.jar');
 const INIT_SCRIPT_PATH     = getBundledResource('analyzer-init.gradle');
 ```
 
-### 9.3 Why NPM over a Native Binary
+### 9.3 CFR path override
+
+If the environment variable **`JVM_ORACLE_CFR_PATH`** is set to an absolute or relative path of a JAR file, the decompiler layer uses that JAR **instead of** the bundled `resources/cfr.jar`. Default remains the bundled artifact.
+
+**Why:** Some organizations block arbitrary bundled binaries until security review. Supplying an internally vetted CFR build keeps the tool usable without forking the package. When unset, behavior is unchanged.
+
+### 9.4 Why NPM over a Native Binary
 
 Compiling to a single native binary (via GraalVM or `pkg`) would require a cross-compilation matrix for Mac ARM, Mac Intel, Linux x86, and Linux ARM. Since the tool already requires a JVM to be present (to run Gradle and CFR), and LLM agent environments are heavily Node.js-based, NPM distribution provides equivalent single-command UX (`npx`) with none of the cross-compilation overhead.
 
@@ -680,6 +742,18 @@ Downloading executables at runtime introduces failure modes (network outages, co
 
 Different agent architectures have different needs. Terminal-native agents (Claude Code, shell-based pipelines) work most naturally with CLI tools — they avoid loading MCP tool schemas into the context window on every turn, which matters at scale. IDE-integrated agents (Cursor, Windsurf, Claude Desktop) benefit from persistent MCP server processes with warm caches and structured tool invocation. Both interfaces share identical core logic; the choice of surface is purely operational.
 
+### Why add `get_class_structure` alongside `get_class_source`?
+
+Most agent questions are about **signatures** (return type, parameters, implemented interfaces, visibility) — not 800 lines of implementation. Returning full source for every question wastes context and latency. `get_class_structure` mirrors the IDE pattern of “stub first, full file on demand”: a cheap structured call, then escalate to `get_class_source` only when the body matters.
+
+### Why `forceRefresh` / `--force-refresh`?
+
+Hash-based invalidation only sees **tracked build files**. It cannot see SNAPSHOT churn in a remote repo, manual Gradle cache wipes, or CI environments where resolved artifacts changed without editing `build.gradle`. A explicit bypass lets agents and humans re-resolve without deleting cache directories by hand.
+
+### Why `sourceAvailable` on every source-bearing response?
+
+Agents must treat **original source** and **decompiled bytecode** differently: parameter names and Javadoc are ground truth in the former and unreliable in the latter. A single boolean keeps that contract explicit in MCP, CLI, and library APIs (§7.1).
+
 ---
 
 ## 11. MVP Scope
@@ -693,8 +767,19 @@ The following represents the minimum build that validates the architecture end-t
 5. Source JAR extraction (preferred path)
 6. CFR decompilation with result caching (fallback path)
 7. CLI entry point with `--project` and `--module` flags
-8. MCP server entry point with `get_class_source`, `list_modules`, `resolve_dependencies` tools
+8. MCP server entry point with `get_class_source`, `get_class_structure`, `list_modules`, `resolve_dependencies` tools (see §8.2 for shapes and flags)
 9. Structured error responses (unsupported project, class not found, version conflict)
+
+**Near-term interface goals (specified in §7–§9; implement in priority order):**
+
+| Priority | Item | Section |
+|---|---|---|
+| High | `get_class_structure` MCP tool (metadata without full source) | §8.2 |
+| High | `sourceAvailable` on all source-bearing MCP/CLI/library responses | §7.1 |
+| Medium | `forceRefresh` on `resolve_dependencies` + `--force-refresh` on CLI | §6.1, §8.1 |
+| Medium | Class search by simple name / glob (disambiguation list) | §12 |
+| Low | `jvm-dependency-resolver config` MCP snippet generator | §8.1.1 |
+| Low | `JVM_ORACLE_CFR_PATH` CFR JAR override | §9.3 |
 
 Maven resolver is explicitly out of scope for v1 but the architecture accommodates it as a drop-in addition.
 
@@ -707,4 +792,4 @@ Maven resolver is explicitly out of scope for v1 but the architecture accommodat
 | `MavenResolver` | Parse `pom.xml`, invoke `mvn dependency:resolve`, same interface |
 | `BazelResolver` | Use Bazel query API |
 | Decompiler alternatives | Pluggable decompiler interface; allow Procyon or Fernflower as alternatives to CFR |
-| Class search by simple name | `MyClass` instead of `com.example.MyClass` — return candidates for the agent to select |
+| Class search by simple name or glob | Accept `MyClass`, `com.foo.*Bar`, or `*Repository` in addition to FQN; resolve against an index built from `ResolutionOutput` + classpath scan; return **ranked candidates** (FQN, module, artifact coordinates) for the agent to choose or disambiguate. Moves from “exact FQN or fail” to “best effort with disambiguation” for stack traces and partial snippets. Medium effort, medium impact on autonomy. |
