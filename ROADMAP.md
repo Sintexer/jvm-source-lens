@@ -18,7 +18,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 ### P0 — MVP core
 
 - [x] CFR decompilation fallback + `decompiled/` cache
-- [ ] MCP server — `get_class_source`
+- [x] MCP server — `get_class_source`
 - [ ] MCP server — `resolve_dependencies`
 - [ ] MCP server — `list_modules`
 - [ ] Inter-project source lookup (`origin: interproject`)
@@ -75,11 +75,11 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **References:** [src/mcp.ts](src/mcp.ts), [src/get-class-source.ts](src/get-class-source.ts)
 
-- [ ] MCP SDK wiring + `startMcpServer()`
-- [ ] Tool `get_class_source`: inputs (`className`, `projectRoot`, `modulePath?`, `configuration?`, `includeTest?`, `forceRefresh?`)
-- [ ] Response: `source`, `sourceAvailable`, `provenance` or structured error with `code`
-- [ ] Build `mcp.js` in prepack; smoke manual test in Cursor/Claude Desktop
-- [ ] README §8.2 marked implemented for this tool
+- [x] MCP SDK wiring + `startMcpServer()`
+- [x] Tool `get_class_source`: inputs (`className`, `projectRoot`, `modulePath?`, `configuration?`, `includeTest?`, `forceRefresh?`)
+- [x] Response: `source`, `sourceAvailable`, `provenance` or structured error with `code`
+- [x] Build `mcp.js` in prepack; smoke manual test in Cursor/Claude Desktop
+- [x] README §8.2 marked implemented for this tool
 
 ---
 

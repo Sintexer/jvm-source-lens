@@ -671,7 +671,7 @@ Example success metadata (stderr, default mode):
 
 **`--quiet` / `-q`:** on success, write **only** the Java source to stdout; **do not** print the metadata JSON to stderr. Errors are unchanged (still JSON on stderr, non-zero exit). Use for shell pipelines (`jvmsrc get … -q > Foo.java`) when you do not need provenance on the terminal.
 
-The **MCP** server (§8.2) will expose the same facts in a single structured tool result (`source`, `sourceAvailable`, provenance fields) — no stdout/stderr split — which is better for IDE agents.
+The **MCP** server tool **`get_class_source`** (§8.2) exposes the same facts in a single structured result (`source`, `sourceAvailable`, provenance fields) — no stdout/stderr split — which is better for IDE agents.
 
 #### 8.1.2 `config` subcommand (planned)
 
@@ -681,7 +681,7 @@ Goals: remove hand-edited JSON mistakes (`command`, `args`, `env`) and improve f
 
 ### 8.2 MCP Server
 
-The same core logic is exposed as an MCP server, making the tool available to IDE-integrated agents (Claude Desktop, Cursor, Windsurf, Cline) without shell invocation overhead.
+The same core logic is exposed as an MCP server, making the tool available to IDE-integrated agents (Claude Desktop, Cursor, Windsurf, Cline) without shell invocation overhead. The published entry point is **`dist/mcp.js`** (run via `jvmsrc mcp` after install, or `bun run dev:mcp` in this repository).
 
 ```json
 {
@@ -696,12 +696,14 @@ The same core logic is exposed as an MCP server, making the tool available to ID
 
 **Exposed MCP tools:**
 
-| Tool | Description |
-|---|---|
-| `get_class_source` | Returns full Java source (original or CFR-decompiled) for a **fully-qualified** class name; response includes **`sourceAvailable`** (§7.1). |
-| `get_class_structure` | Returns **structured metadata only** — kind, superclass, interfaces, type parameters, fields (type + visibility), method signatures (parameters, return type, generics), Javadoc when a sources JAR exists — **not** full file body. Lets agents answer “does this method take `String` or `CharSequence`?” without burning context on hundreds of lines; escalate to `get_class_source` when implementation is needed. |
-| `list_modules` | Lists all submodules in a multimodule project with their dependency counts |
-| `resolve_dependencies` | Returns **`ResolutionOutput`** (§5.5.2) for the project or scoped module. Supports **`forceRefresh: boolean`** — when `true`, skips hash-based resolution cache and re-invokes Gradle (see §6.1). |
+| Tool | Status | Description |
+|---|---|---|
+| `get_class_source` | **Implemented** | Returns full Java source (original or CFR-decompiled) for a **fully-qualified** class name. Tool arguments: **`className`**, **`projectRoot`**, optional **`modulePath`**, **`configuration`**, **`includeTest`**, **`forceRefresh`** (same semantics as CLI `get`). **Found:** **`isError: false`**, **`found: true`**, **`source`**, **`sourceAvailable`**, **`provenance`**. **Not on classpath (successful scan):** **`isError: false`**, **`found: false`**, **`querySucceeded: true`** — do not retry as a transient failure. **Failures:** **`isError: true`** with **`errorCategory`** (`transient` \| `validation` \| `business` \| `permission`), **`isRetryable`**, **`description`** (what/why + recovery), stable **`code`** (§7), and domain **`error`**. |
+| `get_class_structure` | Planned | Returns **structured metadata only** — kind, superclass, interfaces, type parameters, fields (type + visibility), method signatures (parameters, return type, generics), Javadoc when a sources JAR exists — **not** full file body. Lets agents answer “does this method take `String` or `CharSequence`?” without burning context on hundreds of lines; escalate to `get_class_source` when implementation is needed. |
+| `list_modules` | Planned | Lists all submodules in a multimodule project with their dependency counts |
+| `resolve_dependencies` | Planned | Returns **`ResolutionOutput`** (§5.5.2) for the project or scoped module. Supports **`forceRefresh: boolean`** — when `true`, skips hash-based resolution cache and re-invokes Gradle (see §6.1). |
+
+**MCP error categories (`get_class_source`):** Tool failures set **`isError: true`** and include **`errorCategory`**, **`isRetryable`**, and a **`description`** explaining what failed and why. **`transient`** — Gradle/network/timeouts; retry after a delay. **`validation`** — bad `projectRoot`, FQN, `modulePath`, or `configuration`; fix inputs. **`business`** — e.g. CFR cannot decompile, sources permanently unavailable; do not retry the same request. **`permission`** — repository auth denied; escalate credentials. A class missing after a **successful** classpath scan is **`found: false`** with **`isError: false`** (not confused with “could not reach Gradle”).
 
 **`get_class_structure` output shape (illustrative):**
 
@@ -864,7 +866,7 @@ The following represents the minimum build that validates the architecture end-t
 5. Source JAR extraction (preferred path)
 6. CFR decompilation with result caching (fallback path)
 7. CLI entry point with `--project` and `--module` flags
-8. MCP server entry point with `get_class_source`, `get_class_structure`, `list_modules`, `resolve_dependencies` tools (see §8.2 for shapes and flags)
+8. MCP server entry point; **`get_class_source`** is implemented (§8.2). Remaining tools **`get_class_structure`**, **`list_modules`**, **`resolve_dependencies`** are specified but not yet registered.
 9. Structured error responses (unsupported project, class not found, version conflict)
 
 **Near-term interface goals (specified in §7–§9; implement in priority order):**

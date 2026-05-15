@@ -31,8 +31,10 @@
     "typescript": "^5.9.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0-alpha.2",
     "commander": "^14.0.3",
     "env-paths": "^4.0.0",
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.2",
+    "zod": "^4.4.3"
   }
 }
