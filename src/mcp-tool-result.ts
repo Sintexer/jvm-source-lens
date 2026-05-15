@@ -1,6 +1,8 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { ClassSourceError } from './extractor/class-source-types.js';
 import type { DecompiledProvenance, SourcesJarProvenance } from './extractor/class-source-types.js';
+import type { ResolutionResult } from './resolvers/base.js';
+import type { ResolutionOutput } from './resolvers/resolution-output.js';
 
 /** MCP agent recovery categories (transient / validation / business / permission). */
 export type McpErrorCategory = 'transient' | 'validation' | 'business' | 'permission';
@@ -39,6 +41,13 @@ export type McpClassSourceToolPayload =
   | McpClassSourceNotFoundPayload
   | McpClassSourceFailurePayload;
 
+export type McpResolveDependenciesSuccessPayload = {
+  ok: true;
+  resolution: ResolutionOutput;
+};
+
+export type McpResolveDependenciesToolPayload = McpResolveDependenciesSuccessPayload | McpClassSourceFailurePayload;
+
 export type ClassSourceQueryContext = {
   projectRoot: string;
   modulePath?: string;
@@ -76,6 +85,34 @@ export function mcpToolResultFromClassSource(
 
 export function mcpToolResultFromProjectRootError(message: string, projectRoot: string): CallToolResult {
   const error: ClassSourceError = { code: 'RESOLUTION_FAILED', message };
+  const envelope = classifyClassSourceError(error, { projectRoot });
+  return buildMcpErrorCallResult(envelope.summary, envelope.payload);
+}
+
+export function mcpToolResultFromResolutionResult(
+  result: ResolutionResult,
+  projectRoot: string,
+): CallToolResult {
+  if (result.ok) {
+    const { output } = result;
+    const payload: McpResolveDependenciesSuccessPayload = { ok: true, resolution: output };
+    const partialErrors = output.errors.length;
+    const summary =
+      `Resolved ${output.modules.length} module(s) at ${output.resolvedAt}` +
+      (partialErrors > 0 ? ` with ${partialErrors} partial resolution warning(s) in errors[]` : '') +
+      '.';
+    return {
+      isError: false,
+      content: [{ type: 'text', text: summary }],
+      structuredContent: payload,
+    };
+  }
+
+  const error: ClassSourceError = {
+    code: 'RESOLUTION_FAILED',
+    message: result.message,
+    stderr: result.stderr,
+  };
   const envelope = classifyClassSourceError(error, { projectRoot });
   return buildMcpErrorCallResult(envelope.summary, envelope.payload);
 }

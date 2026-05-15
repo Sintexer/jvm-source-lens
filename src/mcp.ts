@@ -8,10 +8,13 @@ import { getClassSource } from './get-class-source.js';
 import {
   mcpToolResultFromClassSource,
   mcpToolResultFromProjectRootError,
+  mcpToolResultFromResolutionResult,
   mcpToolResultFromUnexpectedError,
   type ClassSourceQueryContext,
 } from './mcp-tool-result.js';
 import { resolveProjectRoot } from './project-path.js';
+import { resolveWithResolutionCache } from './resolve-with-cache.js';
+import { UnsupportedProjectError } from './resolvers/index.js';
 
 const artifactCoordinatesSchema = z.object({
   group: z.string(),
@@ -128,6 +131,56 @@ const getClassSourceInputSchema = z.object({
   forceRefresh: z.boolean().optional(),
 });
 
+const buildSystemInfoSchema = z.object({
+  type: z.literal('gradle'),
+  version: z.string(),
+  wrapper: z.boolean(),
+});
+
+const resolutionErrorSchema = z.object({
+  module: z.string(),
+  configuration: z.string().optional(),
+  message: z.string(),
+  fatal: z.boolean(),
+});
+
+/** Top-level ResolutionOutput shape (§5.5.2); nested modules validated at Gradle/cache boundary. */
+const resolutionOutputSchema = z.object({
+  schemaVersion: z.string(),
+  resolvedAt: z.string(),
+  buildSystem: buildSystemInfoSchema,
+  projectRoot: z.string(),
+  modules: z.array(z.unknown()),
+  errors: z.array(resolutionErrorSchema),
+});
+
+const resolveDependenciesFailureSchema = z.object({
+  ok: z.literal(false),
+  error: z.object({
+    code: z.literal('RESOLUTION_FAILED'),
+    message: z.string(),
+    stderr: z.string().optional(),
+  }),
+  code: z.literal('RESOLUTION_FAILED'),
+  errorCategory: mcpErrorCategorySchema,
+  isRetryable: z.boolean(),
+  description: z.string(),
+});
+
+/** Documented MCP tool payloads for resolve_dependencies (success or categorized failure). */
+export const mcpResolveDependenciesPayloadSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+    resolution: resolutionOutputSchema,
+  }),
+  resolveDependenciesFailureSchema,
+]);
+
+const resolveDependenciesInputSchema = z.object({
+  projectRoot: z.string().min(1),
+  forceRefresh: z.boolean().optional(),
+});
+
 export async function startMcpServer(): Promise<void> {
   const pkgPath = fileURLToPath(new URL('../package.json', import.meta.url));
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
@@ -137,6 +190,7 @@ export async function startMcpServer(): Promise<void> {
     {
       instructions:
         'JVM Source Lens (Gradle first): use get_class_source with a fully-qualified class name and projectRoot. ' +
+        'Use resolve_dependencies to warm or refresh the resolution cache and obtain ResolutionOutput (all modules); then get_class_source reuses the cache. ' +
         'Failures return errorCategory (transient | validation | business | permission), isRetryable, and a detailed description. ' +
         'CLASS_NOT_FOUND after a successful classpath scan is NOT an error (found=false, querySucceeded=true) — do not retry as if the tool failed. ' +
         'Transient errors: retry after a delay. Validation: fix inputs. Business and permission: do not retry the same request.',
@@ -178,6 +232,38 @@ export async function startMcpServer(): Promise<void> {
         });
         return mcpToolResultFromClassSource(result, query);
       } catch (e) {
+        return mcpToolResultFromUnexpectedError(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'resolve_dependencies',
+    {
+      title: 'Resolve Gradle dependencies',
+      description:
+        'Runs or loads cached Gradle dependency resolution for the project and returns ResolutionOutput (§5.5.2). ' +
+        'Use forceRefresh to bypass the hash cache after dependency changes without build-file edits. ' +
+        'On failure: isError=true with errorCategory, isRetryable, description, and code RESOLUTION_FAILED.',
+      inputSchema: resolveDependenciesInputSchema,
+      outputSchema: mcpResolveDependenciesPayloadSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async (args) => {
+      const root = resolveProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
+      }
+
+      try {
+        const result = await resolveWithResolutionCache(root.path, {
+          forceRefresh: Boolean(args.forceRefresh),
+        });
+        return mcpToolResultFromResolutionResult(result, args.projectRoot);
+      } catch (e) {
+        if (e instanceof UnsupportedProjectError) {
+          return mcpToolResultFromProjectRootError(e.message, args.projectRoot);
+        }
         return mcpToolResultFromUnexpectedError(e);
       }
     },

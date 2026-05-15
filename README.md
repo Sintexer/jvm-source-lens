@@ -701,9 +701,9 @@ The same core logic is exposed as an MCP server, making the tool available to ID
 | `get_class_source` | **Implemented** | Returns full Java source (original or CFR-decompiled) for a **fully-qualified** class name. Tool arguments: **`className`**, **`projectRoot`**, optional **`modulePath`**, **`configuration`**, **`includeTest`**, **`forceRefresh`** (same semantics as CLI `get`). **Found:** **`isError: false`**, **`found: true`**, **`source`**, **`sourceAvailable`**, **`provenance`**. **Not on classpath (successful scan):** **`isError: false`**, **`found: false`**, **`querySucceeded: true`** — do not retry as a transient failure. **Failures:** **`isError: true`** with **`errorCategory`** (`transient` \| `validation` \| `business` \| `permission`), **`isRetryable`**, **`description`** (what/why + recovery), stable **`code`** (§7), and domain **`error`**. |
 | `get_class_structure` | Planned | Returns **structured metadata only** — kind, superclass, interfaces, type parameters, fields (type + visibility), method signatures (parameters, return type, generics), Javadoc when a sources JAR exists — **not** full file body. Lets agents answer “does this method take `String` or `CharSequence`?” without burning context on hundreds of lines; escalate to `get_class_source` when implementation is needed. |
 | `list_modules` | Planned | Lists all submodules in a multimodule project with their dependency counts |
-| `resolve_dependencies` | Planned | Returns **`ResolutionOutput`** (§5.5.2) for the project or scoped module. Supports **`forceRefresh: boolean`** — when `true`, skips hash-based resolution cache and re-invokes Gradle (see §6.1). |
+| `resolve_dependencies` | **Implemented** | Returns validated **`ResolutionOutput`** (§5.5.2) for the whole project (all `modules[]`). Tool arguments: **`projectRoot`**, optional **`forceRefresh`** (same semantics as CLI `resolve` / §6.1). **Success:** **`isError: false`**, **`ok: true`**, **`resolution`** (full document). **Failures:** **`isError: true`** with **`errorCategory`**, **`isRetryable`**, **`description`**, **`code: RESOLUTION_FAILED`**, and domain **`error`**. Use before batch **`get_class_source`** calls to warm the resolution cache without per-class Gradle runs. |
 
-**MCP error categories (`get_class_source`):** Tool failures set **`isError: true`** and include **`errorCategory`**, **`isRetryable`**, and a **`description`** explaining what failed and why. **`transient`** — Gradle/network/timeouts; retry after a delay. **`validation`** — bad `projectRoot`, FQN, `modulePath`, or `configuration`; fix inputs. **`business`** — e.g. CFR cannot decompile, sources permanently unavailable; do not retry the same request. **`permission`** — repository auth denied; escalate credentials. A class missing after a **successful** classpath scan is **`found: false`** with **`isError: false`** (not confused with “could not reach Gradle”).
+**MCP error categories (`get_class_source`, `resolve_dependencies`):** Tool failures set **`isError: true`** and include **`errorCategory`**, **`isRetryable`**, and a **`description`** explaining what failed and why. **`transient`** — Gradle/network/timeouts; retry after a delay. **`validation`** — bad `projectRoot`, FQN, `modulePath`, or `configuration`; fix inputs. **`business`** — e.g. CFR cannot decompile, sources permanently unavailable; do not retry the same request. **`permission`** — repository auth denied; escalate credentials. A class missing after a **successful** classpath scan is **`found: false`** with **`isError: false`** (not confused with “could not reach Gradle”).
 
 **`get_class_structure` output shape (illustrative):**
 
@@ -866,7 +866,7 @@ The following represents the minimum build that validates the architecture end-t
 5. Source JAR extraction (preferred path)
 6. CFR decompilation with result caching (fallback path)
 7. CLI entry point with `--project` and `--module` flags
-8. MCP server entry point; **`get_class_source`** is implemented (§8.2). Remaining tools **`get_class_structure`**, **`list_modules`**, **`resolve_dependencies`** are specified but not yet registered.
+8. MCP server entry point; **`get_class_source`** and **`resolve_dependencies`** are implemented (§8.2). Remaining tools **`get_class_structure`**, **`list_modules`** are specified but not yet registered.
 9. Structured error responses (unsupported project, class not found, version conflict)
 
 **Near-term interface goals (specified in §7–§9; implement in priority order):**
@@ -875,7 +875,7 @@ The following represents the minimum build that validates the architecture end-t
 |---|---|---|
 | High | `get_class_structure` MCP tool (metadata without full source) | §8.2 |
 | High | `sourceAvailable` on all source-bearing MCP/CLI/library responses | §7.1 |
-| Medium | `forceRefresh` on `resolve_dependencies` + `--force-refresh` on CLI | §6.1, §8.1 |
+| Medium | `forceRefresh` on `resolve_dependencies` + `--force-refresh` on CLI | §6.1, §8.1 — **done** for MCP and CLI |
 | Medium | Class search by simple name / glob (disambiguation list) | §12 |
 | Low | `jvmsrc config` MCP snippet generator | §8.1.1 |
 | Low | `JVMSRC_CFR_PATH` CFR JAR override | §9.3 |

@@ -19,7 +19,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 - [x] CFR decompilation fallback + `decompiled/` cache
 - [x] MCP server — `get_class_source`
-- [ ] MCP server — `resolve_dependencies`
+- [x] MCP server — `resolve_dependencies`
 - [ ] MCP server — `list_modules`
 - [ ] Inter-project source lookup (`origin: interproject`)
 
@@ -89,9 +89,9 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **References:** [src/resolve-with-cache.ts](src/resolve-with-cache.ts)
 
-- [ ] Tool `resolve_dependencies`: `projectRoot`, optional `forceRefresh`
-- [ ] Returns validated `ResolutionOutput` JSON
-- [ ] Errors as structured tool result (not thrown over MCP)
+- [x] Tool `resolve_dependencies`: `projectRoot`, optional `forceRefresh`
+- [x] Returns validated `ResolutionOutput` JSON
+- [x] Errors as structured tool result (not thrown over MCP)
 
 ---
 
