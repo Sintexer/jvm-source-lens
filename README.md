@@ -186,6 +186,7 @@ src/
   method-signature-from-javap.ts ← shared javap parse helper for method overloads
   public-api.ts             ← library entry (`package.json` `main` / `exports`)
   cli-get-output.ts         ← `get` stdout/stderr JSON formatting
+  cli-progress.ts           ← phased stderr progress (CLI)
   decompiler/
     decompile-external-class.ts  ← cache + CFR orchestration
     spawn-cfr.ts                 ← `java -jar cfr.jar` subprocess
@@ -676,7 +677,7 @@ jvmsrc get com.example.MyClass --project /path/to/project --json
 
 #### 8.1.1 `get` output contract (CLI)
 
-**`jvmsrc resolve`** writes pretty-printed **`ResolutionOutput`** JSON to **stdout** only.
+**`jvmsrc resolve`** writes pretty-printed **`ResolutionOutput`** JSON to **stdout** only. While Gradle runs, **stderr** may show phased **`[jvmsrc] …`** lines (or Gradle’s own stderr if **`--verbose` / `-v`**). **`jvmsrc get`** uses the same progress rules on **stderr** for Gradle work; add **`--verbose`** to stream Gradle stderr during resolution and sources JAR fetch.
 
 **`jvmsrc get`** uses two streams on purpose so **stdout stays pipeable** as a single `.java` file:
 
@@ -692,7 +693,9 @@ Example success metadata (stderr, default mode):
 {"sourceAvailable":true,"className":"com.example.Foo","provenance":{"kind":"sourcesJar","coordinates":{"group":"…","name":"…","version":"…"},"jarPath":"/path/to/…-sources.jar"}}
 ```
 
-**`--quiet` / `-q`:** on success, write **only** the Java source to stdout; **do not** print the metadata JSON to stderr. Errors are unchanged (still JSON on stderr, non-zero exit). Use for shell pipelines (`jvmsrc get … -q > Foo.java`) when you do not need provenance on the terminal.
+**`--quiet` / `-q`:** on success, write **only** the Java source to stdout; **do not** print the metadata JSON to stderr. **Also disables** phased **`[jvmsrc]`** progress on stderr (Gradle CFR phases and dependency resolution). Errors are unchanged (still JSON on stderr in default mode, non-zero exit). Use for shell pipelines (`jvmsrc get … -q > Foo.java`) when you do not need provenance on the terminal.
+
+**`--verbose` / `-v` (`get` and `resolve`):** stream **Gradle** stderr to the terminal for the main **`jvmsrcResolve`** run and for **`jvmsrcResolveSources`** on **`get`** (live build output). When **`--verbose`** is set, phased progress lines are not shown for those Gradle invocations (Gradle output replaces them). CFR decompilation still emits a phased **`[jvmsrc] Decompiling with CFR…`** line on **`get`** when progress is enabled (i.e. not **`--quiet`**).
 
 **`--json`:** write **one compact JSON line** to **stdout** for both success and failure; **nothing** to stderr. **Success:** `source`, `sourceAvailable`, `className`, `provenance` (same shape as MCP **`get_class_source`**, §8.2). **Failure:** `{ "error": true, "code": "…", … }` using the same stable **`code`** values as default mode (§7). **Invalid `--project`:** stdout only: `{ "error": true, "code": "INVALID_PROJECT_ROOT", "message": "…" }` (CLI validation; not an extractor error). Non-zero exit on failure. With **`--json`**, **`--quiet` / `-q`** has no extra effect (stdout is already a single structured object).
 

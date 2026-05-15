@@ -30,7 +30,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] Enrich `get_class_structure`: optional `include` (hierarchy, fields, annotations) — §12.2
 - [x] Inspection split: bytecode-only MCP overload tool + declaration-centric default payloads — [README §7.2](README.md)
 - [x] CLI `get --json` (single structured object on stdout)
-- [ ] CLI progress indicators (long Gradle / decompile waits)
+- [x] CLI progress indicators (long Gradle / decompile waits)
 - [ ] Hardening: Gradle timeouts, clearer errors, integration smoke test
 
 ### P2 — Post-MVP
@@ -211,11 +211,13 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **References:** [src/cli.ts](src/cli.ts), [src/cli-get-output.ts](src/cli-get-output.ts), [src/resolvers/gradle/spawn-gradle.ts](src/resolvers/gradle/spawn-gradle.ts), README §8.1.1 (stdout/stderr contract)
 
-- [ ] Spinner or phase labels on **stderr** while Gradle runs (`resolve`, resolution cache miss on `get`, `jvmsrcResolveSources`)
-- [ ] Optional phase line when CFR decompiles (stderr)
-- [ ] Disabled when **`--quiet`** / `-q` on `get`; `resolve` stays JSON-clean on stdout (progress stderr-only)
-- [ ] Optional **`--verbose`**: forward or trim Gradle stderr for power users (design TBD)
-- [ ] README §8.1.1 updated (progress on stderr; scripts use `--quiet` or stdout-only parsing)
+- [x] Spinner or phase labels on **stderr** while Gradle runs (`resolve`, resolution cache miss on `get`, `jvmsrcResolveSources`)
+- [x] Optional phase line when CFR decompiles (stderr)
+- [x] Disabled when **`--quiet`** / `-q` on `get`; `resolve` stays JSON-clean on stdout (progress stderr-only)
+- [x] Optional **`--verbose` / `-v`**: Gradle stderr inherited on **`resolve`** and on Gradle work during **`get`**
+- [x] README §8.1.1 updated (progress on stderr; scripts use `--quiet` or stdout-only parsing)
+
+**Note:** `--verbose` streams Gradle stderr to the terminal; phased **`[jvmsrc]`** lines are omitted for those Gradle runs so output is not duplicated on a single TTY line.
 
 ---
 

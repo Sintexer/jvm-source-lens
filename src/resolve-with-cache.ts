@@ -1,4 +1,4 @@
-import type { DependencyResolver, ResolutionResult } from './resolvers/base.js';
+import type { DependencyResolver, ResolutionResult, ResolveOptions } from './resolvers/base.js';
 import { detectResolver } from './resolvers/index.js';
 import {
   computeBuildInputsDigest,
@@ -11,6 +11,8 @@ export type ResolveWithResolutionCacheOptions = {
   forceRefresh: boolean;
   /** When set (e.g. in tests), skips `detectResolver` and uses this resolver instead. */
   resolver?: DependencyResolver;
+  /** Passed through to `resolver.resolve` (Gradle hooks / verbose stderr). */
+  resolveOptions?: ResolveOptions;
 };
 
 const defaultOptions: ResolveWithResolutionCacheOptions = { forceRefresh: false };
@@ -35,7 +37,7 @@ export async function resolveWithResolutionCache(
     }
   }
 
-  const result = await resolver.resolve(canonical);
+  const result = await resolver.resolve(canonical, options?.resolveOptions);
 
   if (result.ok) {
     const digest = computeBuildInputsDigest(canonical);

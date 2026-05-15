@@ -13,6 +13,8 @@ export type DecompileExternalClassOptions = {
   entryRelPath: string;
   coordinates: ArtifactCoordinates;
   runCfr?: typeof runCfrDecompile;
+  /** Invoked only when CFR runs (not on cache hit). */
+  onBeforeCfr?: () => void;
 };
 
 export type DecompileExternalClassSuccess = {
@@ -93,6 +95,7 @@ export async function decompileExternalClass(
   }
 
   const runCfr = opts.runCfr ?? runCfrDecompile;
+  opts.onBeforeCfr?.();
   const cfr = await runCfr({
     jarPath: opts.jarPath,
     className: opts.className,

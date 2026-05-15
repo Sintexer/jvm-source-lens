@@ -19,6 +19,12 @@ export interface ResolveOptions {
   modulePath?: string;
   configuration?: string;
   includeTest?: boolean;
+  /** Gradle: stream stderr to the terminal (CLI `--verbose`). */
+  inheritGradleStderr?: boolean;
+  /** Gradle: invoked immediately before `runGradleTask` for this resolve. */
+  onBeforeGradle?: () => void;
+  /** Gradle: invoked when this resolve's Gradle process has exited (success or failure). */
+  onAfterGradle?: () => void;
 }
 
 export type ResolutionResult =

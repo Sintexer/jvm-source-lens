@@ -41,6 +41,8 @@ export type ClassSourceLookupOptions = {
   includeTest?: boolean;
   /** When set, fetches sources for the winning artifact only (Gradle on-demand). */
   resolveSourcesJar?: ResolveSourcesJarFn;
+  /** When set, invoked only if CFR runs (not on decompilation cache hit). */
+  onBeforeDecompile?: () => void;
   /** Override for tests; defaults to CFR decompilation with global cache. */
   decompileExternalClass?: DecompileExternalClassFn;
 };

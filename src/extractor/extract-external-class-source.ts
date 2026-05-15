@@ -123,6 +123,7 @@ export async function extractExternalClassSource(
     jarPath: hit.classpath,
     entryRelPath: paths.classRelPath,
     coordinates,
+    onBeforeCfr: opts.onBeforeDecompile,
   });
   if (decompiled.ok) {
     return decompiled;

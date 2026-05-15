@@ -15,6 +15,11 @@ export type GradleSpawnResult =
   | { ok: true; stdout: string; stderr: string }
   | { ok: false; message: string; stderr?: string };
 
+export type RunGradleSpawnOptions = {
+  /** When true, Gradle stderr is inherited by the process (stdout stays piped for JSON). */
+  inheritStderr?: boolean;
+};
+
 /**
  * Runs a root-project Gradle task with the bundled jvmsrc init script.
  */
@@ -22,6 +27,7 @@ export async function runGradleTask(
   projectRoot: string,
   task: string,
   projectProperties?: Record<string, string>,
+  spawnOptions?: RunGradleSpawnOptions,
 ): Promise<GradleSpawnResult> {
   const root = path.resolve(projectRoot);
   const initScript = getBundledResource('analyzer-init.gradle');
@@ -56,7 +62,7 @@ export async function runGradleTask(
     proc = Bun.spawn(argv, {
       cwd: root,
       stdout: 'pipe',
-      stderr: 'pipe',
+      stderr: spawnOptions?.inheritStderr ? 'inherit' : 'pipe',
       stdin: 'ignore',
       env: process.env,
     });

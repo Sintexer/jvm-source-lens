@@ -224,4 +224,30 @@ describe('resolveWithResolutionCache', () => {
     await resolveWithResolutionCache(dir, { forceRefresh: true, resolver });
     expect(calls).toBe(2);
   });
+
+  test('forwards resolveOptions to resolver.resolve', async () => {
+    const { resolveWithResolutionCache } = await import('../resolve-with-cache.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-ropts-'));
+    writeGradleStubs(dir);
+    const out = minimalResolutionOutput(dir);
+    let seen: unknown;
+    const resolver: DependencyResolver = {
+      detect: () => true,
+      resolve: async (_root, opts): Promise<ResolutionResult> => {
+        seen = opts;
+        return { ok: true, output: out };
+      },
+    };
+    await resolveWithResolutionCache(dir, {
+      forceRefresh: true,
+      resolver,
+      resolveOptions: { inheritGradleStderr: true, onBeforeGradle: () => {} },
+    });
+    expect(seen).toEqual(
+      expect.objectContaining({
+        inheritGradleStderr: true,
+        onBeforeGradle: expect.any(Function),
+      }),
+    );
+  });
 });

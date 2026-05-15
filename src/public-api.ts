@@ -1,4 +1,4 @@
-export { getClassSource, type GetClassSourceOptions } from './get-class-source.js';
+export { getClassSource, type GetClassSourceCliOptions, type GetClassSourceOptions } from './get-class-source.js';
 export { getClassStructure, type GetClassStructureOptions } from './get-class-structure.js';
 export type {
   ClassStructureDeclaredAnnotation,
@@ -11,7 +11,7 @@ export type {
 } from './class-structure/types.js';
 export { resolveWithResolutionCache, type ResolveWithResolutionCacheOptions } from './resolve-with-cache.js';
 export { extractExternalClassSource } from './extractor/extract-external-class-source.js';
-export { resolveSourcesJar, type ResolveSourcesJarResult } from './resolvers/gradle/resolve-sources-jar.js';
+export { resolveSourcesJar, type ResolveSourcesJarGradleOptions, type ResolveSourcesJarResult } from './resolvers/gradle/resolve-sources-jar.js';
 export type {
   ArtifactCoordinates,
   ClassSourceError,
