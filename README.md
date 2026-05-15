@@ -179,9 +179,12 @@ src/
   public-api.ts             ← library entry (`package.json` `main` / `exports`)
   cli-get-output.ts         ← `get` stdout/stderr JSON formatting
   decompiler/
-    index.ts              ← CFR subprocess wrapper (stub)
+    decompile-external-class.ts  ← cache + CFR orchestration
+    spawn-cfr.ts                 ← `java -jar cfr.jar` subprocess
+    index.ts                     ← re-exports
   cache/
     paths.ts              ← global cache root (env-paths) + project bucket paths
+    decompiled-paths.ts   ← global `decompiled/<g>/<a>/<v>/<Class>.java` paths
     index.ts              ← build-input digest, read/write resolution cache files
   resolve-with-cache.ts   ← resolveWithResolutionCache() — cache gate + resolver on miss
   cli.ts                  ← CLI entry point (`get`, `resolve`, `mcp`, …)
@@ -560,7 +563,16 @@ CFR decompilation results are cached by artifact coordinates + class name under 
   decompiled/<group>/<artifact>/<version>/<ClassName>.java
 ```
 
-This means sequential agent calls for classes within the same dependency pay the decompilation cost only once, and the store can be shared across projects on one machine.
+This means sequential agent calls for classes within the same dependency pay the decompilation cost only once, and the store can be shared across projects on one machine. Files are written on the first decompile miss (atomic temp + rename, same pattern as resolution cache buckets).
+
+**Security (decompile path):**
+
+- **Untrusted bytecode:** CFR executes JVM bytecode from dependency JARs. Treat decompilation as running third-party code in a local JDK process (same trust boundary as Gradle). Use only on projects and dependencies you trust.
+- **Cache confinement:** Cache file paths are built only from sanitized Maven coordinates and a validated simple class name; writes are refused unless the resolved path stays under `decompiled/`. Segments `.`, `..`, and `..` substrings in coordinates are rejected.
+- **Subprocess env:** CFR spawns use a stripped environment (no `JAVA_TOOL_OPTIONS`, `_JAVA_OPTIONS`, `JDK_JAVA_OPTIONS`, `CLASSPATH`, `LD_PRELOAD`, etc.) so parent-process JVM injection does not apply to the child.
+- **Limits:** CFR runs with a wall-clock timeout (default 120s, `JVMSRC_CFR_TIMEOUT_MS`) and stdout cap (default 10 MiB, `JVMSRC_CFR_MAX_OUTPUT_BYTES`).
+- **Shared cache:** The `decompiled/` tree is machine-local and shared across projects. Another user or process with access to the same cache directory could read cached `.java` files; keep `JVMSRC_CACHE_ROOT` private on multi-user hosts.
+- **Agent trust:** Decompiled stdout is structurally useful but not authoritative (see §7.1 `sourceAvailable: false`). Agents must not treat decompiled text as ground truth for security-sensitive decisions (secrets, auth checks, crypto).
 
 ---
 
@@ -585,9 +597,9 @@ Once a **`ResolutionOutput`** is loaded (from cache or a fresh Gradle run), the 
         to verify the class name or check if the dependency is declared
 ```
 
-**Current `jvmsrc get` / library behavior (v0.1.x):** Steps **2** and **4** for **`origin: external`** JARs. **`jvmsrc resolve`** records main **`jarPath`** only (`sourcesJarPath` is usually **`null`** — compile classpaths do not include sources variants). On **`get`**, the tool walks artifacts in order, finds the first **`jarPath`** containing the **`.class`**, then runs Gradle task **`jvmsrcResolveSources`** once for that module’s coordinates (`ArtifactResolutionQuery` + `SourcesArtifact`) to download or reuse the **`-sources.jar`** from `~/.gradle/caches`, then reads **`.java`**. Step **1** (inter-project) and step **3** (CFR + decompile cache) are **not implemented** — if sources are missing, **`DECOMPILE_NOT_IMPLEMENTED`**. First bytecode match wins.
+**Current `jvmsrc get` / library behavior (v0.1.x):** Steps **2**, **3**, and **4** for **`origin: external`** JARs. **`jvmsrc resolve`** records main **`jarPath`** only (`sourcesJarPath` is usually **`null`** — compile classpaths do not include sources variants). On **`get`**, the tool walks artifacts in order, finds the first **`jarPath`** containing the **`.class`**, then runs Gradle task **`jvmsrcResolveSources`** once for that module’s coordinates (`ArtifactResolutionQuery` + `SourcesArtifact`) to download or reuse the **`-sources.jar`** from `~/.gradle/caches`, then reads **`.java`**. If sources are still missing, it checks the global **`decompiled/`** cache (§6.2), then runs bundled **CFR** via `java -jar` (requires a JDK on `PATH` or **`JAVA_HOME`**), caches the result, and returns decompiled Java with **`sourceAvailable: false`**. Step **1** (inter-project) is **not implemented**. First bytecode match wins.
 
-**Stable `code` values** on failures: **`RESOLUTION_FAILED`**, **`SOURCES_RESOLVE_FAILED`**, **`INVALID_FQN`**, **`MODULE_NOT_FOUND`**, **`CONFIGURATION_NOT_FOUND`**, **`ZIP_READ_ERROR`**, **`CLASS_NOT_FOUND`**, **`DECOMPILE_NOT_IMPLEMENTED`**.
+**Stable `code` values** on failures: **`RESOLUTION_FAILED`**, **`SOURCES_RESOLVE_FAILED`**, **`INVALID_FQN`**, **`MODULE_NOT_FOUND`**, **`CONFIGURATION_NOT_FOUND`**, **`ZIP_READ_ERROR`**, **`CLASS_NOT_FOUND`**, **`DECOMPILE_FAILED`**.
 
 The tool **never falls back to scanning the global cache** without a resolved tree. If Gradle resolution fails, the tool reports the failure — it does not attempt to guess from `~/.gradle/caches`.
 
@@ -598,7 +610,7 @@ Every response that returns **Java source text** (CLI `get` stdout, MCP `get_cla
 - **`true`** — text came from **original source** (project sources, inter-project files, or a **sources JAR**). Javadoc, parameter names (as compiled), and generics match what the author shipped.
 - **`false`** — text came from **decompiled bytecode** (CFR). Structurally reliable, but Javadoc is absent, parameter names may be missing unless the dependency was built with `-parameters`, and complex generics can be approximated.
 
-Agents should treat `sourceAvailable: false` as “trust types and control flow; treat names and comments as best-effort.” Escalation to `get_class_structure` (signatures only) or re-resolution (`forceRefresh`) is a separate concern.
+Agents should treat `sourceAvailable: false` as “trust types and control flow; treat names and comments as best-effort.” Do not rely on decompiled output for security reviews, credential handling, or proving absence of malicious behavior — it is recovered from bytecode, may omit comments, and is produced by a subprocess on untrusted classes. Escalation to `get_class_structure` (signatures only) or re-resolution (`forceRefresh`) is a separate concern.
 
 ---
 

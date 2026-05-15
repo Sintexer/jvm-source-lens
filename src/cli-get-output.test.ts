@@ -42,6 +42,26 @@ describe('writeCliGetResult', () => {
     expect(stderrMessages.length).toBe(0);
   });
 
+  test('writes decompiled metadata to stderr', () => {
+    captureConsoleError();
+    writeCliGetResult({
+      ok: true,
+      source: 'class Foo {}\n',
+      sourceAvailable: false,
+      className: 'com.example.Foo',
+      provenance: {
+        kind: 'decompiled',
+        coordinates: { group: 'g', name: 'a', version: '1' },
+        jarPath: '/tmp/a.jar',
+        entryRelPath: 'com/example/Foo.class',
+        cachePath: '/cache/jvmsrc/decompiled/g/a/1/Foo.java',
+      },
+    });
+    expect(stderrMessages.length).toBe(1);
+    expect(stderrMessages[0]).toContain('"sourceAvailable":false');
+    expect(stderrMessages[0]).toContain('"kind":"decompiled"');
+  });
+
   test('quiet mode still writes errors to stderr', () => {
     captureConsoleError();
     writeCliGetResult(

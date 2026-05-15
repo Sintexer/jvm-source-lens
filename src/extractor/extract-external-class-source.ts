@@ -1,3 +1,4 @@
+import { decompileExternalClass } from '../decompiler/decompile-external-class.js';
 import type { ArtifactCoordinates, ClassSourceLookupOptions, ClassSourceLookupResult } from './class-source-types.js';
 import { isExternalJarArtifact } from './class-source-types.js';
 import { fqnToZipRelPaths } from './fqn-paths.js';
@@ -105,18 +106,17 @@ export async function extractExternalClassSource(
       }
     }
 
-    return {
-      ok: false,
-      error: {
-        code: 'DECOMPILE_NOT_IMPLEMENTED',
-        message:
-          'Class found as bytecode only; CFR decompilation is not implemented yet. Use a dependency that publishes a sources JAR, or wait for decompiler support.',
-        className: opts.className,
-        jarPath: a.jarPath,
-        entryRelPath: paths.classRelPath,
-        coordinates,
-      },
-    };
+    const decompile = opts.decompileExternalClass ?? decompileExternalClass;
+    const decompiled = await decompile({
+      className: opts.className,
+      jarPath: a.jarPath,
+      entryRelPath: paths.classRelPath,
+      coordinates,
+    });
+    if (decompiled.ok) {
+      return decompiled;
+    }
+    return { ok: false, error: decompiled.error };
   }
 
   return {

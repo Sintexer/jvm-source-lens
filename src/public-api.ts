@@ -7,9 +7,11 @@ export type {
   ClassSourceError,
   ClassSourceLookupOptions,
   ClassSourceLookupResult,
+  DecompiledProvenance,
   ResolveSourcesJarFn,
   SourcesJarProvenance,
 } from './extractor/class-source-types.js';
+export { decompileExternalClass } from './decompiler/index.js';
 export { pickResolvedConfiguration, type PickClasspathOptions } from './extractor/pick-classpath.js';
 export { fqnToZipRelPaths } from './extractor/fqn-paths.js';
 export type {

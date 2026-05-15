@@ -36,7 +36,7 @@ program
 program
   .command('get')
   .description(
-    'Print Java source for a fully-qualified class from external dependency JARs (sources JAR only; interproject + CFR not implemented yet)',
+    'Print Java source for a fully-qualified external class (sources JAR preferred, CFR decompile fallback; interproject not yet)',
   )
   .argument('<className>', 'e.g. com.example.MyClass')
   .option('-p, --project <path>', 'Path to the project root', process.cwd())

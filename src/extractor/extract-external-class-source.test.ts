@@ -120,7 +120,7 @@ describe('extractExternalClassSource', () => {
     }
   });
 
-  test('returns DECOMPILE_NOT_IMPLEMENTED when only bytecode and no sources', async () => {
+  test('decompiles when only bytecode and no sources', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
     const binJar = path.join(dir, 'lib.jar');
     fs.writeFileSync(
@@ -142,10 +142,65 @@ describe('extractExternalClassSource', () => {
     const r = await extractExternalClassSource(out, {
       className: 'com.example.Foo',
       resolveSourcesJar: async () => null,
+      decompileExternalClass: async () => ({
+        ok: true,
+        source: 'decompiled Foo',
+        sourceAvailable: false,
+        className: 'com.example.Foo',
+        provenance: {
+          kind: 'decompiled',
+          coordinates: { group: 'com.example', name: 'lib', version: '1.0' },
+          jarPath: binJar,
+          entryRelPath: 'com/example/Foo.class',
+          cachePath: '/cache/Foo.java',
+        },
+      }),
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.source).toBe('decompiled Foo');
+      expect(r.sourceAvailable).toBe(false);
+      expect(r.provenance.kind).toBe('decompiled');
+    }
+  });
+
+  test('returns DECOMPILE_FAILED when decompile fails', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
+    const binJar = path.join(dir, 'lib.jar');
+    fs.writeFileSync(
+      binJar,
+      zipSync({
+        'com/example/Foo.class': fakeClassBytes,
+      }),
+    );
+
+    const out = baseOutput(dir, [
+      artifact({
+        group: 'com.example',
+        name: 'lib',
+        jarPath: binJar,
+        sourcesJarPath: null,
+      }),
+    ]);
+
+    const r = await extractExternalClassSource(out, {
+      className: 'com.example.Foo',
+      resolveSourcesJar: async () => null,
+      decompileExternalClass: async () => ({
+        ok: false,
+        error: {
+          code: 'DECOMPILE_FAILED',
+          message: 'CFR failed',
+          className: 'com.example.Foo',
+          jarPath: binJar,
+          entryRelPath: 'com/example/Foo.class',
+          coordinates: { group: 'com.example', name: 'lib', version: '1.0' },
+        },
+      }),
     });
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error.code).toBe('DECOMPILE_NOT_IMPLEMENTED');
+      expect(r.error.code).toBe('DECOMPILE_FAILED');
     }
   });
 

@@ -1,4 +1,5 @@
 import type { ResolvedArtifact } from '../resolvers/resolution-output.js';
+import type { DecompileExternalClassFn } from '../decompiler/decompile-external-class.js';
 
 export type ArtifactCoordinates = {
   group: string;
@@ -12,6 +13,14 @@ export type SourcesJarProvenance = {
   jarPath: string;
 };
 
+export type DecompiledProvenance = {
+  kind: 'decompiled';
+  coordinates: ArtifactCoordinates;
+  jarPath: string;
+  entryRelPath: string;
+  cachePath: string;
+};
+
 export type ResolveSourcesJarFn = (coordinates: ArtifactCoordinates) => Promise<string | null>;
 
 export type ClassSourceLookupOptions = {
@@ -21,6 +30,8 @@ export type ClassSourceLookupOptions = {
   includeTest?: boolean;
   /** When set, fetches sources for the winning artifact only (Gradle on-demand). */
   resolveSourcesJar?: ResolveSourcesJarFn;
+  /** Override for tests; defaults to CFR decompilation with global cache. */
+  decompileExternalClass?: DecompileExternalClassFn;
 };
 
 export type ClassSourceError =
@@ -39,12 +50,13 @@ export type ClassSourceError =
       searchedArtifactCount: number;
     }
   | {
-      code: 'DECOMPILE_NOT_IMPLEMENTED';
+      code: 'DECOMPILE_FAILED';
       message: string;
       className: string;
       jarPath: string;
       entryRelPath: string;
       coordinates: ArtifactCoordinates;
+      stderr?: string;
     }
   | { code: 'ZIP_READ_ERROR'; message: string; jarPath: string; entryRelPath?: string }
   | { code: 'RESOLUTION_FAILED'; message: string; stderr?: string }
@@ -59,9 +71,9 @@ export type ClassSourceLookupResult =
   | {
       ok: true;
       source: string;
-      sourceAvailable: true;
+      sourceAvailable: boolean;
       className: string;
-      provenance: SourcesJarProvenance;
+      provenance: SourcesJarProvenance | DecompiledProvenance;
     }
   | { ok: false; error: ClassSourceError };
 

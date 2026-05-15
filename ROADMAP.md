@@ -1,6 +1,6 @@
 # jvmsrc roadmap
 
-Living plan for **JVM Source Lens** (`jvmsrc`). Full behavior and schemas remain in [README.md](README.md). Shipped vs planned context: [docs 22-34-27-162/spec-handoff.md](docs%2022-34-27-162/spec-handoff.md).
+Living plan for **JVM Source Lens** (`jvmsrc`). Full behavior and schemas remain in [README.md](README.md).
 
 ## For developers
 
@@ -17,7 +17,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ### P0 — MVP core
 
-- [ ] CFR decompilation fallback + `decompiled/` cache
+- [x] CFR decompilation fallback + `decompiled/` cache
 - [ ] MCP server — `get_class_source`
 - [ ] MCP server — `resolve_dependencies`
 - [ ] MCP server — `list_modules`
@@ -27,6 +27,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 - [ ] MCP server — `get_class_structure`
 - [ ] CLI `get --json` (single structured object on stdout)
+- [ ] CLI progress indicators (long Gradle / decompile waits)
 - [ ] Hardening: Gradle timeouts, clearer errors, integration smoke test
 
 ### P2 — Post-MVP
@@ -59,12 +60,12 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **References:** [README.md §6.2](README.md), [README.md §7](README.md), [src/decompiler/index.ts](src/decompiler/index.ts), [resources/cfr.jar](resources/cfr.jar)
 
-- [ ] CFR subprocess wrapper (`src/decompiler/`)
-- [ ] Wire into `extractExternalClassSource` / `getClassSource` after sources miss
-- [ ] Cache layout: `decompiled/<group>/<artifact>/<version>/<ClassName>.java`
-- [ ] Set `sourceAvailable: false` for decompiled output (CLI stderr, MCP, library)
-- [ ] Tests (fixture JAR without sources)
-- [ ] README / spec-handoff updated
+- [x] CFR subprocess wrapper (`src/decompiler/`)
+- [x] Wire into `extractExternalClassSource` / `getClassSource` after sources miss
+- [x] Cache layout: `decompiled/<group>/<artifact>/<version>/<ClassName>.java`
+- [x] Set `sourceAvailable: false` for decompiled output (CLI stderr, MCP, library)
+- [x] Tests (fixture JAR without sources)
+- [x] README / spec-handoff updated
 
 ---
 
@@ -142,6 +143,20 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [ ] Success: one JSON object on stdout (`source`, `sourceAvailable`, `provenance`)
 - [ ] Failure: one JSON object on stdout with `error` + `code` (document vs stderr default)
 - [ ] README §8.1.1 updated
+
+---
+
+### CLI progress indicators (long Gradle / decompile waits)
+
+**Goal:** Reduce “is it hung?” confusion on cold cache, first resolve, and slow `get` paths. Indeterminate feedback only (no fake percentages unless we later parse Gradle output).
+
+**References:** [src/cli.ts](src/cli.ts), [src/cli-get-output.ts](src/cli-get-output.ts), [src/resolvers/gradle/spawn-gradle.ts](src/resolvers/gradle/spawn-gradle.ts), README §8.1.1 (stdout/stderr contract)
+
+- [ ] Spinner or phase labels on **stderr** while Gradle runs (`resolve`, resolution cache miss on `get`, `jvmsrcResolveSources`)
+- [ ] Optional phase line when CFR decompiles (stderr)
+- [ ] Disabled when **`--quiet`** / `-q` on `get`; `resolve` stays JSON-clean on stdout (progress stderr-only)
+- [ ] Optional **`--verbose`**: forward or trim Gradle stderr for power users (design TBD)
+- [ ] README §8.1.1 updated (progress on stderr; scripts use `--quiet` or stdout-only parsing)
 
 ---
 
