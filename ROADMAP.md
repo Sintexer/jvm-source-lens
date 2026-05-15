@@ -29,7 +29,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 - [x] Enrich `get_class_structure`: optional `include` (hierarchy, fields, annotations) — §12.2
 - [x] Inspection split: bytecode-only MCP overload tool + declaration-centric default payloads — [README §7.2](README.md)
-- [ ] CLI `get --json` (single structured object on stdout)
+- [x] CLI `get --json` (single structured object on stdout)
 - [ ] CLI progress indicators (long Gradle / decompile waits)
 - [ ] Hardening: Gradle timeouts, clearer errors, integration smoke test
 
@@ -198,10 +198,10 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **Goal:** Agent-friendly single blob on stdout (complement `--quiet`).
 
-- [ ] Flag `--json` on `get` subcommand
-- [ ] Success: one JSON object on stdout (`source`, `sourceAvailable`, `provenance`)
-- [ ] Failure: one JSON object on stdout with `error` + `code` (document vs stderr default)
-- [ ] README §8.1.1 updated
+- [x] Flag `--json` on `get` subcommand
+- [x] Success: one JSON object on stdout (`source`, `sourceAvailable`, `className`, `provenance`)
+- [x] Failure: one JSON object on stdout with `error` + `code` (document vs stderr default)
+- [x] README §8.1.1 updated
 
 ---
 

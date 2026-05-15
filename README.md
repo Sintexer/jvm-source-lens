@@ -669,6 +669,9 @@ jvmsrc com.example.MyClass --project /path/to/project
 # Pipe-friendly: no metadata line on stderr
 jvmsrc get com.example.MyClass --project /path/to/project --quiet
 jvmsrc get com.example.MyClass -p /path/to/project -q
+
+# One JSON object on stdout (success or failure)—same facts as MCP get_class_source
+jvmsrc get com.example.MyClass --project /path/to/project --json
 ```
 
 #### 8.1.1 `get` output contract (CLI)
@@ -690,6 +693,8 @@ Example success metadata (stderr, default mode):
 ```
 
 **`--quiet` / `-q`:** on success, write **only** the Java source to stdout; **do not** print the metadata JSON to stderr. Errors are unchanged (still JSON on stderr, non-zero exit). Use for shell pipelines (`jvmsrc get … -q > Foo.java`) when you do not need provenance on the terminal.
+
+**`--json`:** write **one compact JSON line** to **stdout** for both success and failure; **nothing** to stderr. **Success:** `source`, `sourceAvailable`, `className`, `provenance` (same shape as MCP **`get_class_source`**, §8.2). **Failure:** `{ "error": true, "code": "…", … }` using the same stable **`code`** values as default mode (§7). **Invalid `--project`:** stdout only: `{ "error": true, "code": "INVALID_PROJECT_ROOT", "message": "…" }` (CLI validation; not an extractor error). Non-zero exit on failure. With **`--json`**, **`--quiet` / `-q`** has no extra effect (stdout is already a single structured object).
 
 The **MCP** server tool **`get_class_source`** (§8.2) exposes the same facts in a single structured result (`source`, `sourceAvailable`, provenance fields) — no stdout/stderr split — which is better for IDE agents.
 

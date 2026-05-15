@@ -2,11 +2,16 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { writeCliGetResult } from './cli-get-output.js';
 
 const stderrMessages: string[] = [];
+const stdoutJsonLines: string[] = [];
 const origConsoleError = console.error;
+const origConsoleLog = console.log;
 
 afterEach(() => {
   console.error = origConsoleError;
+  console.log = origConsoleLog;
   stderrMessages.length = 0;
+  stdoutJsonLines.length = 0;
+  process.exitCode = 0;
 });
 
 function captureConsoleError(): void {
@@ -14,6 +19,13 @@ function captureConsoleError(): void {
   console.error = ((msg: string) => {
     stderrMessages.push(msg);
   }) as typeof console.error;
+}
+
+function captureConsoleLog(): void {
+  stdoutJsonLines.length = 0;
+  console.log = ((msg: string) => {
+    stdoutJsonLines.push(msg);
+  }) as typeof console.log;
 }
 
 const successResult = {
@@ -73,5 +85,41 @@ describe('writeCliGetResult', () => {
     );
     expect(stderrMessages.length).toBe(1);
     expect(stderrMessages[0]).toContain('"error":true');
+  });
+
+  test('json mode writes one JSON object to stdout on success; nothing to stderr', () => {
+    captureConsoleError();
+    captureConsoleLog();
+    writeCliGetResult(successResult, { json: true });
+    expect(stderrMessages.length).toBe(0);
+    expect(stdoutJsonLines.length).toBe(1);
+    const parsed = JSON.parse(stdoutJsonLines[0]!) as {
+      source: string;
+      sourceAvailable: boolean;
+      className: string;
+      provenance: unknown;
+    };
+    expect(parsed.source).toBe(successResult.source);
+    expect(parsed.sourceAvailable).toBe(true);
+    expect(parsed.className).toBe('com.example.Foo');
+    expect(parsed.provenance).toEqual(successResult.provenance);
+  });
+
+  test('json mode writes error JSON to stdout only', () => {
+    captureConsoleError();
+    captureConsoleLog();
+    writeCliGetResult(
+      {
+        ok: false,
+        error: { code: 'CLASS_NOT_FOUND', message: 'nope', className: 'x', searchedArtifactCount: 0 },
+      },
+      { json: true },
+    );
+    expect(stderrMessages.length).toBe(0);
+    expect(stdoutJsonLines.length).toBe(1);
+    const parsed = JSON.parse(stdoutJsonLines[0]!) as { error: boolean; code: string; message: string };
+    expect(parsed.error).toBe(true);
+    expect(parsed.code).toBe('CLASS_NOT_FOUND');
+    expect(parsed.message).toBe('nope');
   });
 });

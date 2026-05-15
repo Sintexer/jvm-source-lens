@@ -48,6 +48,7 @@ program
   .option('--include-test', 'When --configuration is omitted, use testCompileClasspath', false)
   .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle', false)
   .option('-q, --quiet', 'On success, write only Java source to stdout (no metadata JSON on stderr)', false)
+  .option('--json', 'Print one JSON object on stdout for success or failure (agent-friendly)', false)
   .action(
     async (
       className: string,
@@ -58,11 +59,23 @@ program
         includeTest?: boolean;
         forceRefresh?: boolean;
         quiet?: boolean;
+        json?: boolean;
       },
     ) => {
+      const json = Boolean(options.json);
       const root = resolveProjectRoot(options.project);
       if (!root.ok) {
-        console.error(root.message);
+        if (json) {
+          console.log(
+            JSON.stringify({
+              error: true,
+              code: 'INVALID_PROJECT_ROOT',
+              message: root.message,
+            }),
+          );
+        } else {
+          console.error(root.message);
+        }
         process.exitCode = 1;
         return;
       }
@@ -73,7 +86,7 @@ program
         includeTest: Boolean(options.includeTest),
         forceRefresh: Boolean(options.forceRefresh),
       });
-      writeCliGetResult(result, { quiet: Boolean(options.quiet) });
+      writeCliGetResult(result, { quiet: Boolean(options.quiet), json });
     },
   );
 
