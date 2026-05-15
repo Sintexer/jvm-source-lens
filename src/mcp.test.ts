@@ -3,9 +3,14 @@ import {
   mcpClassSourceToolPayloadSchema,
   mcpGetClassStructurePayloadSchema,
   mcpGetMethodSignaturePayloadSchema,
+  mcpListModulesPayloadSchema,
   mcpResolveDependenciesPayloadSchema,
 } from './mcp.js';
-import { mcpToolResultFromMethodSignature, mcpToolResultFromResolutionResult } from './mcp-tool-result.js';
+import {
+  mcpToolResultFromListModules,
+  mcpToolResultFromMethodSignature,
+  mcpToolResultFromResolutionResult,
+} from './mcp-tool-result.js';
 
 test('mcpClassSourceToolPayloadSchema accepts success with found=true', () => {
   const parsed = mcpClassSourceToolPayloadSchema.safeParse({
@@ -46,6 +51,90 @@ test('mcpClassSourceToolPayloadSchema accepts categorized failure', () => {
     error: { code: 'INVALID_FQN', message: 'bad' },
   });
   expect(parsed.success).toBe(true);
+});
+
+test('mcpListModulesPayloadSchema accepts success payload', () => {
+  const parsed = mcpListModulesPayloadSchema.safeParse({
+    ok: true,
+    projectRoot: '/tmp/proj',
+    resolvedAt: '2026-05-15T12:00:00Z',
+    schemaVersion: '1.0',
+    buildSystem: { type: 'gradle', version: '8.7', wrapper: true },
+    modules: [
+      {
+        name: ':app',
+        path: '/tmp/proj/app',
+        configurations: [
+          {
+            name: 'compileClasspath',
+            scope: 'compile',
+            artifactCount: 2,
+            directArtifactCount: 1,
+          },
+        ],
+      },
+    ],
+    resolutionWarningCount: 0,
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpListModulesPayloadSchema accepts RESOLUTION_FAILED failure', () => {
+  const parsed = mcpListModulesPayloadSchema.safeParse({
+    ok: false,
+    code: 'RESOLUTION_FAILED',
+    errorCategory: 'validation',
+    isRetryable: true,
+    description: 'Not Gradle.',
+    error: { code: 'RESOLUTION_FAILED', message: 'Not Gradle.' },
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpToolResultFromListModules success sets isError false and module summary', () => {
+  const result = mcpToolResultFromListModules(
+    {
+      ok: true,
+      output: {
+        schemaVersion: '1.0',
+        resolvedAt: '2026-05-15T12:00:00Z',
+        buildSystem: { type: 'gradle', version: '8.7', wrapper: true },
+        projectRoot: '/tmp/proj',
+        modules: [
+          {
+            name: ':app',
+            path: '/tmp/proj/app',
+            configurations: [
+              {
+                name: 'compileClasspath',
+                scope: 'compile',
+                artifacts: [],
+              },
+            ],
+          },
+        ],
+        errors: [],
+      },
+    },
+    '/tmp/proj',
+  );
+  expect(result.isError).toBe(false);
+  expect(result.structuredContent).toMatchObject({
+    ok: true,
+    projectRoot: '/tmp/proj',
+    modules: [{ name: ':app', configurations: [{ artifactCount: 0, directArtifactCount: 0 }] }],
+    resolutionWarningCount: 0,
+  });
+});
+
+test('mcpToolResultFromListModules failure matches resolve_dependencies failure shape', () => {
+  const result = mcpToolResultFromListModules({ ok: false, message: 'boom' }, '/tmp/bad');
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent).toMatchObject({
+    ok: false,
+    code: 'RESOLUTION_FAILED',
+    error: { code: 'RESOLUTION_FAILED', message: 'boom' },
+  });
 });
 
 test('mcpResolveDependenciesPayloadSchema accepts success with resolution', () => {

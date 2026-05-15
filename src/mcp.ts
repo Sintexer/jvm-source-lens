@@ -10,6 +10,7 @@ import {
   mcpToolResultFromMethodSignature,
   mcpToolResultFromProjectRootError,
   mcpToolResultFromResolutionResult,
+  mcpToolResultFromListModules,
   mcpToolResultFromUnexpectedError,
   mcpToolResultFromClassStructure,
   type ClassSourceQueryContext,
@@ -168,6 +169,19 @@ const resolutionOutputSchema = z.object({
   errors: z.array(resolutionErrorSchema),
 });
 
+const listModulesConfigurationRowSchema = z.object({
+  name: z.string(),
+  scope: z.enum(['compile', 'runtime', 'test-compile', 'test-runtime']),
+  artifactCount: z.number(),
+  directArtifactCount: z.number(),
+});
+
+const listModulesModuleRowSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  configurations: z.array(listModulesConfigurationRowSchema),
+});
+
 const resolveDependenciesFailureSchema = z.object({
   ok: z.literal(false),
   error: z.object({
@@ -190,10 +204,25 @@ export const mcpResolveDependenciesPayloadSchema = z.union([
   resolveDependenciesFailureSchema,
 ]);
 
+export const mcpListModulesPayloadSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+    projectRoot: z.string(),
+    resolvedAt: z.string(),
+    schemaVersion: z.string(),
+    buildSystem: buildSystemInfoSchema,
+    modules: z.array(listModulesModuleRowSchema),
+    resolutionWarningCount: z.number(),
+  }),
+  resolveDependenciesFailureSchema,
+]);
+
 const resolveDependenciesInputSchema = z.object({
   projectRoot: z.string().min(1),
   forceRefresh: z.boolean().optional(),
 });
+
+const listModulesInputSchema = resolveDependenciesInputSchema;
 
 const javapParameterSchema = z.object({
   name: z.string().nullable(),
@@ -354,7 +383,8 @@ export async function startMcpServer(): Promise<void> {
         'Use get_class_structure for structured API metadata (kind, fields, methods including inherited public/protected instance methods) without full source — sourceAvailable is true when the primary type was read from a sources JAR (Javadoc enrichment), false when structure is bytecode-only. ' +
         'Use get_method_signature when you know className and methodName and need overloads (parameters, return type, generics Signature attribute, checked exceptions) via javap on the resolved binary JAR — sourceAvailable is always false for this tool (README §7.1). ' +
         'Constructors are queried with methodName <init>. Inter-project classes are not supported yet (same as get_class_source). ' +
-        'Use resolve_dependencies to warm or refresh the resolution cache and obtain ResolutionOutput (all modules); then get_class_source / get_method_signature / get_class_structure reuse the cache. ' +
+        'Use list_modules for submodule names and per-configuration dependency counts without full ResolutionOutput, or resolve_dependencies for the complete document. ' +
+        'Both warm or refresh the resolution cache; then get_class_source / get_method_signature / get_class_structure reuse the cache. ' +
         'Failures return errorCategory (transient | validation | business | permission), isRetryable, and a detailed description. ' +
         'CLASS_NOT_FOUND after a successful classpath scan is NOT an error (found=false, querySucceeded=true) — do not retry as if the tool failed. ' +
         'When the class exists but no overloads match: found=true, methodFound=false (not an MCP error). ' +
@@ -425,6 +455,38 @@ export async function startMcpServer(): Promise<void> {
           forceRefresh: Boolean(args.forceRefresh),
         });
         return mcpToolResultFromResolutionResult(result, args.projectRoot);
+      } catch (e) {
+        if (e instanceof UnsupportedProjectError) {
+          return mcpToolResultFromProjectRootError(e.message, args.projectRoot);
+        }
+        return mcpToolResultFromUnexpectedError(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'list_modules',
+    {
+      title: 'List Gradle submodules',
+      description:
+        'Runs or loads cached Gradle dependency resolution and returns each submodule path plus dependency counts per classpath configuration ' +
+        '(artifactCount and directArtifactCount). Omits full ResolutionOutput — use resolve_dependencies for errors[] and artifact lists. ' +
+        'Same projectRoot and forceRefresh semantics as resolve_dependencies. On failure: isError=true with code RESOLUTION_FAILED.',
+      inputSchema: listModulesInputSchema,
+      outputSchema: mcpListModulesPayloadSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async (args) => {
+      const root = resolveProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
+      }
+
+      try {
+        const result = await resolveWithResolutionCache(root.path, {
+          forceRefresh: Boolean(args.forceRefresh),
+        });
+        return mcpToolResultFromListModules(result, args.projectRoot);
       } catch (e) {
         if (e instanceof UnsupportedProjectError) {
           return mcpToolResultFromProjectRootError(e.message, args.projectRoot);

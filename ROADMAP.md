@@ -22,7 +22,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] MCP server — `resolve_dependencies`
 - [x] MCP server — `get_method_signature`
 - [x] MCP server — `get_class_structure` (effective API / inherited methods — §12.2)
-- [ ] MCP server — `list_modules`
+- [x] MCP server — `list_modules`
 - [ ] Inter-project source lookup (`origin: interproject`)
 
 ### P1 — MVP polish
@@ -135,8 +135,8 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **References:** README §8.2, `ResolutionOutput.modules[]`
 
-- [ ] Tool `list_modules`: `projectRoot`, optional `forceRefresh`
-- [ ] Response object (not bare array): module name, path, dependency counts per configuration or summary
+- [x] Tool `list_modules`: `projectRoot`, optional `forceRefresh`
+- [x] Response object (not bare array): module name, path, dependency counts per configuration or summary
 
 ---
 

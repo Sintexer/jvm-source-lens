@@ -5,6 +5,8 @@ import type { ResolutionResult } from './resolvers/base.js';
 import type { ResolutionOutput } from './resolvers/resolution-output.js';
 import type { GetMethodSignatureResult } from './get-method-signatures.js';
 import type { ClassStructureMethod, GetClassStructureResult } from './class-structure/types.js';
+import type { ListModulesPayloadData } from './list-modules-payload.js';
+import { buildListModulesPayload } from './list-modules-payload.js';
 
 /** MCP agent recovery categories (transient / validation / business / permission). */
 export type McpErrorCategory = 'transient' | 'validation' | 'business' | 'permission';
@@ -49,6 +51,10 @@ export type McpResolveDependenciesSuccessPayload = {
 };
 
 export type McpResolveDependenciesToolPayload = McpResolveDependenciesSuccessPayload | McpClassSourceFailurePayload;
+
+export type McpListModulesSuccessPayload = { ok: true } & ListModulesPayloadData;
+
+export type McpListModulesToolPayload = McpListModulesSuccessPayload | McpClassSourceFailurePayload;
 
 export type ClassSourceQueryContext = {
   projectRoot: string;
@@ -192,6 +198,20 @@ export function mcpToolResultFromProjectRootError(message: string, projectRoot: 
   return buildMcpErrorCallResult(envelope.summary, envelope.payload);
 }
 
+function mcpToolResultFromResolutionFailure(
+  message: string,
+  stderr: string | undefined,
+  projectRoot: string,
+): CallToolResult {
+  const error: ClassSourceError = {
+    code: 'RESOLUTION_FAILED',
+    message,
+    stderr,
+  };
+  const envelope = classifyClassSourceError(error, { projectRoot });
+  return buildMcpErrorCallResult(envelope.summary, envelope.payload);
+}
+
 export function mcpToolResultFromResolutionResult(
   result: ResolutionResult,
   projectRoot: string,
@@ -211,13 +231,31 @@ export function mcpToolResultFromResolutionResult(
     };
   }
 
-  const error: ClassSourceError = {
-    code: 'RESOLUTION_FAILED',
-    message: result.message,
-    stderr: result.stderr,
-  };
-  const envelope = classifyClassSourceError(error, { projectRoot });
-  return buildMcpErrorCallResult(envelope.summary, envelope.payload);
+  return mcpToolResultFromResolutionFailure(result.message, result.stderr, projectRoot);
+}
+
+export function mcpToolResultFromListModules(
+  result: ResolutionResult,
+  projectRoot: string,
+): CallToolResult {
+  if (result.ok) {
+    const data = buildListModulesPayload(result.output);
+    const payload: McpListModulesSuccessPayload = { ok: true, ...data };
+    const configRows = data.modules.reduce((n, m) => n + m.configurations.length, 0);
+    const summary =
+      `Listed ${data.modules.length} module(s), ${configRows} classpath configuration row(s)` +
+      (data.resolutionWarningCount > 0
+        ? ` (${data.resolutionWarningCount} resolution warning(s); use resolve_dependencies for full errors[])`
+        : '') +
+      '.';
+    return {
+      isError: false,
+      content: [{ type: 'text', text: summary }],
+      structuredContent: payload,
+    };
+  }
+
+  return mcpToolResultFromResolutionFailure(result.message, result.stderr, projectRoot);
 }
 
 export function mcpToolResultFromUnexpectedError(e: unknown): CallToolResult {
@@ -444,7 +482,7 @@ function classifyClassSourceError(error: ClassSourceError, query: ClassSourceQue
         true,
         `Unknown Gradle module ${JSON.stringify(error.modulePath)}.`,
         `No resolved submodule matches modulePath ${JSON.stringify(error.modulePath)}. ` +
-          `Run list_modules (when available) or inspect resolution output for valid names like ":app" or "root". ` +
+          `Run list_modules or inspect resolve_dependencies output for valid names like ":app" or "root". ` +
           `Omit modulePath to use the root project union.`,
       );
     case 'CONFIGURATION_NOT_FOUND':
