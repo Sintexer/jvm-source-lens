@@ -20,6 +20,7 @@ import type {
 } from './class-structure/types.js';
 import type { ListModulesPayloadData } from './list-modules-payload.js';
 import { buildListModulesPayload } from './list-modules-payload.js';
+import type { ClassSearchHit, ClassSearchIndexMeta, SearchClassesResult } from './class-search/types.js';
 
 /** MCP agent recovery categories (transient / validation / business / permission). */
 export type McpErrorCategory = 'transient' | 'validation' | 'business' | 'permission';
@@ -70,6 +71,34 @@ export type McpResolveDependenciesToolPayload = McpResolveDependenciesSuccessPay
 export type McpListModulesSuccessPayload = { ok: true } & ListModulesPayloadData;
 
 export type McpListModulesToolPayload = McpListModulesSuccessPayload | McpClassSourceFailurePayload;
+
+export type SearchClassesQueryContext = ClassSourceQueryContext & { query: string };
+
+export type McpSearchClassesHitPayload = {
+  className: string;
+  simpleName: string;
+  moduleName: string;
+  configurationName: string;
+  origin: 'external' | 'interproject';
+  coordinates: { group: string; name: string; version: string | null };
+  jarPath: string | null;
+  moduleRoot: string | null;
+  interprojectModuleName: string | null;
+  score: number;
+};
+
+export type McpSearchClassesSuccessPayload = {
+  ok: true;
+  querySucceeded: true;
+  query: string;
+  limit: number;
+  totalMatches: number;
+  hitCount: number;
+  hits: McpSearchClassesHitPayload[];
+  indexMeta: ClassSearchIndexMeta;
+};
+
+export type McpSearchClassesToolPayload = McpSearchClassesSuccessPayload | McpClassSourceFailurePayload;
 
 export type ClassSourceQueryContext = {
   projectRoot: string;
@@ -282,6 +311,47 @@ export function mcpToolResultFromListModules(
   }
 
   return mcpToolResultFromResolutionFailure(result, projectRoot);
+}
+
+export function mcpToolResultFromSearchClasses(
+  result: SearchClassesResult,
+  query: SearchClassesQueryContext,
+): CallToolResult {
+  if (result.ok) {
+    const hits: McpSearchClassesHitPayload[] = result.hits.map((h: ClassSearchHit) => ({
+      className: h.className,
+      simpleName: h.simpleName,
+      moduleName: h.moduleName,
+      configurationName: h.configurationName,
+      origin: h.origin,
+      coordinates: h.coordinates,
+      jarPath: h.jarPath,
+      moduleRoot: h.moduleRoot,
+      interprojectModuleName: h.interprojectModuleName,
+      score: h.score,
+    }));
+    const payload: McpSearchClassesSuccessPayload = {
+      ok: true,
+      querySucceeded: true,
+      query: result.query,
+      limit: result.limit,
+      totalMatches: result.totalMatches,
+      hitCount: hits.length,
+      hits,
+      indexMeta: result.indexMeta,
+    };
+    const scope = formatQueryScope(query);
+    const summary =
+      `search_classes: ${result.totalMatches} matching class(es) for ${JSON.stringify(result.query)}${scope}; returning ${hits.length} hit(s) (limit ${result.limit}). ` +
+      `Index v${result.indexMeta.indexFormatVersion}, ${result.indexMeta.entryCount} entr(ies), skippedArtifacts=${result.indexMeta.skippedArtifacts}.`;
+    return {
+      isError: false,
+      content: [{ type: 'text', text: summary }],
+      structuredContent: payload,
+    };
+  }
+
+  return mcpFailureResult(result.error, query, pickDiag(result));
 }
 
 export function mcpToolResultFromUnexpectedError(e: unknown): CallToolResult {

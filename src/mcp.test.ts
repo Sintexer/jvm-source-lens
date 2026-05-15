@@ -5,11 +5,13 @@ import {
   mcpGetMethodSignaturePayloadSchema,
   mcpListModulesPayloadSchema,
   mcpResolveDependenciesPayloadSchema,
+  mcpSearchClassesPayloadSchema,
 } from './mcp.js';
 import {
   mcpToolResultFromListModules,
   mcpToolResultFromMethodSignature,
   mcpToolResultFromResolutionResult,
+  mcpToolResultFromSearchClasses,
 } from './mcp-tool-result.js';
 
 test('mcpClassSourceToolPayloadSchema accepts interproject provenance', () => {
@@ -219,6 +221,81 @@ test('mcpListModulesPayloadSchema accepts RESOLUTION_FAILED failure', () => {
     error: { code: 'RESOLUTION_FAILED', message: 'Not Gradle.' },
   });
   expect(parsed.success).toBe(true);
+});
+
+test('mcpSearchClassesPayloadSchema accepts success payload', () => {
+  const parsed = mcpSearchClassesPayloadSchema.safeParse({
+    ok: true,
+    querySucceeded: true,
+    query: 'Repository',
+    limit: 50,
+    totalMatches: 2,
+    hitCount: 2,
+    hits: [
+      {
+        className: 'com.example.FooRepository',
+        simpleName: 'FooRepository',
+        moduleName: 'root',
+        configurationName: 'compileClasspath',
+        origin: 'external',
+        coordinates: { group: 'g', name: 'a', version: '1' },
+        jarPath: '/tmp/a.jar',
+        moduleRoot: null,
+        interprojectModuleName: null,
+        score: 8_000_000,
+      },
+    ],
+    indexMeta: {
+      indexFormatVersion: 1,
+      buildInputsDigest: 'abc',
+      resolutionFingerprint: 'def',
+      moduleName: 'root',
+      configurationName: 'compileClasspath',
+      includeTest: false,
+      builtAt: '2026-05-15T12:00:00Z',
+      entryCount: 100,
+      skippedArtifacts: 0,
+    },
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpToolResultFromSearchClasses success', () => {
+  const r = mcpToolResultFromSearchClasses(
+    {
+      ok: true,
+      query: 'X',
+      limit: 10,
+      totalMatches: 1,
+      hits: [
+        {
+          className: 'a.b.X',
+          simpleName: 'X',
+          moduleName: 'root',
+          configurationName: 'compileClasspath',
+          origin: 'external',
+          coordinates: { group: 'g', name: 'n', version: null },
+          jarPath: '/j.jar',
+          moduleRoot: null,
+          interprojectModuleName: null,
+          score: 10_000_000,
+        },
+      ],
+      indexMeta: {
+        indexFormatVersion: 1,
+        buildInputsDigest: 'a',
+        resolutionFingerprint: 'b',
+        moduleName: 'root',
+        configurationName: 'compileClasspath',
+        includeTest: false,
+        builtAt: '2026-05-15T12:00:00Z',
+        entryCount: 1,
+        skippedArtifacts: 0,
+      },
+    },
+    { projectRoot: '/p', query: 'X' },
+  );
+  expect(r.isError).toBe(false);
 });
 
 test('mcpToolResultFromListModules success sets isError false and module summary', () => {

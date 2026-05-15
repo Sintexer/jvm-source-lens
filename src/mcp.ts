@@ -11,10 +11,12 @@ import {
   mcpToolResultFromProjectRootError,
   mcpToolResultFromResolutionResult,
   mcpToolResultFromListModules,
+  mcpToolResultFromSearchClasses,
   mcpToolResultFromUnexpectedError,
   mcpToolResultFromClassStructure,
   type ClassSourceQueryContext,
   type MethodSignatureQueryContext,
+  type SearchClassesQueryContext,
 } from './mcp-tool-result.js';
 import { resolveProjectRoot } from './project-path.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
@@ -22,6 +24,7 @@ import { UnsupportedProjectError } from './resolvers/index.js';
 import { getClassStructure } from './get-class-structure.js';
 import { getMethodSignaturesBytecode } from './get-method-signatures-bytecode.js';
 import { getMethodSignatures } from './get-method-signatures.js';
+import { searchClasses } from './search-classes.js';
 
 const artifactCoordinatesSchema = z.object({
   group: z.string(),
@@ -225,6 +228,55 @@ export const mcpListModulesPayloadSchema = z.union([
   }),
   resolveDependenciesFailureSchema,
 ]);
+
+const classSearchIndexMetaSchema = z.object({
+  indexFormatVersion: z.literal(1),
+  buildInputsDigest: z.string(),
+  resolutionFingerprint: z.string(),
+  moduleName: z.string(),
+  configurationName: z.string(),
+  includeTest: z.boolean(),
+  builtAt: z.string(),
+  entryCount: z.number(),
+  skippedArtifacts: z.number(),
+});
+
+const searchClassesHitSchema = z.object({
+  className: z.string(),
+  simpleName: z.string(),
+  moduleName: z.string(),
+  configurationName: z.string(),
+  origin: z.enum(['external', 'interproject']),
+  coordinates: artifactCoordinatesSchema,
+  jarPath: z.string().nullable(),
+  moduleRoot: z.string().nullable(),
+  interprojectModuleName: z.string().nullable(),
+  score: z.number(),
+});
+
+export const mcpSearchClassesPayloadSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+    querySucceeded: z.literal(true),
+    query: z.string(),
+    limit: z.number(),
+    totalMatches: z.number(),
+    hitCount: z.number(),
+    hits: z.array(searchClassesHitSchema),
+    indexMeta: classSearchIndexMetaSchema,
+  }),
+  resolveDependenciesFailureSchema,
+]);
+
+const searchClassesInputSchema = z.object({
+  query: z.string().min(1),
+  projectRoot: z.string().min(1),
+  modulePath: z.string().optional(),
+  configuration: z.string().optional(),
+  includeTest: z.boolean().optional(),
+  forceRefresh: z.boolean().optional(),
+  limit: z.number().int().positive().max(200).optional(),
+});
 
 const resolveDependenciesInputSchema = z.object({
   projectRoot: z.string().min(1),
@@ -444,6 +496,7 @@ export async function startMcpServer(): Promise<void> {
         'Use get_method_signature_bytecode when you need strict JVM descriptors and javap-only metadata — no sources/`src` fallback; requires a resolvable `.class` on the classpath. ' +
         'Constructors are queried with methodName <init>. Inter-project classes (`origin: interproject`) resolve from sibling `src/main/java` (and `src/test/java` when includeTest) for source-first tools before requiring `build/classes/**` for javap. ' +
         'Use list_modules for submodule names and per-configuration dependency counts without full ResolutionOutput, or resolve_dependencies for the complete document. ' +
+        'Use search_classes for discovery when the FQN is unknown: substring or simple glob (*, ?) over indexed class names on the selected compile/test classpath (v1 indexes external JAR .class entries and inter-project src/main/java + src/test/java when includeTest). ' +
         'Both warm or refresh the resolution cache; then get_class_source / get_method_signature / get_method_signature_bytecode / get_class_structure reuse the cache. ' +
         'Failures return errorCategory (transient | validation | business | permission), isRetryable, and a detailed description. ' +
         'CLASS_NOT_FOUND after a successful classpath scan is NOT an error (found=false, querySucceeded=true) — do not retry as if the tool failed. ' +
@@ -549,6 +602,54 @@ export async function startMcpServer(): Promise<void> {
           diagnosticOperation: 'list_modules',
         });
         return mcpToolResultFromListModules(result, args.projectRoot);
+      } catch (e) {
+        if (e instanceof UnsupportedProjectError) {
+          return mcpToolResultFromProjectRootError(e.message, args.projectRoot);
+        }
+        return mcpToolResultFromUnexpectedError(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'search_classes',
+    {
+      title: 'Search classes on the resolved classpath',
+      description:
+        'Capability discovery when the FQN is unknown (README §12.3): resolves or loads cached Gradle output, builds or reuses a disk index for the selected module + configuration, ' +
+        'then returns ranked FQN hits. Query is a case-insensitive substring over class FQN/simple name, or a glob with * and ? matched against FQN or simple name. ' +
+        'Optional limit (default 50, max 200). Same projectRoot, modulePath, configuration, includeTest, and forceRefresh semantics as get_class_source. ' +
+        'v1 indexes external JAR .class paths (ZIP central directory only) and inter-project .java trees; origin:local-file artifacts are skipped. ' +
+        'On failure: isError=true with code RESOLUTION_FAILED or classpath validation codes.',
+      inputSchema: searchClassesInputSchema,
+      outputSchema: mcpSearchClassesPayloadSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async (args) => {
+      const queryCtx: SearchClassesQueryContext = {
+        projectRoot: args.projectRoot,
+        modulePath: args.modulePath,
+        configuration: args.configuration,
+        includeTest: args.includeTest,
+        query: args.query,
+      };
+
+      const root = resolveProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
+      }
+
+      try {
+        const result = await searchClasses({
+          projectRoot: root.path,
+          query: args.query,
+          modulePath: args.modulePath,
+          configuration: args.configuration,
+          includeTest: Boolean(args.includeTest),
+          forceRefresh: Boolean(args.forceRefresh),
+          limit: args.limit,
+        });
+        return mcpToolResultFromSearchClasses(result, queryCtx);
       } catch (e) {
         if (e instanceof UnsupportedProjectError) {
           return mcpToolResultFromProjectRootError(e.message, args.projectRoot);

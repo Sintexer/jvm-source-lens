@@ -5,6 +5,7 @@ import { access, constants } from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { getClassSource } from '../../src/get-class-source.js';
 import { resolveWithResolutionCache } from '../../src/resolve-with-cache.js';
+import { searchClasses } from '../../src/search-classes.js';
 
 /**
  * Integration smoke: `test/fixtures/gradle-smoke` (multimodule Gradle project).
@@ -100,5 +101,17 @@ describe.skipIf(!runnable)('Gradle smoke fixture', () => {
     expect(got.source).toContain('public class Core');
     expect(got.sourceAvailable).toBe(true);
     expect(got.provenance.kind).toBe('interproject');
+
+    const search = await searchClasses({
+      projectRoot: fixtureRoot,
+      query: 'com.smoke.Core',
+      modulePath: ':app',
+      limit: 20,
+    });
+    expect(search.ok).toBe(true);
+    if (search.ok) {
+      expect(search.totalMatches).toBeGreaterThanOrEqual(1);
+      expect(search.hits.some((h) => h.className === 'com.smoke.Core')).toBe(true);
+    }
   });
 });

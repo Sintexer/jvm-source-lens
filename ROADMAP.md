@@ -254,8 +254,10 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **Goal:** README §12.2 P2 — discovery when FQN unknown (“what HTTP client classes exist?”). Architecturally distinct: index over resolution, not single-class parse.
 
+**v1 shipped:** MCP tool **`search_classes`** + **`class-search-index.json`** sidecar (per resolution cache bucket): external JAR **`.class`** listing (ZIP central directory only) and inter-project **`src/main/java`** / **`src/test/java`** FQNs on the selected classpath; substring + simple-glob queries; ranked hits (`score`). See README §8.2.
+
 - [ ] Full-text index over class names, method names, Javadoc when sources available
-- [ ] MCP tool `search_classes` (or merged surface with CLI); ranked candidates
+- [x] MCP tool `search_classes` (or merged surface with CLI); ranked candidates
 - [ ] Builds on / relates to classpath FQN index (below)
 
 ---
