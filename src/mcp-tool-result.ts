@@ -8,6 +8,7 @@ import type {
 import type { ResolutionResult } from './resolvers/base.js';
 import type { ResolutionOutput } from './resolvers/resolution-output.js';
 import type { GetMethodSignatureResult } from './get-method-signatures.js';
+import { isSyntheticJvmDescriptor } from './class-structure/parse-java-type-metadata.js';
 import type {
   ClassStructureMethod,
   ClassStructureProvenance,
@@ -83,12 +84,14 @@ export type McpMethodSignatureSuccessPayload = {
   overloads: Array<{
     declarationLine: string;
     visibility: 'public' | 'protected' | 'package' | 'private';
-    jvmDescriptor: string;
-    genericSignature: string | null;
+    /** Omitted on IDE-minimal (source-parse) rows. */
+    jvmDescriptor?: string;
+    genericSignature?: string | null;
     returnTypeDisplay: string | null;
     parameters: Array<{ name: string | null; typeDisplay: string }>;
     thrownExceptions: string[];
-    flagsLine: string | null;
+    /** Omitted on IDE-minimal (source-parse) rows. */
+    flagsLine?: string | null;
   }>;
   provenance: MethodSignatureProvenance;
 };
@@ -142,7 +145,8 @@ export type McpClassStructureSuccessPayload = {
     static: boolean;
     throws: string[];
     genericSignature: string | null;
-    jvmDescriptor: string;
+    /** Omitted when the row is declaration-centric (primary type from parsed `.java`, synthetic descriptor stripped). */
+    jvmDescriptor?: string | null;
     inherited: boolean;
     annotations?: Array<{ summary: string }>;
   }>;
@@ -285,6 +289,25 @@ export function mcpToolResultFromMethodSignature(
   query: MethodSignatureQueryContext,
 ): CallToolResult {
   if (result.ok) {
+    const overloads =
+      result.sourceAvailable === true
+        ? result.overloads.map((o) => {
+            const row: McpMethodSignatureSuccessPayload['overloads'][number] = {
+              declarationLine: o.declarationLine,
+              visibility: o.visibility,
+              returnTypeDisplay: o.returnTypeDisplay,
+              parameters: o.parameters,
+              thrownExceptions: o.thrownExceptions,
+            };
+            if (!isSyntheticJvmDescriptor(o.jvmDescriptor)) {
+              row.jvmDescriptor = o.jvmDescriptor;
+            }
+            if (o.genericSignature != null && o.genericSignature.length > 0) {
+              row.genericSignature = o.genericSignature;
+            }
+            return row;
+          })
+        : result.overloads;
     const payload: McpMethodSignatureSuccessPayload = {
       ok: true,
       found: true,
@@ -293,7 +316,7 @@ export function mcpToolResultFromMethodSignature(
       methodName: result.methodName,
       methodFound: result.methodFound,
       sourceAvailable: result.sourceAvailable,
-      overloads: result.overloads,
+      overloads,
       provenance: result.provenance,
     };
     const metaHint =
@@ -317,6 +340,22 @@ export function mcpToolResultFromMethodSignature(
   return mcpFailureResult(result.error, query);
 }
 
+function classStructureMethodsForMcpPayload(
+  methods: ClassStructureMethod[],
+  sourceAvailable: boolean,
+): McpClassStructureSuccessPayload['methods'] {
+  return methods.map((m) => {
+    if (sourceAvailable && !m.inherited && isSyntheticJvmDescriptor(m.jvmDescriptor)) {
+      return {
+        ...m,
+        jvmDescriptor: null,
+        genericSignature: null,
+      };
+    }
+    return { ...m };
+  });
+}
+
 export function mcpToolResultFromClassStructure(
   result: GetClassStructureResult,
   query: ClassSourceQueryContext,
@@ -332,7 +371,7 @@ export function mcpToolResultFromClassStructure(
       interfaces: result.interfaces,
       typeParameters: result.typeParameters,
       fields: result.fields,
-      methods: result.methods,
+      methods: classStructureMethodsForMcpPayload(result.methods, result.sourceAvailable),
       sourceAvailable: result.sourceAvailable,
       provenance: result.provenance,
       ...(result.typeHierarchy ? { typeHierarchy: result.typeHierarchy } : {}),

@@ -28,7 +28,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 ### P1 — MVP polish
 
 - [x] Enrich `get_class_structure`: optional `include` (hierarchy, fields, annotations) — §12.2
-- [ ] Inspection split: bytecode-only MCP overload tool + declaration-centric default payloads — [README §7.2](README.md)
+- [x] Inspection split: bytecode-only MCP overload tool + declaration-centric default payloads — [README §7.2](README.md)
 - [ ] CLI `get --json` (single structured object on stdout)
 - [ ] CLI progress indicators (long Gradle / decompile waits)
 - [ ] Hardening: Gradle timeouts, clearer errors, integration smoke test
@@ -104,9 +104,9 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ### MCP server — `get_method_signature`
 
-**Goal:** IDE-like overload browsing — caller knows **`className`** and **`methodName`** and needs overloads and contracts **as you would read them from source** when **`.java`** is on the classpath (parameters, return types, **`throws`**); **`javap`** supplements bytecode-only artifacts and fills gaps. Not the primary home for JVM-descriptor archaeology; see **§7.2** and the P1 “Inspection tooling” item for a planned bytecode-only companion tool.
+**Goal:** IDE-like overload browsing — caller knows **`className`** and **`methodName`** and needs overloads and contracts **as you would read them from source** when **`.java`** is on the classpath (parameters, return types, **`throws`**); **`javap`** supplements bytecode-only artifacts and fills gaps. JVM-descriptor–oriented workflows use companion tool **`get_method_signature_bytecode`** (§7.2).
 
-**Implementation:** After resolving Gradle output (cached), read classpath-order **`.java`** (**inter-project** `src/` then **sources JAR** / on-demand fetch). When **`parseJavaTypeMetadata`** succeeds, return overloads from source (**`sourceAvailable: true`**, synthetic **`#SRC:`** **`jvmDescriptor`** for merge keys—not a real bytecode descriptor). Otherwise locate the owning classpath element (same ordering as **`get_class_source`**) and run **`javap -private -verbose`** (**`sourceAvailable: false`**).
+**Implementation:** After resolving Gradle output (cached), read classpath-order **`.java`** (**inter-project** `src/` then **sources JAR** / on-demand fetch). When **`parseJavaTypeMetadata`** succeeds, return overloads from source (**`sourceAvailable: true`**; MCP payloads omit synthetic **`#SRC:`** **`jvmDescriptor`** / **`flagsLine`** where practical). Otherwise locate the owning classpath element (same ordering as **`get_class_source`**) and run **`javap -private -verbose`** (**`sourceAvailable: false`**).
 
 **References:** [README.md §7.2](README.md), [README.md §8.2](README.md), [README.md §12.2](README.md), [src/get-method-signatures.ts](src/get-method-signatures.ts), [src/class-structure/javap-parse.ts](src/class-structure/javap-parse.ts), [src/class-structure/parse-java-type-metadata.ts](src/class-structure/parse-java-type-metadata.ts)
 
@@ -115,7 +115,19 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] Shared **`parseJavaTypeMetadata`** with **`get_class_structure`** for the source-first path
 - [x] Errors: same structured pattern as `get_class_source`
 - [x] README §7.2 / §8.2 marked implemented for this tool
-- [ ] **P1:** Dedicated MCP **`javap`**-only overload tool + declaration-centric default payloads ([README §7.2](README.md))
+- [x] **P1:** Dedicated MCP **`javap`**-only overload tool + declaration-centric default payloads ([README §7.2](README.md))
+
+---
+
+### MCP server — `get_method_signature_bytecode`
+
+**Goal:** Strict **`javap -private -verbose`** overload listing with **no** sources / **`src/`** fallback — for agents that need JVM descriptors and classfile attributes without IDE-shaped projection (README §7.2).
+
+**References:** [src/get-method-signatures-bytecode.ts](src/get-method-signatures-bytecode.ts), [src/method-signature-from-javap.ts](src/method-signature-from-javap.ts)
+
+- [x] Tool `get_method_signature_bytecode`: same arguments as `get_method_signature`
+- [x] **`sourceAvailable: false`** always; **`provenance`** only **`classpathJar`** \| **`interprojectBytecode`**
+- [x] README §8.2
 
 ---
 
@@ -129,7 +141,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] v1 implementation: parse `.java` from sources path (reuse lookup pipeline) and/or bytecode when sources missing
 - [x] `sourceAvailable` on response per §7.2
 - [x] P1 optional `include`: hierarchy, fields, annotations (see §12.2 / ROADMAP P1)
-- [ ] **P1:** Align source-derived member payloads with declaration-centric shape where javap-shaped fields leak ([README §7.2](README.md))
+- [x] **P1:** Align source-derived member payloads with declaration-centric shape where javap-shaped fields leak ([README §7.2](README.md))
 
 ---
 
@@ -166,8 +178,8 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **References:** [README.md §7.2](README.md)
 
-- [ ] MCP tool (**name TBD**, e.g. `get_method_signature_bytecode`): **`javap -private -verbose`** only; **`sourceAvailable: false`**; requires resolvable **`.class`** (fails clearly when exploded **`build/classes/**`** or JAR entry is missing — **no** sibling **`src/`** fallback by design)
-- [ ] Narrow **`get_method_signature`** / **`get_class_structure`** source-path payloads toward declaration-centric fields (reduce javap-shaped fields on **`sourceAvailable: true`** rows where practical)
+- [x] MCP tool **`get_method_signature_bytecode`**: **`javap -private -verbose`** only; **`sourceAvailable: false`**; requires resolvable **`.class`** (fails clearly when exploded **`build/classes/**`** or JAR entry is missing — **no** sibling **`src/`** fallback by design)
+- [x] Narrow **`get_method_signature`** / **`get_class_structure`** source-path payloads toward declaration-centric fields (reduce javap-shaped fields on **`sourceAvailable: true`** rows where practical)
 
 ---
 

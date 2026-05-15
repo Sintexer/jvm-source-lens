@@ -107,6 +107,7 @@ export type ClassStructureMethod = {
   static: boolean;
   throws: string[];
   genericSignature: string | null;
+  /** JVM bytecode descriptor, or synthetic `#SRC:` key when the row came from parsed primary `.java`. */
   jvmDescriptor: string;
   inherited: boolean;
   /** Present when `include` lists `annotations` and javap supplied metadata for this declared member. */

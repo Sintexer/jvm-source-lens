@@ -8,6 +8,10 @@ export function methodMergeKey(jvmMethodName: string, jvmDescriptor: string): st
 export function structureMethodMergeKey(
   m: Pick<ClassStructureMethod, 'jvmMethodName' | 'jvmDescriptor' | 'parameters'>,
 ): string {
+  if (m.jvmDescriptor == null) {
+    const paramJoin = m.parameters.map((p) => p.type).join('|');
+    return `${m.jvmMethodName}\0#SRC_DECL\0${paramJoin}`;
+  }
   if (!isSyntheticJvmDescriptor(m.jvmDescriptor)) {
     return methodMergeKey(m.jvmMethodName, m.jvmDescriptor);
   }

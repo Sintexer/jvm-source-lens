@@ -20,6 +20,7 @@ import { resolveProjectRoot } from './project-path.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 import { UnsupportedProjectError } from './resolvers/index.js';
 import { getClassStructure } from './get-class-structure.js';
+import { getMethodSignaturesBytecode } from './get-method-signatures-bytecode.js';
 import { getMethodSignatures } from './get-method-signatures.js';
 
 const artifactCoordinatesSchema = z.object({
@@ -237,15 +238,16 @@ const javapParameterSchema = z.object({
   typeDisplay: z.string(),
 });
 
+/** Full javap row or IDE-minimal row (source-first path omits bytecode-only fields). */
 const javapOverloadSchema = z.object({
   declarationLine: z.string(),
   visibility: z.enum(['public', 'protected', 'package', 'private']),
-  jvmDescriptor: z.string(),
-  genericSignature: z.string().nullable(),
+  jvmDescriptor: z.string().optional(),
+  genericSignature: z.string().nullable().optional(),
   returnTypeDisplay: z.string().nullable(),
   parameters: z.array(javapParameterSchema),
   thrownExceptions: z.array(z.string()),
-  flagsLine: z.string().nullable(),
+  flagsLine: z.string().nullable().optional(),
 });
 
 const classpathJarProvenanceSchema = z.object({
@@ -353,7 +355,7 @@ const classStructureMethodSchema = z.object({
   static: z.boolean(),
   throws: z.array(z.string()),
   genericSignature: z.string().nullable(),
-  jvmDescriptor: z.string(),
+  jvmDescriptor: z.union([z.string(), z.null()]),
   inherited: z.boolean(),
   annotations: z.array(classStructureDeclaredAnnotationSchema).optional(),
 });
@@ -438,10 +440,11 @@ export async function startMcpServer(): Promise<void> {
       instructions:
         'JVM Source Lens (Gradle first): use get_class_source with a fully-qualified class name and projectRoot. ' +
         'Use get_class_structure for structured API metadata (kind, fields, methods including inherited public/protected instance methods) without full source — sourceAvailable is true when the primary type was read from a sources JAR or inter-project `.java`; inherited members may still come from javap when bytecode is available or from parsed source when not. ' +
-        'Use get_method_signature when you know className and methodName and need overloads: the implementation prefers parsing `.java` from a sources JAR or inter-project `src/` when present (sourceAvailable=true; synthetic JVM descriptors and no Signature attribute), otherwise falls back to javap bytecode metadata (sourceAvailable=false). ' +
+        'Use get_method_signature when you know className and methodName and need IDE-like overloads: prefers parsing `.java` when present (sourceAvailable=true), otherwise javap bytecode metadata (sourceAvailable=false). ' +
+        'Use get_method_signature_bytecode when you need strict JVM descriptors and javap-only metadata — no sources/`src` fallback; requires a resolvable `.class` on the classpath. ' +
         'Constructors are queried with methodName <init>. Inter-project classes (`origin: interproject`) resolve from sibling `src/main/java` (and `src/test/java` when includeTest) for source-first tools before requiring `build/classes/**` for javap. ' +
         'Use list_modules for submodule names and per-configuration dependency counts without full ResolutionOutput, or resolve_dependencies for the complete document. ' +
-        'Both warm or refresh the resolution cache; then get_class_source / get_method_signature / get_class_structure reuse the cache. ' +
+        'Both warm or refresh the resolution cache; then get_class_source / get_method_signature / get_method_signature_bytecode / get_class_structure reuse the cache. ' +
         'Failures return errorCategory (transient | validation | business | permission), isRetryable, and a detailed description. ' +
         'CLASS_NOT_FOUND after a successful classpath scan is NOT an error (found=false, querySucceeded=true) — do not retry as if the tool failed. ' +
         'When the class exists but no overloads match: found=true, methodFound=false (not an MCP error). ' +
@@ -558,10 +561,10 @@ export async function startMcpServer(): Promise<void> {
     {
       title: 'Get Java method overload signatures',
       description:
-        'Resolves the classpath (cached), finds the binary JAR owning the class, runs javap -verbose, and returns all overloads of methodName ' +
-        '(parameters with optional names from LocalVariableTable, JVM descriptors, generic Signature attribute when present, checked exceptions). ' +
-        'sourceAvailable is always false (bytecode metadata). Use methodName <init> for constructors. ' +
-        'On failure: isError=true with errorCategory, isRetryable, description, and stable code (README §7). ' +
+        'IDE-first overload listing (README §7.2): resolves the classpath (cached), then prefers parsing original `.java` from sources JAR or inter-project `src/` when present — sourceAvailable=true, declaration-centric overload fields without javap-only artifacts. ' +
+        'If sources are missing or unparsable, falls back to javap -private -verbose on the owning binary classpath element — sourceAvailable=false (JVM descriptors, Signature attribute, flags, LocalVariableTable names when present). ' +
+        'For strict bytecode-only inspection without any source fallback, use get_method_signature_bytecode. ' +
+        'Use methodName <init> for constructors. On failure: isError=true with stable code (README §7). ' +
         'CLASS_NOT_FOUND after scan: isError=false, found=false. Class found but no overloads: found=true, methodFound=false.',
       inputSchema: getMethodSignatureInputSchema,
       outputSchema: mcpGetMethodSignaturePayloadSchema,
@@ -583,6 +586,47 @@ export async function startMcpServer(): Promise<void> {
 
       try {
         const result = await getMethodSignatures(args.className, args.methodName, {
+          projectRoot: root.path,
+          modulePath: args.modulePath,
+          configuration: args.configuration,
+          includeTest: Boolean(args.includeTest),
+          forceRefresh: Boolean(args.forceRefresh),
+        });
+        return mcpToolResultFromMethodSignature(result, query);
+      } catch (e) {
+        return mcpToolResultFromUnexpectedError(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_method_signature_bytecode',
+    {
+      title: 'Get Java method overload signatures (javap bytecode only)',
+      description:
+        'javap -private -verbose only: resolves the classpath (cached), finds the owning binary element (external JAR or inter-project build output), runs javap — no sources JAR or `src/` fallback. ' +
+        'sourceAvailable is always false. Fails with CLASS_NOT_FOUND or SIGNATURE_EXTRACT_FAILED when no `.class` is on the selected classpath or javap cannot read it (README §7.2). ' +
+        'Use get_method_signature for IDE-like source-first overloads. Same inputs as get_method_signature: className, methodName, projectRoot, optional modulePath, configuration, includeTest, forceRefresh.',
+      inputSchema: getMethodSignatureInputSchema,
+      outputSchema: mcpGetMethodSignaturePayloadSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async (args) => {
+      const query: MethodSignatureQueryContext = {
+        projectRoot: args.projectRoot,
+        modulePath: args.modulePath,
+        configuration: args.configuration,
+        includeTest: args.includeTest,
+        methodName: args.methodName,
+      };
+
+      const root = resolveProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
+      }
+
+      try {
+        const result = await getMethodSignaturesBytecode(args.className, args.methodName, {
           projectRoot: root.path,
           modulePath: args.modulePath,
           configuration: args.configuration,

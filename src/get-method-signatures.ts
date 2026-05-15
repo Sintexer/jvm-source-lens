@@ -1,6 +1,5 @@
-import { extractClassMemberSection, parseJavapVerboseMethods } from './class-structure/javap-parse.js';
 import { parseJavaTypeMetadata } from './class-structure/parse-java-type-metadata.js';
-import { spawnJavapVerbose } from './class-structure/spawn-javap.js';
+import { loadMethodOverloadsViaJavap } from './method-signature-from-javap.js';
 import type {
   JavapMethodOverload,
   JavapMethodWithName,
@@ -206,39 +205,16 @@ export async function getMethodSignatures(
 
   const javapClasspath = hit.classpath;
 
-  const javap = await spawnJavapVerbose({
+  const javap = await loadMethodOverloadsViaJavap({
     classpath: javapClasspath,
     className,
+    methodName: mn,
   });
-
   if (!javap.ok) {
-    return {
-      ok: false,
-      error: {
-        code: 'SIGNATURE_EXTRACT_FAILED',
-        message: javap.message,
-        className,
-        methodName: mn,
-        jarPath: javapClasspath,
-        stderr: javap.stderr,
-      },
-    };
+    return { ok: false, error: javap.error };
   }
 
-  if (extractClassMemberSection(javap.stdout) === null) {
-    return {
-      ok: false,
-      error: {
-        code: 'SIGNATURE_EXTRACT_FAILED',
-        message: 'Could not locate class member section in javap output',
-        className,
-        methodName: mn,
-        jarPath: javapClasspath,
-      },
-    };
-  }
-
-  const overloads = parseJavapVerboseMethods(javap.stdout, mn, className);
+  const { overloads } = javap;
 
   return {
     ok: true,

@@ -294,6 +294,33 @@ test('mcpResolveDependenciesPayloadSchema accepts RESOLUTION_FAILED failure', ()
   expect(parsed.success).toBe(true);
 });
 
+test('mcpGetMethodSignaturePayloadSchema accepts IDE-minimal overloads (source path)', () => {
+  const parsed = mcpGetMethodSignaturePayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    querySucceeded: true,
+    className: 'com.example.Foo',
+    methodName: 'bar',
+    methodFound: true,
+    sourceAvailable: true,
+    overloads: [
+      {
+        declarationLine: 'public void bar(int x);',
+        visibility: 'public',
+        returnTypeDisplay: 'void',
+        parameters: [{ name: 'x', typeDisplay: 'int' }],
+        thrownExceptions: [],
+      },
+    ],
+    provenance: {
+      kind: 'sourcesJar',
+      coordinates: { group: 'g', name: 'a', version: '1' },
+      jarPath: '/tmp/a-sources.jar',
+    },
+  });
+  expect(parsed.success).toBe(true);
+});
+
 test('mcpGetMethodSignaturePayloadSchema accepts success with overloads', () => {
   const parsed = mcpGetMethodSignaturePayloadSchema.safeParse({
     ok: true,
@@ -367,7 +394,7 @@ test('mcpGetClassStructurePayloadSchema accepts success', () => {
         static: false,
         throws: [],
         genericSignature: null,
-        jvmDescriptor: '()V',
+        jvmDescriptor: null,
         inherited: false,
       },
     ],

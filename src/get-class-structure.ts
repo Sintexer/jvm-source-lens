@@ -113,6 +113,33 @@ function buildClassStructureProvenance(args: {
   throw new Error('jvmsrc internal error: missing ClassStructure provenance');
 }
 
+function sourceParsedMethodToStructure(
+  o: JavapMethodWithName,
+  declaringClass: string,
+  skeleton: JavaClassSkeleton | null,
+): ClassStructureMethod {
+  const displayName = o.jvmMethodName === '<init>' ? declaringSimpleName(declaringClass) : o.jvmMethodName;
+  const paramCount = o.parameters.length;
+  const javadoc = pickMethodJavadoc(skeleton, displayName, paramCount);
+  const decl = o.declarationLine;
+  return {
+    name: displayName,
+    jvmMethodName: o.jvmMethodName,
+    declaringClass,
+    visibility: o.visibility,
+    returnType: o.jvmMethodName === '<init>' ? '' : (o.returnTypeDisplay ?? ''),
+    parameters: o.parameters.map((p) => ({ name: p.name, type: p.typeDisplay })),
+    typeParameters: [],
+    javadoc,
+    abstract: Boolean(/\babstract\b/.test(decl)),
+    static: Boolean(/\bstatic\b/.test(decl)),
+    throws: o.thrownExceptions,
+    genericSignature: null,
+    jvmDescriptor: o.jvmDescriptor,
+    inherited: false,
+  };
+}
+
 function javapMethodToStructure(
   o: JavapMethodWithName,
   declaringClass: string,
@@ -402,7 +429,7 @@ export async function getClassStructure(
 
   const declared = parsedPrimary
     ? parsedPrimary.methods.map((m) => {
-        const row = javapMethodToStructure(m, className, false, sourceAvailable, skeleton);
+        const row = sourceParsedMethodToStructure(m, className, skeleton);
         if (!javapAnnIndex) {
           return row;
         }
