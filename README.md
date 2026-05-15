@@ -292,7 +292,7 @@ The init script emits a single JSON document to stdout. The Node process capture
 
 ```typescript
 interface ResolutionOutput {
-  schemaVersion: string;            // e.g. "1.0" — bump on breaking changes
+  schemaVersion: string;            // "1.0" or "1.1" — bump on breaking changes
   resolvedAt: string;               // ISO 8601 UTC timestamp
   buildSystem: BuildSystemInfo;
   projectRoot: string;              // absolute path — used to validate cache portability
@@ -323,8 +323,8 @@ interface ResolvedArtifact {
   name: string;
   version: string | null;           // null for interproject deps (no version concept)
   type: "jar" | "project" | "local-file";
-  jarPath: string | null;           // null for interproject deps
-  sourcesJarPath: string | null;    // null = checked and absent, not = field omitted
+  jarPath: string | null;           // null for interproject deps (key may be omitted in 1.1 JSON)
+  sourcesJarPath?: string | null;   // 1.1: omitted when null; normalized to null after parse
   origin: "external" | "interproject" | "local-file";
   direct: boolean;                  // true = declared in build file; false = transitive
   interproject?: InterprojectRef;   // present only when origin = "interproject"
@@ -347,7 +347,7 @@ interface ResolutionError {
 
 ```json
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "resolvedAt": "2026-05-14T10:23:00Z",
   "buildSystem": {
     "type": "gradle",
@@ -516,7 +516,7 @@ interface ResolutionError {
 | `direct: boolean` | Distinguishes declared from transitive deps; a class found in a `direct: true` artifact is a stronger match signal |
 | `origin` enum | Three fundamentally different artifact kinds require different downstream handling: `external` → JAR in cache, `interproject` → redirect to source dir, `local-file` → raw path |
 | `version: null` for interproject | Explicit null is better than omitting the field; the consumer knows the field exists but the concept does not apply |
-| `sourcesJarPath: null` | Normal for `compileClasspath`: only main JARs are on that configuration. Sources are resolved **on demand** during `jvmsrc get` via `jvmsrcResolveSources`, not during `jvmsrcResolve`. If sources were already on the classpath (rare), the path may be non-null. |
+| `sourcesJarPath` | For **`schemaVersion` `1.1`**, Gradle may **omit** the key when there is no sources artifact on the classpath edge; consumers normalize missing values to **`null`**. Same semantics as before: on-demand sources use **`jvmsrcResolveSources`**. |
 | `errors` always present | Partial resolution failures (one unreachable submodule) should not discard results for the rest; non-empty errors array does not mean the output is unusable |
 | Artifact identity | Rows are unique by **`group` + `name` + `version`** (with `version: null` for inter-project). Multiple rows sharing the same `group` are normal (different artifact names). |
 | `buildDir` filtering | External JARs whose paths live under **another** subproject’s `buildDir` are skipped so a dependency is not double-counted as both an inter-project edge and a built output JAR. |
@@ -530,6 +530,12 @@ The following behaviors were validated against real Gradle builds before folding
 - **True Gradle resolution** — coordinates are **resolved** (including transitives and conflict resolution), not guessed from `~/.gradle` directory listing.
 - **Single JSON document** per invocation, eager four-scope output per module, `errors[]` for partial failures.
 - **Inter-project vs external** — project dependencies carry `interproject`; sibling `buildDir` artifacts are filtered from the external list.
+
+#### 5.5.6 Gradle configurations collected
+
+`jvmsrcResolve` walks every submodule and, **for each configuration name that exists**, collects resolved artifacts: **`compileClasspath`**, **`runtimeClasspath`**, **`testCompileClasspath`**, **`testRuntimeClasspath`**, **`jvmCompileClasspath`**, **`jvmRuntimeClasspath`**, **`jvmTestCompileClasspath`**, **`jvmTestRuntimeClasspath`** (the `jvm*` names support Kotlin Multiplatform JVM publications when present).
+
+**Android:** variant-specific classpaths (for example **`debugCompileClasspath`**, **`releaseCompileClasspath`**) are **not** collected by default — Android modules can expose many variants, which would multiply Gradle configuration work. Prefer JVM library modules for default **`jvmsrc`** classpath queries, pass **`--configuration`** when your graph exposes a stable custom configuration, or extend the init script locally if you need a dedicated Android scope.
 
 ## 6. Caching Strategy
 
@@ -557,6 +563,8 @@ Gradle invocation is expensive (often ~5–10 seconds; less when the Gradle daem
 | `resolution.json` | Strict `ResolutionOutput` only (no extra fields) |
 | `resolution.hash` | Single line: lowercase hex digest of the build-input set above |
 | `bucket-meta.json` | Small envelope: `cacheMetaVersion`, `projectRootAbsolute`, `projectRootDigestFull`, `writtenAt` (ISO UTC) |
+| `class-search-index.json` | Optional sidecar: built for **`search_classes`** (format version 3); invalidated when resolution fingerprint / scope changes |
+| `jar-fqn-cache.json` | Optional sidecar: per-binary-JAR FQN lists keyed by absolute `jarPath` with **`mtimeMs:size`** stat keys; reused when a JAR file is unchanged so class-search rebuilds skip re-reading unchanged ZIP central directories |
 
 The top-level `decompiled/` directory under the same cache root is reserved for the shared decompile store (§6.2). A top-level `gc.json` is reserved for a future GC pass over stale project buckets.
 
@@ -566,7 +574,7 @@ The top-level `decompiled/` directory under the same cache root is reserved for 
 
 **Durability:** bucket files (`resolution.json`, `resolution.hash`, `bucket-meta.json`) are each written via a **temporary file in the same directory followed by `rename`**, so concurrent readers are less likely to observe a torn combination than with in-place overwrites.
 
-When the build-input digest matches `resolution.hash`, the cached document is used immediately (no Gradle). When it differs, Gradle is re-invoked and the bucket is overwritten. A future **classpath class index** may apply a diff-aware patch (Path 2) after Gradle so that only added/changed JARs are rescanned for FQNs; the full cold scan (Path 3) is avoided on small dependency bumps once that index exists.
+When the build-input digest matches `resolution.hash`, the cached document is used immediately (no Gradle). When it differs, Gradle is re-invoked and the bucket is overwritten. **`jar-fqn-cache.json`** (see table above) stores per-JAR FQN lists with stat-based reuse so **`class-search-index.json`** rebuilds avoid re-scanning unchanged dependency JARs after small resolution graph changes.
 
 **Escape hatch — `forceRefresh`:** Hash keys only cover tracked build inputs (`build.gradle*`, `settings.gradle*`, version catalogs, lockfiles). They do **not** detect SNAPSHOT bumps in a remote repo, a teammate clearing `~/.gradle`, or CI using a fresh dependency cache while build files are unchanged. **`resolve_dependencies`** (MCP), **`jvmsrc resolve --force-refresh`**, and **`jvmsrc get --force-refresh`** bypass the resolution cache and **always** re-invoke Gradle so the agent or developer can re-resolve without manually deleting cache files.
 
@@ -830,11 +838,11 @@ Example success metadata (stderr, default mode):
 
 The **MCP** server tool **`get_class_source`** (§8.2) exposes the same facts in a single structured result (`source`, `sourceAvailable`, provenance fields) — no stdout/stderr split — which is better for IDE agents.
 
-#### 8.1.2 `config` subcommand (planned)
+#### 8.1.2 `config` subcommand
 
-A **`jvmsrc config`** command inspects the environment (build system markers, `JAVA_HOME` / detected JDK) and prints a **ready-to-paste** MCP server block for the user’s IDE (Claude Desktop, Cursor, Windsurf). Optional: copy to clipboard when supported.
+**`jvmsrc config`** prints one JSON document to **stdout**: a paste-ready **`mcpServers.jvmsrc`** block (same shape as §8.2) plus a **`hints`** object (`packageVersion`, `projectRoot`, `hasGradleWrapper`, `javaHome`, `javaDetected`). Use **`--project <path>`** (default: current working directory) only to tune Gradle-wrapper detection for hints.
 
-Goals: remove hand-edited JSON mistakes (`command`, `args`, `env`) and improve first-run success rate. Low implementation cost, high UX leverage (same idea as dedicated MCP config-generator utilities in other ecosystems).
+When you run the CLI from this repository via **`bun run src/cli.ts`**, the snippet uses **`bun run …/src/mcp.ts`** so agents start the MCP entry without a global install. When running the published **`jvmsrc`** binary, the snippet uses that binary’s path with **`args: ["mcp"]`**.
 
 #### 8.1.3 `diagnostics` subcommand
 
@@ -882,7 +890,7 @@ Primary intent for **`get_method_signature`** / **`get_class_structure`**: **IDE
 | `get_method_signature_bytecode` | **Implemented** | **`javap -private -verbose` only** on the resolved binary classpath element (external JAR or inter-project **`build/classes/**`**). **No** sources JAR or **`src/`** fallback — fails if no **`.class`** for the FQN. **`sourceAvailable`** is always **`false`**. **`provenance`:** **`classpathJar`** or **`interprojectBytecode`** only. Same tool arguments as **`get_method_signature`**. Use when callers need full JVM descriptors / classfile metadata; use **`get_method_signature`** for IDE-like overloads first. |
 | `get_class_structure` | **Implemented** | **IDE-shaped API browse:** **`kind`, superclass, interfaces, type parameters, fields, declared methods**, plus inherited public/protected instance API (§7.2). Optional **`include`**: **`hierarchy`**, **`fields`**, **`annotations`** (see illustrative payload below). Declared members prefer parsed **`.java`**; **`javap`** fills gaps and walks supers/interfaces when bytecode exists; source fallback when **`build/classes/**`** is absent but **`src/`** or sources JAR exists. **`javadoc`** when primary type came from sources. **Does not** run CFR. **`sourceAvailable`:** **`true`** when primary declarations came from original source. **`provenance`** as for **`get_method_signature`**. **`JVMSRC_JAVAP_*`** env matches **`get_method_signature`**. |
 | `list_modules` | **Implemented** | Lists Gradle **submodules** with **`path`** and **per-configuration** dependency counts (**`artifactCount`**, **`directArtifactCount`**) without returning full **`ResolutionOutput`**. Tool arguments: **`projectRoot`**, optional **`forceRefresh`** (same as **`resolve_dependencies`** / §6.1). **Success:** **`isError: false`**, **`ok: true`**, **`schemaVersion`**, **`resolvedAt`**, **`projectRoot`**, **`buildSystem`**, **`modules[]`** (each with **`name`**, **`path`**, **`configurations[]`** with **`name`**, **`scope`**, counts), **`resolutionWarningCount`** (length of Gradle partial **`errors[]`** — call **`resolve_dependencies`** for full **`errors`** and artifact lists). **Failures:** same structured envelope as **`resolve_dependencies`** (**`code: RESOLUTION_FAILED`**). |
-| `search_classes` | **Implemented** (index v2) | **Classpath discovery** when the FQN is unknown (§12.3). Arguments: **`query`** (non-empty), **`projectRoot`**, optional **`modulePath`**, **`configuration`**, **`includeTest`**, **`forceRefresh`**, **`limit`** (default 50, max 200). Resolves or loads cached Gradle output, builds or reuses a disk index under the resolution cache bucket (`class-search-index.json`), returns ranked hits: **`className`**, **`simpleName`**, **`moduleName`**, **`configurationName`**, **`origin`** (`external` \| `interproject`), **`coordinates`**, **`jarPath`** / **`moduleRoot`** / **`interprojectModuleName`**, **`score`**. **Substring query:** case-insensitive match over index **`searchText`**: FQN and simple name, plus when sources are available declared method/field identifiers and plain text from Javadoc comments (`/** … */`) parsed from inter-project **`src/...`** **`.java`** and from external **`-sources.jar`** entries when **`sourcesJarPath`** on the artifact is non-null (index build does **not** call Gradle on-demand source resolution). **Glob query:** **`*`** / **`?`** apply to **FQN and simple name only** (not to enriched text). **Index:** external JAR **`.class`** names (ZIP central directory) plus source enrichment as above; inter-project **`src/main/java`** and **`src/test/java`** when **`includeTest`**. **`indexMeta`:** **`indexFormatVersion`** 2, **`sourceEnrichedEntries`**, **`sourceEnrichmentBytesCap`**, **`skippedArtifacts`**, etc. **`origin: local-file`** artifacts are skipped (**`skippedArtifacts`**). **Success:** **`isError: false`**, **`ok: true`**, **`querySucceeded: true`**, **`totalMatches`**, **`hitCount`**, **`hits[]`**, **`indexMeta`**. **Failures:** same envelope as **`resolve_dependencies`** or validation (**`MODULE_NOT_FOUND`**, **`CONFIGURATION_NOT_FOUND`**). |
+| `search_classes` | **Implemented** (index v3) | **Classpath discovery** when the FQN is unknown (§12.3). Arguments: **`query`** (non-empty), **`projectRoot`**, optional **`modulePath`**, **`configuration`**, **`includeTest`**, **`forceRefresh`**, **`limit`** (default 50, max 200). Resolves or loads cached Gradle output, builds or reuses **`class-search-index.json`** in the resolution cache bucket (with **`jar-fqn-cache.json`** stat-based reuse for unchanged JAR paths). Returns ranked hits: **`className`**, **`simpleName`**, **`moduleName`**, **`configurationName`**, **`origin`** (`external` \| `interproject` \| `local-file`), **`coordinates`**, **`jarPath`** / **`moduleRoot`** / **`interprojectModuleName`**, **`score`**. **Substring query:** case-insensitive match over index **`searchText`**: FQN and simple name, plus when sources are available declared method/field identifiers and plain text from Javadoc comments (`/** … */`) parsed from inter-project **`src/...`** **`.java`** and from external **`-sources.jar`** entries when **`sourcesJarPath`** on the artifact is non-null (index build does **not** call Gradle on-demand source resolution). **Glob query:** **`*`** / **`?`** apply to **FQN and simple name only** (not to enriched text). **Index:** external and **`local-file`** JAR **`.class`** names (ZIP central directory) plus source enrichment as above; inter-project **`src/main/java`** and **`src/test/java`** when **`includeTest`**. **`indexMeta`:** **`indexFormatVersion`** 3, **`sourceEnrichedEntries`**, **`sourceEnrichmentBytesCap`**, **`skippedArtifacts`**, etc. **Success:** **`isError: false`**, **`ok: true`**, **`querySucceeded: true`**, **`totalMatches`**, **`hitCount`**, **`hits[]`**, **`indexMeta`**. **Failures:** same envelope as **`resolve_dependencies`** or validation (**`MODULE_NOT_FOUND`**, **`CONFIGURATION_NOT_FOUND`**). |
 | `resolve_dependencies` | **Implemented** | Returns validated **`ResolutionOutput`** (§5.5.2) for the whole project (all `modules[]`). Tool arguments: **`projectRoot`**, optional **`forceRefresh`** (same semantics as CLI `resolve` / §6.1). **Success:** **`isError: false`**, **`ok: true`**, **`resolution`** (full document). **Failures:** **`isError: true`** with **`errorCategory`**, **`isRetryable`**, **`description`**, **`code: RESOLUTION_FAILED`**, and domain **`error`**. Use before batch **`get_class_source`** calls to warm the resolution cache without per-class Gradle runs. |
 
 **Failure diagnostics:** tool error payloads **may** include **`diagnosticId`** and **`hint`** (e.g. **`jvmsrc diagnostics show …`**) when a full diagnostic file is written, so agents can surface an opaque id to the developer without embedding subprocess output.
@@ -1035,8 +1043,8 @@ function getBundledResource(filename: BundledResourceName): string {
   return resourcePath;
 }
 
-const CFR_JAR_PATH =
-  process.env.JVMSRC_CFR_PATH?.trim() || getBundledResource('cfr.jar');
+// CFR JAR selection (implementation: `resolveCfrJarPath()` in `src/decompiler/resolve-cfr-jar.ts`):
+// `JVMSRC_CFR_PATH` → else `JVM_ORACLE_CFR_PATH` → else `getBundledResource('cfr.jar')`.
 const INIT_SCRIPT_PATH     = getBundledResource('analyzer-init.gradle');
 ```
 
@@ -1121,10 +1129,10 @@ The following represents the minimum build that validates the architecture end-t
 | High | `sourceAvailable` on all source-bearing MCP/CLI/library responses | §7.1 |
 | Medium | Enrich `get_class_structure` (optional `include`: hierarchy, fields, annotations) — **implemented** (§8.2); parameter-level annotations deferred | §12 |
 | Medium | `forceRefresh` on `resolve_dependencies` + `--force-refresh` on CLI | §6.1, §8.1 — **done** for MCP and CLI |
-| Medium | **`search_classes`** / class search index (capability discovery; index-backed) | §12 — **implemented** (§8.2 index v2: FQN + source-derived method / field / Javadoc **`searchText`; globs still FQN/simple only) |
+| Medium | **`search_classes`** / class search index (capability discovery; index-backed) | §12 — **implemented** (§8.2 index v3: FQN + **`local-file`** JARs + source-derived method / field / Javadoc **`searchText`**; **`jar-fqn-cache.json`** reuse; globs still FQN/simple only) |
 | Medium | Structured failure diagnostics + **`jvmsrc diagnostics`** CLI | §6.3, §8.1.3 |
-| Low | `jvmsrc config` MCP snippet generator | §8.1.1 |
-| Low | `JVMSRC_CFR_PATH` CFR JAR override | §9.3 |
+| Low | `jvmsrc config` MCP snippet generator — **implemented** (§8.1.2) | §8.1.2 |
+| Low | `JVMSRC_CFR_PATH` / `JVM_ORACLE_CFR_PATH` CFR JAR override — **implemented** | §9.3 |
 | Future | `get_implementors` (inverted index; post–v2) | §12 |
 
 Maven resolver is explicitly out of scope for v1 but the architecture accommodates it as a drop-in addition.
@@ -1201,7 +1209,7 @@ parse class (once, cached)
 | `get_method_signature` | Method contract (IDE-first) | ~25% | MVP (**done** — source-first + javap fallback) |
 | `get_method_signature_bytecode` | Method contract (javap-only) | ~5% | MVP (**done**) |
 | `get_class_structure` (enriched over releases) | Browse API, hierarchy, fields, annotations | ~42% | MVP + P1 |
-| `search_classes` | Discovery | ~7% | v2 (**done** — index v2 source enrichment) |
+| `search_classes` | Discovery | ~7% | v3 (**done** — index v3 + JAR FQN sidecar cache) |
 | `get_implementors` | Implementation templates | ~1% | Future |
 | **Total** | | **~88%** | |
 

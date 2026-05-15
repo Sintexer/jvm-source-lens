@@ -5,6 +5,7 @@ import type { ResolutionOutput } from '../resolvers/resolution-output.js';
 import type { ResolvedConfiguration, ResolvedModule } from '../resolvers/resolution-output.js';
 import { buildClassSearchIndex } from './build-class-search-index.js';
 import { readClassSearchIndex, writeClassSearchIndex } from './class-search-index-cache.js';
+import { emptyJarFqnCache, readJarFqnCache, writeJarFqnCache } from './jar-fqn-cache.js';
 import type { ClassSearchIndexFileV1 } from './types.js';
 
 export function resolutionFingerprint(output: ResolutionOutput): string {
@@ -43,12 +44,15 @@ export function ensureClassSearchIndex(
     }
   }
 
+  const jarCache = readJarFqnCache(canonical) ?? emptyJarFqnCache();
+
   const built = buildClassSearchIndex({
     module: scope.module,
     configuration: scope.configuration,
     includeTest: scope.includeTest,
     buildInputsDigest,
     resolutionFingerprint: fp,
+    jarFqnCache: jarCache,
   });
   if (!built.ok) {
     return built;
@@ -58,6 +62,8 @@ export function ensureClassSearchIndex(
   if (!written.ok) {
     return { ok: false, message: written.message };
   }
+
+  writeJarFqnCache(canonical, jarCache);
 
   return { ok: true, file: built.file };
 }

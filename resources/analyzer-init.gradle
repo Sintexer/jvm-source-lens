@@ -26,6 +26,10 @@ gradle.projectsLoaded { g ->
                 [name: "runtimeClasspath", scope: "runtime"],
                 [name: "testCompileClasspath", scope: "test-compile"],
                 [name: "testRuntimeClasspath", scope: "test-runtime"],
+                [name: "jvmCompileClasspath", scope: "compile"],
+                [name: "jvmRuntimeClasspath", scope: "runtime"],
+                [name: "jvmTestCompileClasspath", scope: "test-compile"],
+                [name: "jvmTestRuntimeClasspath", scope: "test-runtime"],
             ]
 
             def modules = []
@@ -62,7 +66,7 @@ gradle.projectsLoaded { g ->
             }
 
             def result = [
-                schemaVersion: "1.0",
+                schemaVersion: "1.1",
                 resolvedAt   : Instant.now().toString(),
                 buildSystem  : [
                     type   : "gradle",
@@ -153,8 +157,6 @@ List<Map<String, Object>> collectArtifacts(org.gradle.api.Project project, Confi
             name            : name,
             version         : null,
             type            : "project",
-            jarPath         : null,
-            sourcesJarPath  : null,
             origin          : "interproject",
             direct          : direct,
             interproject    : [
@@ -167,7 +169,10 @@ List<Map<String, Object>> collectArtifacts(org.gradle.api.Project project, Confi
     def byKey = [:].withDefault { [main: null, sources: null, mvi: null] }
     config.resolvedConfiguration.resolvedArtifacts.each { ResolvedArtifact ra ->
         def f = ra.file
-        if (f != null && otherBuildDirs.any { f.absolutePath.startsWith(it) }) {
+        if (f == null) {
+            return
+        }
+        if (otherBuildDirs.any { f.absolutePath.startsWith(it) }) {
             return
         }
         def mvi = ra.moduleVersion.id
@@ -191,16 +196,64 @@ List<Map<String, Object>> collectArtifacts(org.gradle.api.Project project, Confi
         def mvi = entry.mvi
         def comp = moduleKeyToComponent[moduleKeyFromMvi(mvi)]
         boolean direct = comp != null && directSelected.contains(comp)
-        list << [
+        def row = [
             group          : mvi.group,
             name           : mvi.name,
             version        : mvi.version,
             type           : "jar",
             jarPath        : entry.main != null ? entry.main.absolutePath : null,
-            sourcesJarPath : entry.sources != null ? entry.sources.absolutePath : null,
             origin         : "external",
             direct         : direct,
         ]
+        if (entry.sources != null) {
+            row.sourcesJarPath = entry.sources.absolutePath
+        }
+        list << row
+    }
+
+    def emittedJarPaths = new HashSet<String>()
+    list.each { Map item ->
+        def jp = item.get("jarPath")
+        if (jp instanceof String && jp.toString().length() > 0) {
+            emittedJarPaths.add(jp.toString())
+        }
+    }
+
+    config.resolvedConfiguration.resolvedArtifacts.each { ResolvedArtifact ra ->
+        def f = ra.file
+        if (f == null) {
+            return
+        }
+        def ap = f.absolutePath
+        if (otherBuildDirs.any { ap.startsWith(it) }) {
+            return
+        }
+        def fn = f.name
+        if (fn.endsWith("-sources.jar") || fn.endsWith("-javadoc.jar")) {
+            return
+        }
+        if (!fn.toLowerCase().endsWith(".jar")) {
+            return
+        }
+        if (emittedJarPaths.contains(ap)) {
+            return
+        }
+        def mvi = ra.moduleVersion.id
+        def g = mvi.group != null ? String.valueOf(mvi.group).trim() : ""
+        def n = mvi.name != null ? String.valueOf(mvi.name) : fn
+        def verRaw = mvi.version != null ? String.valueOf(mvi.version).trim() : ""
+        def verStr = (verRaw.length() > 0 && !"unspecified".equalsIgnoreCase(verRaw)) ? verRaw : null
+        def gOut = g.length() > 0 ? g : "_local"
+        list << [
+            group   : gOut,
+            name    : n,
+            version : verStr,
+            type    : "local-file",
+            jarPath : ap,
+            origin  : "local-file",
+            direct  : true,
+        ]
+        emittedJarPaths.add(ap)
     }
 
     return list

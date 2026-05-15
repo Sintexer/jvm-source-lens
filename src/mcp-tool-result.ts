@@ -79,7 +79,7 @@ export type McpSearchClassesHitPayload = {
   simpleName: string;
   moduleName: string;
   configurationName: string;
-  origin: 'external' | 'interproject';
+  origin: 'external' | 'interproject' | 'local-file';
   coordinates: { group: string; name: string; version: string | null };
   jarPath: string | null;
   moduleRoot: string | null;

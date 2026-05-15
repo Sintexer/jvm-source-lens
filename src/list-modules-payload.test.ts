@@ -4,7 +4,7 @@ import type { ResolutionOutput } from './resolvers/resolution-output.js';
 
 test('buildListModulesPayload maps modules and dependency counts', () => {
   const output: ResolutionOutput = {
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
     resolvedAt: '2026-05-15T12:00:00Z',
     buildSystem: { type: 'gradle', version: '8.7', wrapper: true },
     projectRoot: '/tmp/proj',

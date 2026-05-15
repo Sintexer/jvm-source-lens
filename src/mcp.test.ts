@@ -190,7 +190,7 @@ test('mcpListModulesPayloadSchema accepts success payload', () => {
     ok: true,
     projectRoot: '/tmp/proj',
     resolvedAt: '2026-05-15T12:00:00Z',
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
     buildSystem: { type: 'gradle', version: '8.7', wrapper: true },
     modules: [
       {
@@ -246,7 +246,7 @@ test('mcpSearchClassesPayloadSchema accepts success payload', () => {
       },
     ],
     indexMeta: {
-      indexFormatVersion: 2,
+      indexFormatVersion: 3,
       buildInputsDigest: 'abc',
       resolutionFingerprint: 'def',
       moduleName: 'root',
@@ -284,7 +284,7 @@ test('mcpToolResultFromSearchClasses success', () => {
         },
       ],
       indexMeta: {
-        indexFormatVersion: 2,
+        indexFormatVersion: 3,
         buildInputsDigest: 'a',
         resolutionFingerprint: 'b',
         moduleName: 'root',
@@ -307,7 +307,7 @@ test('mcpToolResultFromListModules success sets isError false and module summary
     {
       ok: true,
       output: {
-        schemaVersion: '1.0',
+        schemaVersion: '1.1',
         resolvedAt: '2026-05-15T12:00:00Z',
         buildSystem: { type: 'gradle', version: '8.7', wrapper: true },
         projectRoot: '/tmp/proj',
@@ -352,7 +352,7 @@ test('mcpResolveDependenciesPayloadSchema accepts success with resolution', () =
   const parsed = mcpResolveDependenciesPayloadSchema.safeParse({
     ok: true,
     resolution: {
-      schemaVersion: '1.0',
+      schemaVersion: '1.1',
       resolvedAt: '2026-05-15T12:00:00Z',
       buildSystem: { type: 'gradle', version: '8.7', wrapper: true },
       projectRoot: '/tmp/proj',
@@ -610,7 +610,7 @@ test('mcpToolResultFromResolutionResult success sets isError false and resolutio
     {
       ok: true,
       output: {
-        schemaVersion: '1.0',
+        schemaVersion: '1.1',
         resolvedAt: '2026-05-15T12:00:00Z',
         buildSystem: { type: 'gradle', version: '8.7', wrapper: true },
         projectRoot: '/tmp/proj',

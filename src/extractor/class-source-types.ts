@@ -104,3 +104,17 @@ export type ClassSourceLookupResult =
 export function isExternalJarArtifact(a: ResolvedArtifact): boolean {
   return a.origin === 'external' && a.type === 'jar';
 }
+
+/** Resolved Maven JAR or `local-file` `.jar` on classpath (ZIP class lookup + optional embedded sources). */
+export function isClasspathBinaryJarArtifact(a: ResolvedArtifact): boolean {
+  if (a.jarPath === null || a.jarPath.length === 0) {
+    return false;
+  }
+  if (!a.jarPath.toLowerCase().endsWith('.jar')) {
+    return false;
+  }
+  if (isExternalJarArtifact(a)) {
+    return true;
+  }
+  return a.origin === 'local-file' && a.type === 'local-file';
+}

@@ -64,7 +64,7 @@ function writeGradleStubs(projectDir: string): void {
 
 function minimalResolutionOutput(projectRoot: string): ResolutionOutput {
   return {
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
     resolvedAt: '2026-01-01T00:00:00Z',
     buildSystem: { type: 'gradle', version: '8.0', wrapper: false },
     projectRoot: canonicalProjectRoot(projectRoot),

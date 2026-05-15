@@ -18,7 +18,7 @@ function artifact(partial: Partial<ResolvedArtifact> & Pick<ResolvedArtifact, 'g
 
 function minimalOutput(): ResolutionOutput {
   return {
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
     resolvedAt: '2020-01-01T00:00:00Z',
     buildSystem: { type: 'gradle', version: '8.0', wrapper: true },
     projectRoot: '/tmp/p',

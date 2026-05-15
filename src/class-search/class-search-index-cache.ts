@@ -52,7 +52,7 @@ function parseIndexFile(raw: unknown): ClassSearchIndexFileV1 | null {
       typeof e.className !== 'string' ||
       typeof e.simpleName !== 'string' ||
       typeof e.searchText !== 'string' ||
-      (e.origin !== 'external' && e.origin !== 'interproject') ||
+      (e.origin !== 'external' && e.origin !== 'interproject' && e.origin !== 'local-file') ||
       typeof e.group !== 'string' ||
       typeof e.name !== 'string' ||
       (e.version !== null && typeof e.version !== 'string') ||

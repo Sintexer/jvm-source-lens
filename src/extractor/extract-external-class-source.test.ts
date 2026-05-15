@@ -27,7 +27,7 @@ function baseOutput(
   artifacts: ResolvedArtifact[],
 ): ResolutionOutput {
   return {
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
     resolvedAt: '2020-01-01T00:00:00Z',
     buildSystem: { type: 'gradle', version: '8.0', wrapper: true },
     projectRoot: rootDir,
@@ -238,6 +238,56 @@ describe('extractExternalClassSource', () => {
       expect(r.source).toBe('decompiled Foo');
       expect(r.sourceAvailable).toBe(false);
       expect(r.provenance.kind).toBe('decompiled');
+    }
+  });
+
+  test('local-file jar skips Gradle resolveSourcesJar and can decompile', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-lf-'));
+    const binJar = path.join(dir, 'dep.jar');
+    fs.writeFileSync(
+      binJar,
+      zipSync({
+        'com/example/Foo.class': fakeClassBytes,
+      }),
+    );
+
+    const out = baseOutput(dir, [
+      artifact({
+        group: '_local',
+        name: 'dep.jar',
+        version: null,
+        type: 'local-file',
+        origin: 'local-file',
+        jarPath: binJar,
+        sourcesJarPath: null,
+      }),
+    ]);
+
+    let resolveCalls = 0;
+    const r = await extractExternalClassSource(out, {
+      className: 'com.example.Foo',
+      resolveSourcesJar: async () => {
+        resolveCalls += 1;
+        return '/tmp/fake-sources.jar';
+      },
+      decompileExternalClass: async () => ({
+        ok: true,
+        source: 'from local jar',
+        sourceAvailable: false,
+        className: 'com.example.Foo',
+        provenance: {
+          kind: 'decompiled',
+          coordinates: { group: '_local', name: 'dep.jar', version: null },
+          jarPath: binJar,
+          entryRelPath: 'com/example/Foo.class',
+          cachePath: '/c',
+        },
+      }),
+    });
+    expect(resolveCalls).toBe(0);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.source).toBe('from local jar');
     }
   });
 

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import type { ResolvedArtifact, ResolvedConfiguration, ResolvedModule } from '../resolvers/resolution-output.js';
-import { isExternalJarArtifact } from '../extractor/class-source-types.js';
+import { isClasspathBinaryJarArtifact, isExternalJarArtifact } from '../extractor/class-source-types.js';
 import { fqnToZipRelPaths } from '../extractor/fqn-paths.js';
 import { readZipEntryUtf8 } from '../extractor/zip-entry.js';
 import {
@@ -8,6 +8,7 @@ import {
   MAX_JAVA_SOURCE_BYTES_FOR_SEARCH,
 } from './java-source-search-text.js';
 import { listFqnsFromJarClassEntries } from './jar-class-fqns.js';
+import { statKeyForJar, type JarFqnCacheFileV1 } from './jar-fqn-cache.js';
 import { resolveInterprojectJavaAbsolutePath } from './interproject-java-path.js';
 import { listFqnsFromInterprojectSources } from './interproject-source-fqns.js';
 import {
@@ -22,6 +23,8 @@ export type BuildClassSearchIndexParams = {
   includeTest: boolean;
   buildInputsDigest: string;
   resolutionFingerprint: string;
+  /** Optional sidecar cache: updated when listing JAR FQNs; reused when mtime+size unchanged. */
+  jarFqnCache?: JarFqnCacheFileV1;
 };
 
 function simpleNameOf(fqn: string): string {
@@ -72,29 +75,39 @@ export function buildClassSearchIndex(
   let sourceEnrichedEntries = 0;
 
   for (const a of configuration.artifacts) {
-    if (a.origin === 'local-file' || a.type === 'local-file') {
-      skippedArtifacts += 1;
-      continue;
-    }
-
-    if (isExternalJarArtifact(a)) {
+    if (isClasspathBinaryJarArtifact(a)) {
       if (!a.jarPath) {
         skippedArtifacts += 1;
         continue;
       }
-      const listed = listFqnsFromJarClassEntries(a.jarPath);
-      if (!listed.ok) {
-        skippedArtifacts += 1;
-        continue;
+      const jarPath = a.jarPath;
+      const cache = params.jarFqnCache;
+      const sk = statKeyForJar(jarPath);
+      const cached = sk !== null && cache !== undefined ? cache.jars[jarPath] : undefined;
+      let fqns: string[];
+      if (cached !== undefined && cached.statKey === sk) {
+        fqns = cached.fqns;
+      } else {
+        const listed = listFqnsFromJarClassEntries(jarPath);
+        if (!listed.ok) {
+          skippedArtifacts += 1;
+          continue;
+        }
+        fqns = [...new Set(listed.fqns)];
+        if (cache !== undefined && sk !== null) {
+          cache.jars[jarPath] = { statKey: sk, fqns };
+        }
       }
-      for (const fqn of new Set(listed.fqns)) {
+      const originTag: ClassSearchIndexEntry['origin'] = isExternalJarArtifact(a) ? 'external' : 'local-file';
+      for (const fqn of fqns) {
         let blob: string | null = null;
-        if (a.sourcesJarPath !== null && a.sourcesJarPath.length > 0) {
+        const sj = a.sourcesJarPath ?? null;
+        if (sj !== null && sj.length > 0) {
           try {
-            if (fs.existsSync(a.sourcesJarPath)) {
+            if (fs.existsSync(sj)) {
               const paths = fqnToZipRelPaths(fqn);
               if (paths.ok) {
-                const z = readZipEntryUtf8(a.sourcesJarPath, paths.sourceRelPath);
+                const z = readZipEntryUtf8(sj, paths.sourceRelPath);
                 if (z.ok && z.text.length > 0) {
                   const b = buildJavaSourceSearchBlob(z.text, fqn);
                   if (b.length > 0) {
@@ -111,7 +124,7 @@ export function buildClassSearchIndex(
           sourceEnrichedEntries += 1;
         }
         entries.push(
-          makeEntry(fqn, a, module.name, configuration.name, 'external', a.jarPath, null, null, blob),
+          makeEntry(fqn, a, module.name, configuration.name, originTag, a.jarPath, null, null, blob),
         );
       }
       continue;

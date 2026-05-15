@@ -37,12 +37,12 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 ### P2 — Post-MVP
 
 - [x] MCP `search_classes` / class search index (capability discovery, full-text; §12.2)
-- [ ] `jvmsrc config` (paste-ready MCP snippet)
-- [ ] `JVMSRC_CFR_PATH` / `JVM_ORACLE_CFR_PATH` override for CFR
-- [ ] Classpath FQN index (diff-aware patch after resolve)
-- [ ] `local-file` artifact origin in extractor
-- [ ] Android / Kotlin MPP configuration coverage
-- [ ] Resolution schema: optional or remove rarely-used `sourcesJarPath`
+- [x] `jvmsrc config` (paste-ready MCP snippet)
+- [x] `JVMSRC_CFR_PATH` / `JVM_ORACLE_CFR_PATH` override for CFR
+- [x] Classpath FQN index (diff-aware patch after resolve)
+- [x] `local-file` artifact origin in extractor
+- [x] Android / Kotlin MPP configuration coverage
+- [x] Resolution schema: optional or remove rarely-used `sourcesJarPath`
 
 ### P3 — Future / post–v2
 
@@ -258,9 +258,11 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **v2 shipped:** **`searchText`** enrichment from **`.java`** when readable: declared method names (constructors mapped to the simple class name), field/enum-constant names from the same parse path as **`parseJavaTypeMetadata`**, and plain text from **`/** … */`** blocks; inter-project paths on disk; external **`-sources.jar`** ZIP entries per FQN when **`sourcesJarPath`** is already present on the artifact (no **`jvmsrcResolveSources`** during index build). **`indexMeta`:** **`sourceEnrichedEntries`**, **`sourceEnrichmentBytesCap`** (max bytes read per source file).
 
+**v3 shipped:** **`local-file`** JAR classpath edges indexed like external jars; **`indexFormatVersion`** 3. **`jar-fqn-cache.json`** sidecar (same bucket): per absolute **`jarPath`**, reuse FQN lists when **`mtime:size`** matches — class-search rebuilds skip re-reading unchanged JAR ZIP central directories when the resolution fingerprint changes but dependency files are unchanged.
+
 - [x] Full-text index over class names, method names, Javadoc when sources available
 - [x] MCP tool `search_classes` (or merged surface with CLI); ranked candidates
-- [ ] Builds on / relates to classpath FQN index (below)
+- [x] Builds on / relates to classpath FQN index (below)
 
 ---
 
@@ -268,8 +270,8 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **Goal:** README §8.1.2 — paste-ready MCP server block for IDEs.
 
-- [ ] Subcommand prints JSON snippet for Claude Desktop / Cursor / Windsurf
-- [ ] Optional: detect `JAVA_HOME`, Gradle wrapper, project root hints
+- [x] Subcommand prints JSON snippet for Claude Desktop / Cursor / Windsurf
+- [x] Optional: detect `JAVA_HOME`, Gradle wrapper, project root hints
 
 ---
 
@@ -277,8 +279,8 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **Goal:** README §9.3 — corporate environments with approved CFR builds.
 
-- [ ] Read env in decompiler layer; fall back to bundled `resources/cfr.jar`
-- [ ] Honor legacy `JVM_ORACLE_CFR_PATH` when unset
+- [x] Read env in decompiler layer; fall back to bundled `resources/cfr.jar`
+- [x] Honor legacy `JVM_ORACLE_CFR_PATH` when unset
 
 ---
 
@@ -286,26 +288,26 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **Goal:** README §6.1 Path 2 — avoid full cold scan on small dependency bumps.
 
-- [ ] Persist index beside resolution cache; patch when `resolution.json` changes
+- [x] Persist index beside resolution cache; patch when `resolution.json` changes
 
 ---
 
 ### `local-file` artifact origin
 
-- [ ] Handle `origin: local-file` in extractor (paths from Gradle output)
+- [x] Handle `origin: local-file` in extractor (paths from Gradle output)
 
 ---
 
 ### Android / Kotlin MPP configuration coverage
 
-- [ ] Document skipped configuration names; extend init script where safe
+- [x] Document skipped configuration names; extend init script where safe
 
 ---
 
 ### Resolution schema: `sourcesJarPath`
 
-- [ ] Decide: keep nullable field vs optional vs remove in schema `1.1`
-- [ ] Migration note in README if schema version bumps
+- [x] Decide: keep nullable field vs optional vs remove in schema `1.1`
+- [x] Migration note in README if schema version bumps
 
 ---
 

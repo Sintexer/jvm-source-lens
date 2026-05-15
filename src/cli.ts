@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
+import { buildJvmsrcMcpConfigPayload } from './cli-config-command.js';
 import { registerDiagnosticsCli } from './diagnostics/cli-diagnostics-command.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import { writeCliGetResult } from './cli-get-output.js';
@@ -155,6 +156,21 @@ program
   });
 
 registerDiagnosticsCli(program);
+
+program
+  .command('config')
+  .description('Print paste-ready MCP server JSON (Cursor / Claude Desktop / Windsurf) plus environment hints')
+  .option('-p, --project <path>', 'Project root for hints (Gradle wrapper detection)', process.cwd())
+  .action((options: { project: string }) => {
+    const root = resolveProjectRoot(options.project);
+    if (!root.ok) {
+      console.error(root.message);
+      process.exitCode = 1;
+      return;
+    }
+    const payload = buildJvmsrcMcpConfigPayload(root.path);
+    console.log(JSON.stringify(payload, null, 2));
+  });
 
 program
   .command('mcp')

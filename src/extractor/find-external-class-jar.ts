@@ -1,5 +1,5 @@
 import type { ArtifactCoordinates, ClassSourceLookupOptions } from './class-source-types.js';
-import { isExternalJarArtifact } from './class-source-types.js';
+import { isClasspathBinaryJarArtifact } from './class-source-types.js';
 import { fqnToZipRelPaths } from './fqn-paths.js';
 import { resolveInterprojectClasspathRootForBinary } from './interproject-paths.js';
 import type { ResolvedArtifact } from '../resolvers/resolution-output.js';
@@ -42,7 +42,8 @@ export type FindExternalJarResult = FindClasspathOwningClassResult;
 
 function countClasspathSearchArtifacts(list: ResolvedArtifact[]): number {
   return list.filter(
-    (a) => isExternalJarArtifact(a) || (a.origin === 'interproject' && Boolean(a.interproject)),
+    (a) =>
+      isClasspathBinaryJarArtifact(a) || (a.origin === 'interproject' && Boolean(a.interproject)),
   ).length;
 }
 
@@ -102,7 +103,7 @@ export function findClasspathOwningClass(
       continue;
     }
 
-    if (!isExternalJarArtifact(a)) {
+    if (!isClasspathBinaryJarArtifact(a)) {
       continue;
     }
 
@@ -135,7 +136,7 @@ export function findClasspathOwningClass(
     ok: false,
     error: {
       code: 'CLASS_NOT_FOUND',
-      message: `Class not found on this classpath (${searchedArtifactCount} classpath edge(s) checked — inter-project outputs and external JARs). Verify the fully-qualified name, modulePath, configuration, or includeTest scope.`,
+      message: `Class not found on this classpath (${searchedArtifactCount} classpath edge(s) checked — inter-project outputs, external JARs, and local file JARs). Verify the fully-qualified name, modulePath, configuration, or includeTest scope.`,
       className: opts.className,
       searchedArtifactCount,
     },

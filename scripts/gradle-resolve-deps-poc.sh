@@ -3,7 +3,7 @@
 #   PROJECT_ROOT defaults to the current working directory.
 #
 # Runs Gradle with an external init script (no files added under the project).
-# Prints one JSON document to stdout matching README 5.4.2 (schemaVersion 1.0):
+# Prints one JSON document to stdout matching README 5.5.2 (schemaVersion 1.1+):
 # eager resolution of compileClasspath, runtimeClasspath, testCompileClasspath,
 # and testRuntimeClasspath per submodule; resolved versions; partial errors array.
 #

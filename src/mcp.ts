@@ -230,7 +230,7 @@ export const mcpListModulesPayloadSchema = z.union([
 ]);
 
 const classSearchIndexMetaSchema = z.object({
-  indexFormatVersion: z.literal(2),
+  indexFormatVersion: z.literal(3),
   buildInputsDigest: z.string(),
   resolutionFingerprint: z.string(),
   moduleName: z.string(),
@@ -248,7 +248,7 @@ const searchClassesHitSchema = z.object({
   simpleName: z.string(),
   moduleName: z.string(),
   configurationName: z.string(),
-  origin: z.enum(['external', 'interproject']),
+  origin: z.enum(['external', 'interproject', 'local-file']),
   coordinates: artifactCoordinatesSchema,
   jarPath: z.string().nullable(),
   moduleRoot: z.string().nullable(),
@@ -621,7 +621,7 @@ export async function startMcpServer(): Promise<void> {
         'Capability discovery when the FQN is unknown (README §12.3): resolves or loads cached Gradle output, builds or reuses a disk index for the selected module + configuration, ' +
         'then returns ranked FQN hits. Query is a case-insensitive substring over the index `searchText` (FQN, simple name, and when sources exist: declared method/field identifiers and Javadoc plain text), or a glob with * and ? matched against FQN or simple name only. ' +
         'Optional limit (default 50, max 200). Same projectRoot, modulePath, configuration, includeTest, and forceRefresh semantics as get_class_source. ' +
-        'v2 indexes external JAR .class paths (ZIP central directory) plus source enrichment from sibling `-sources.jar` when Gradle listed `sourcesJarPath`, and from inter-project `src/main/java` (+ `src/test/java` when includeTest); origin:local-file artifacts are skipped. ' +
+        'v3 indexes external and local-file JAR `.class` paths (ZIP central directory) plus source enrichment from sibling `-sources.jar` when Gradle listed `sourcesJarPath`, and from inter-project `src/main/java` (+ `src/test/java` when includeTest). ' +
         'On failure: isError=true with code RESOLUTION_FAILED or classpath validation codes.',
       inputSchema: searchClassesInputSchema,
       outputSchema: mcpSearchClassesPayloadSchema,

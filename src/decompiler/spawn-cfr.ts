@@ -100,7 +100,16 @@ export async function runCfrDecompile(opts: CfrDecompileOptions): Promise<CfrDec
     }
     javaPath = java.javaPath;
   }
-  const cfrJar = opts.cfrJarPath ?? resolveCfrJarPath();
+  let cfrJar: string;
+  if (opts.cfrJarPath !== undefined && opts.cfrJarPath.length > 0) {
+    cfrJar = opts.cfrJarPath;
+  } else {
+    const resolved = resolveCfrJarPath();
+    if (!resolved.ok) {
+      return { ok: false, message: resolved.message };
+    }
+    cfrJar = resolved.path;
+  }
   const timeoutMs = opts.timeoutMs ?? cfrTimeoutMs();
   const maxOutputBytes = opts.maxOutputBytes ?? cfrMaxOutputBytes();
   const spawnEnv = opts.env ?? buildCfrSpawnEnv();

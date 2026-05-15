@@ -1,4 +1,4 @@
-export const SUPPORTED_RESOLUTION_SCHEMA_VERSIONS = ['1.0'] as const;
+export const SUPPORTED_RESOLUTION_SCHEMA_VERSIONS = ['1.0', '1.1'] as const;
 
 export type ResolutionSchemaVersion = (typeof SUPPORTED_RESOLUTION_SCHEMA_VERSIONS)[number];
 
@@ -19,7 +19,8 @@ export interface ResolvedArtifact {
   version: string | null;
   type: 'jar' | 'project' | 'local-file';
   jarPath: string | null;
-  sourcesJarPath: string | null;
+  /** Omitted in Gradle 1.1 JSON when absent; normalized to `null` after parse. */
+  sourcesJarPath?: string | null;
   origin: 'external' | 'interproject' | 'local-file';
   direct: boolean;
   interproject?: InterprojectRef;
@@ -114,5 +115,23 @@ export function validateResolutionOutput(raw: unknown): ResolutionParseResult {
   }
 
   const output = raw as unknown as ResolutionOutput;
+  normalizeResolutionOutput(output);
   return { ok: true, output };
+}
+
+/** Fills optional / omitted artifact fields after JSON parse (schema 1.1 omits null `sourcesJarPath`). */
+export function normalizeResolutionOutput(output: ResolutionOutput): ResolutionOutput {
+  for (const mod of output.modules) {
+    for (const cfg of mod.configurations) {
+      for (const art of cfg.artifacts) {
+        if (art.jarPath === undefined) {
+          (art as { jarPath: string | null }).jarPath = null;
+        }
+        if (art.sourcesJarPath === undefined) {
+          (art as { sourcesJarPath: string | null }).sourcesJarPath = null;
+        }
+      }
+    }
+  }
+  return output;
 }

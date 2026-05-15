@@ -1,8 +1,8 @@
 import type { ClassSourceError } from '../extractor/class-source-types.js';
 
-export const CLASS_SEARCH_INDEX_FORMAT_VERSION = 2 as const;
+export const CLASS_SEARCH_INDEX_FORMAT_VERSION = 3 as const;
 
-export type ClassSearchArtifactOrigin = 'external' | 'interproject';
+export type ClassSearchArtifactOrigin = 'external' | 'interproject' | 'local-file';
 
 /** One classpath element’s contribution (flattened per FQN). */
 export type ClassSearchIndexEntry = {
@@ -18,7 +18,7 @@ export type ClassSearchIndexEntry = {
   /** Owning Gradle module for the selected configuration (e.g. `root`, `:app`). */
   resolvedModuleName: string;
   configurationName: string;
-  /** Binary JAR path when `origin === 'external'` */
+  /** Binary JAR path when `origin === 'external'` or `local-file` */
   jarPath: string | null;
   /** Interproject depended module root when `origin === 'interproject'` */
   moduleRoot: string | null;

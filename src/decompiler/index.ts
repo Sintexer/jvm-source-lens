@@ -1,6 +1,6 @@
 export { buildCfrSpawnEnv, CFR_STRIPPED_ENV_KEYS } from './cfr-spawn-env.js';
 export { decompileExternalClass, type DecompileExternalClassFn, type DecompileExternalClassOptions } from './decompile-external-class.js';
-export { resolveCfrJarPath } from './resolve-cfr-jar.js';
+export { resolveCfrJarPath, type ResolveCfrJarPathResult } from './resolve-cfr-jar.js';
 export { resolveJavaExecutable } from './resolve-java-executable.js';
 export {
   cfrMaxOutputBytes,

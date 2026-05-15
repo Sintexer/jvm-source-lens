@@ -33,7 +33,7 @@ function interCoreArtifact(): ResolvedArtifact {
 
 function smokeResolutionOutput(): ResolutionOutput {
   return {
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
     resolvedAt: '2026-01-01T00:00:00Z',
     buildSystem: { type: 'gradle', version: '9.0', wrapper: true },
     projectRoot: fixtureRoot,
@@ -121,7 +121,7 @@ describe.skipIf(!fixtureReady)('gradle-smoke fixture (synthetic resolution, no G
       return;
     }
 
-    expect(ensured.file.meta.indexFormatVersion).toBe(2);
+    expect(ensured.file.meta.indexFormatVersion).toBe(3);
     expect(ensured.file.meta.sourceEnrichedEntries).toBeGreaterThanOrEqual(1);
 
     const coreEntry = ensured.file.entries.find((e) => e.className === 'com.smoke.Core');

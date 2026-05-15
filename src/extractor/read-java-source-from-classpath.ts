@@ -5,7 +5,7 @@ import type {
   InterprojectProvenance,
   SourcesJarProvenance,
 } from './class-source-types.js';
-import { isExternalJarArtifact } from './class-source-types.js';
+import { isClasspathBinaryJarArtifact, isExternalJarArtifact } from './class-source-types.js';
 import { findExternalJarAmongArtifacts } from './find-external-class-jar.js';
 import { fqnToZipRelPaths } from './fqn-paths.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
@@ -87,29 +87,34 @@ export async function tryReadJavaSourceFromClasspath(
     }
   }
 
-  const artifacts = picked.configuration.artifacts.filter(isExternalJarArtifact);
-
-  for (const a of artifacts) {
-    if (a.sourcesJarPath !== null && a.sourcesJarPath.length > 0) {
-      const coordinates: ArtifactCoordinates = {
-        group: a.group,
-        name: a.name,
-        version: a.version,
-      };
-      const fromCached = tryReadSourceFromJar(a.sourcesJarPath, paths.sourceRelPath, opts.className, coordinates);
-      if (fromCached !== null) {
-        if (!fromCached.ok) {
-          return { ok: false, error: fromCached.error };
-        }
-        return {
-          ok: true,
-          hit: true,
-          sourceText: fromCached.source,
-          provenance: fromCached.provenance,
-        };
+  for (const a of picked.configuration.artifacts) {
+    if (a.origin === 'interproject') {
+      continue;
+    }
+    const sj = a.sourcesJarPath ?? null;
+    if (sj === null || sj.length === 0) {
+      continue;
+    }
+    const coordinates: ArtifactCoordinates = {
+      group: a.group,
+      name: a.name,
+      version: a.version,
+    };
+    const fromCached = tryReadSourceFromJar(sj, paths.sourceRelPath, opts.className, coordinates);
+    if (fromCached !== null) {
+      if (!fromCached.ok) {
+        return { ok: false, error: fromCached.error };
       }
+      return {
+        ok: true,
+        hit: true,
+        sourceText: fromCached.source,
+        provenance: fromCached.provenance,
+      };
     }
   }
+
+  const artifacts = picked.configuration.artifacts.filter(isClasspathBinaryJarArtifact);
 
   const jarHit = findExternalJarAmongArtifacts(artifacts, paths.classRelPath, opts.className);
   if (!jarHit.ok) {
@@ -120,8 +125,12 @@ export async function tryReadJavaSourceFromClasspath(
   const a = hit.artifact;
   const coordinates = hit.coordinates;
 
-  let sourcesJarPath = a.sourcesJarPath;
-  if ((sourcesJarPath === null || sourcesJarPath.length === 0) && opts.resolveSourcesJar) {
+  let sourcesJarPath = a.sourcesJarPath ?? null;
+  if (
+    (sourcesJarPath === null || sourcesJarPath.length === 0) &&
+    opts.resolveSourcesJar &&
+    isExternalJarArtifact(a)
+  ) {
     sourcesJarPath = await opts.resolveSourcesJar(coordinates);
   }
 

@@ -33,6 +33,46 @@ describe('resolution-output', () => {
     expect(v.ok).toBe(true);
   });
 
+  test('schema 1.1 artifact without sourcesJarPath normalizes to null', () => {
+    const doc = {
+      schemaVersion: '1.1',
+      resolvedAt: 'x',
+      buildSystem: { type: 'gradle', version: '8', wrapper: false },
+      projectRoot: '/p',
+      modules: [
+        {
+          name: 'root',
+          path: '/p',
+          configurations: [
+            {
+              name: 'compileClasspath',
+              scope: 'compile',
+              artifacts: [
+                {
+                  group: 'g',
+                  name: 'n',
+                  version: '1',
+                  type: 'jar',
+                  jarPath: '/tmp/x.jar',
+                  origin: 'external',
+                  direct: true,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      errors: [],
+    };
+    const v = validateResolutionOutput(doc);
+    expect(v.ok).toBe(true);
+    if (v.ok) {
+      const a = v.output.modules[0]?.configurations[0]?.artifacts[0];
+      expect(a).toBeDefined();
+      expect(a?.sourcesJarPath).toBeNull();
+    }
+  });
+
   test('validate rejects unsupported schemaVersion', () => {
     const v = validateResolutionOutput({
       schemaVersion: '0.9',
