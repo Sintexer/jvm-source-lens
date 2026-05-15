@@ -4,8 +4,11 @@ import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.ResolvedArtifact
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+import org.gradle.api.artifacts.result.ResolvedArtifactResult
 import org.gradle.api.artifacts.result.ResolvedComponentResult
 import org.gradle.api.artifacts.result.ResolvedDependencyResult
+import org.gradle.jvm.JvmLibrary
+import org.gradle.language.base.artifact.SourcesArtifact
 
 gradle.projectsLoaded { g ->
     g.rootProject.tasks.register("jvmsrcResolve") {
@@ -71,6 +74,40 @@ gradle.projectsLoaded { g ->
                 errors     : errors,
             ]
             println new JsonBuilder(result).toPrettyString()
+        }
+    }
+
+    g.rootProject.tasks.register("jvmsrcResolveSources") {
+        group = "jvmsrc"
+        description = "Resolve sources JAR for one external module (on-demand for jvmsrc get)."
+        doLast {
+            def root = project
+            def props = root.gradle.startParameter.projectProperties
+            def group = props.get("jvmsrcGroup")
+            def name = props.get("jvmsrcName")
+            def version = props.get("jvmsrcVersion")
+            if (group == null || name == null || version == null) {
+                throw new org.gradle.api.GradleException(
+                    "jvmsrcResolveSources requires -PjvmsrcGroup, -PjvmsrcName, -PjvmsrcVersion")
+            }
+
+            def sourcesPath = null
+            try {
+                def result = root.dependencies.createArtifactResolutionQuery()
+                    .forModule(group.toString(), name.toString(), version.toString())
+                    .withArtifacts(JvmLibrary, SourcesArtifact)
+                    .execute()
+                result.resolvedComponents.each { component ->
+                    component.getArtifacts(SourcesArtifact).each { artifact ->
+                        if (artifact instanceof ResolvedArtifactResult) {
+                            sourcesPath = artifact.file.absolutePath
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+                // Module has no published sources variant.
+            }
+            println new JsonBuilder([sourcesJarPath: sourcesPath]).toString()
         }
     }
 }

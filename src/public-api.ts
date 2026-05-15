@@ -1,13 +1,13 @@
 export { getClassSource, type GetClassSourceOptions } from './get-class-source.js';
 export { resolveWithResolutionCache, type ResolveWithResolutionCacheOptions } from './resolve-with-cache.js';
-export {
-  extractExternalClassSource,
-} from './extractor/extract-external-class-source.js';
+export { extractExternalClassSource } from './extractor/extract-external-class-source.js';
+export { resolveSourcesJar, type ResolveSourcesJarResult } from './resolvers/gradle/resolve-sources-jar.js';
 export type {
   ArtifactCoordinates,
   ClassSourceError,
   ClassSourceLookupOptions,
   ClassSourceLookupResult,
+  ResolveSourcesJarFn,
   SourcesJarProvenance,
 } from './extractor/class-source-types.js';
 export { pickResolvedConfiguration, type PickClasspathOptions } from './extractor/pick-classpath.js';

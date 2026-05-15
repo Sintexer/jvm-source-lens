@@ -499,7 +499,7 @@ interface ResolutionError {
 | `direct: boolean` | Distinguishes declared from transitive deps; a class found in a `direct: true` artifact is a stronger match signal |
 | `origin` enum | Three fundamentally different artifact kinds require different downstream handling: `external` → JAR in cache, `interproject` → redirect to source dir, `local-file` → raw path |
 | `version: null` for interproject | Explicit null is better than omitting the field; the consumer knows the field exists but the concept does not apply |
-| `sourcesJarPath: null` | On `compileClasspath` (and similar), Gradle usually resolves the main artifact only — **sources classifiers are often absent**, so `null` is expected unless the build adds sources or a separate resolution path. A future schema revision may add an explicit `sourcesResolvable` hint and on-demand Gradle steps. |
+| `sourcesJarPath: null` | Normal for `compileClasspath`: only main JARs are on that configuration. Sources are resolved **on demand** during `jvmsrc get` via `jvmsrcResolveSources`, not during `jvmsrcResolve`. If sources were already on the classpath (rare), the path may be non-null. |
 | `errors` always present | Partial resolution failures (one unreachable submodule) should not discard results for the rest; non-empty errors array does not mean the output is unusable |
 | Artifact identity | Rows are unique by **`group` + `name` + `version`** (with `version: null` for inter-project). Multiple rows sharing the same `group` are normal (different artifact names). |
 | `buildDir` filtering | External JARs whose paths live under **another** subproject’s `buildDir` are skipped so a dependency is not double-counted as both an inter-project edge and a built output JAR. |
@@ -585,9 +585,9 @@ Once a **`ResolutionOutput`** is loaded (from cache or a fresh Gradle run), the 
         to verify the class name or check if the dependency is declared
 ```
 
-**Current `jvmsrc get` / library behavior (v0.1.x):** Steps **2** and **4** above are implemented for **`origin: external`** JAR artifacts only: the tool reads **`sourcesJarPath`** first, then checks **`jarPath`** for a matching **`.class`** entry. Step **1** (inter-project) and step **3** (decompilation cache + CFR) are **not implemented yet** — bytecode-only matches return structured error **`DECOMPILE_NOT_IMPLEMENTED`**. Classes that exist only on inter-project classpath lines are not discovered until inter-project extraction ships (you will see **`CLASS_NOT_FOUND`** even when the class compiles in-repo). The first match wins in Gradle’s resolved **`artifacts[]`** order.
+**Current `jvmsrc get` / library behavior (v0.1.x):** Steps **2** and **4** for **`origin: external`** JARs. **`jvmsrc resolve`** records main **`jarPath`** only (`sourcesJarPath` is usually **`null`** — compile classpaths do not include sources variants). On **`get`**, the tool walks artifacts in order, finds the first **`jarPath`** containing the **`.class`**, then runs Gradle task **`jvmsrcResolveSources`** once for that module’s coordinates (`ArtifactResolutionQuery` + `SourcesArtifact`) to download or reuse the **`-sources.jar`** from `~/.gradle/caches`, then reads **`.java`**. Step **1** (inter-project) and step **3** (CFR + decompile cache) are **not implemented** — if sources are missing, **`DECOMPILE_NOT_IMPLEMENTED`**. First bytecode match wins.
 
-**Stable `code` values** on failures (library and CLI `stderr` JSON): **`RESOLUTION_FAILED`**, **`INVALID_FQN`**, **`MODULE_NOT_FOUND`**, **`CONFIGURATION_NOT_FOUND`**, **`ZIP_READ_ERROR`**, **`CLASS_NOT_FOUND`**, **`DECOMPILE_NOT_IMPLEMENTED`**.
+**Stable `code` values** on failures: **`RESOLUTION_FAILED`**, **`SOURCES_RESOLVE_FAILED`**, **`INVALID_FQN`**, **`MODULE_NOT_FOUND`**, **`CONFIGURATION_NOT_FOUND`**, **`ZIP_READ_ERROR`**, **`CLASS_NOT_FOUND`**, **`DECOMPILE_NOT_IMPLEMENTED`**.
 
 The tool **never falls back to scanning the global cache** without a resolved tree. If Gradle resolution fails, the tool reports the failure — it does not attempt to guess from `~/.gradle/caches`.
 
@@ -633,11 +633,35 @@ jvmsrc get com.example.MyClass --project /path/to/project --force-refresh
 
 # Shorthand (equivalent to: jvmsrc get com.example.MyClass …)
 jvmsrc com.example.MyClass --project /path/to/project
+
+# Pipe-friendly: no metadata line on stderr
+jvmsrc get com.example.MyClass --project /path/to/project --quiet
+jvmsrc get com.example.MyClass -p /path/to/project -q
 ```
 
-Output depends on the subcommand: **`jvmsrc resolve`** writes pretty-printed **`ResolutionOutput`** JSON to `stdout`. For **`jvmsrc get`**, **stdout** is the raw **`.java`** file body when source is found; **stderr** is one JSON object with **`sourceAvailable`**, **`className`**, and **`provenance`** (see §7.1). On failure, **stderr** is one JSON object with **`error: true`** and a stable **`code`** field (see §7 above); exit status is non-zero. This keeps `stdout` usable as pure source in shell pipelines.
+#### 8.1.1 `get` output contract (CLI)
 
-#### 8.1.1 `config` subcommand (planned)
+**`jvmsrc resolve`** writes pretty-printed **`ResolutionOutput`** JSON to **stdout** only.
+
+**`jvmsrc get`** uses two streams on purpose so **stdout stays pipeable** as a single `.java` file:
+
+| Stream | On success | On failure |
+|--------|------------|------------|
+| **stdout** | Raw Java source (file body only) | (empty) |
+| **stderr** | One JSON line: `sourceAvailable`, `className`, `provenance` (§7.1) | One JSON line: `{ "error": true, "code": "…", … }` (stable codes in §7) |
+| **Exit code** | `0` | non-zero |
+
+Example success metadata (stderr, default mode):
+
+```json
+{"sourceAvailable":true,"className":"com.example.Foo","provenance":{"kind":"sourcesJar","coordinates":{"group":"…","name":"…","version":"…"},"jarPath":"/path/to/…-sources.jar"}}
+```
+
+**`--quiet` / `-q`:** on success, write **only** the Java source to stdout; **do not** print the metadata JSON to stderr. Errors are unchanged (still JSON on stderr, non-zero exit). Use for shell pipelines (`jvmsrc get … -q > Foo.java`) when you do not need provenance on the terminal.
+
+The **MCP** server (§8.2) will expose the same facts in a single structured tool result (`source`, `sourceAvailable`, provenance fields) — no stdout/stderr split — which is better for IDE agents.
+
+#### 8.1.2 `config` subcommand (planned)
 
 A **`jvmsrc config`** command inspects the environment (build system markers, `JAVA_HOME` / detected JDK) and prints a **ready-to-paste** MCP server block for the user’s IDE (Claude Desktop, Cursor, Windsurf). Optional: copy to clipboard when supported.
 
@@ -816,6 +840,8 @@ Agents must treat **original source** and **decompiled bytecode** differently: p
 ---
 
 ## 11. MVP Scope
+
+**Implementation checklist and priorities:** [ROADMAP.md](ROADMAP.md) (developers: check boxes there when features land).
 
 The following represents the minimum build that validates the architecture end-to-end:
 

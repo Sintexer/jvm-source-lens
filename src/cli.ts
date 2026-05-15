@@ -47,6 +47,7 @@ program
   )
   .option('--include-test', 'When --configuration is omitted, use testCompileClasspath', false)
   .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle', false)
+  .option('-q, --quiet', 'On success, write only Java source to stdout (no metadata JSON on stderr)', false)
   .action(
     async (
       className: string,
@@ -56,6 +57,7 @@ program
         configuration?: string;
         includeTest?: boolean;
         forceRefresh?: boolean;
+        quiet?: boolean;
       },
     ) => {
       const root = resolveProjectRoot(options.project);
@@ -71,7 +73,7 @@ program
         includeTest: Boolean(options.includeTest),
         forceRefresh: Boolean(options.forceRefresh),
       });
-      writeCliGetResult(result);
+      writeCliGetResult(result, { quiet: Boolean(options.quiet) });
     },
   );
 

@@ -12,11 +12,15 @@ export type SourcesJarProvenance = {
   jarPath: string;
 };
 
+export type ResolveSourcesJarFn = (coordinates: ArtifactCoordinates) => Promise<string | null>;
+
 export type ClassSourceLookupOptions = {
   className: string;
   modulePath?: string;
   configuration?: string;
   includeTest?: boolean;
+  /** When set, fetches sources for the winning artifact only (Gradle on-demand). */
+  resolveSourcesJar?: ResolveSourcesJarFn;
 };
 
 export type ClassSourceError =
@@ -43,7 +47,13 @@ export type ClassSourceError =
       coordinates: ArtifactCoordinates;
     }
   | { code: 'ZIP_READ_ERROR'; message: string; jarPath: string; entryRelPath?: string }
-  | { code: 'RESOLUTION_FAILED'; message: string; stderr?: string };
+  | { code: 'RESOLUTION_FAILED'; message: string; stderr?: string }
+  | {
+      code: 'SOURCES_RESOLVE_FAILED';
+      message: string;
+      coordinates: ArtifactCoordinates;
+      stderr?: string;
+    };
 
 export type ClassSourceLookupResult =
   | {

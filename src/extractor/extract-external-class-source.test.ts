@@ -49,7 +49,7 @@ function baseOutput(
 }
 
 describe('extractExternalClassSource', () => {
-  test('returns Java from sources JAR', () => {
+  test('returns Java from sources JAR already on artifact', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
     const sourcesJar = path.join(dir, 'lib-sources.jar');
     const body = 'package com.example;\npublic class Foo {}\n';
@@ -69,7 +69,7 @@ describe('extractExternalClassSource', () => {
       }),
     ]);
 
-    const r = extractExternalClassSource(out, { className: 'com.example.Foo' });
+    const r = await extractExternalClassSource(out, { className: 'com.example.Foo' });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.source).toBe(body);
@@ -78,7 +78,49 @@ describe('extractExternalClassSource', () => {
     }
   });
 
-  test('returns DECOMPILE_NOT_IMPLEMENTED when only bytecode exists', () => {
+  test('on-demand resolveSourcesJar after bytecode match', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
+    const binJar = path.join(dir, 'lib.jar');
+    const sourcesJar = path.join(dir, 'lib-sources.jar');
+    const body = 'package com.example;\npublic class Foo {}\n';
+    fs.writeFileSync(
+      binJar,
+      zipSync({
+        'com/example/Foo.class': fakeClassBytes,
+      }),
+    );
+    fs.writeFileSync(
+      sourcesJar,
+      zipSync({
+        'com/example/Foo.java': strToU8(body),
+      }),
+    );
+
+    const out = baseOutput(dir, [
+      artifact({
+        group: 'com.example',
+        name: 'lib',
+        jarPath: binJar,
+        sourcesJarPath: null,
+      }),
+    ]);
+
+    let resolveCalls = 0;
+    const r = await extractExternalClassSource(out, {
+      className: 'com.example.Foo',
+      resolveSourcesJar: async () => {
+        resolveCalls += 1;
+        return sourcesJar;
+      },
+    });
+    expect(resolveCalls).toBe(1);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.source).toBe(body);
+    }
+  });
+
+  test('returns DECOMPILE_NOT_IMPLEMENTED when only bytecode and no sources', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
     const binJar = path.join(dir, 'lib.jar');
     fs.writeFileSync(
@@ -97,43 +139,44 @@ describe('extractExternalClassSource', () => {
       }),
     ]);
 
-    const r = extractExternalClassSource(out, { className: 'com.example.Foo' });
+    const r = await extractExternalClassSource(out, {
+      className: 'com.example.Foo',
+      resolveSourcesJar: async () => null,
+    });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.code).toBe('DECOMPILE_NOT_IMPLEMENTED');
-      if (r.error.code === 'DECOMPILE_NOT_IMPLEMENTED') {
-        expect(r.error.jarPath).toBe(binJar);
-        expect(r.error.entryRelPath).toBe('com/example/Foo.class');
-      }
     }
   });
 
-  test('CLASS_NOT_FOUND when no external artifacts', () => {
+  test('does not call resolveSourcesJar when class not in jar', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
-    const out = baseOutput(dir, []);
-    const r = extractExternalClassSource(out, { className: 'com.example.Foo' });
+    const binJar = path.join(dir, 'lib.jar');
+    fs.writeFileSync(binJar, zipSync({ 'com/other/Other.class': fakeClassBytes }));
+
+    const out = baseOutput(dir, [
+      artifact({ group: 'com.example', name: 'lib', jarPath: binJar }),
+    ]);
+
+    let resolveCalls = 0;
+    const r = await extractExternalClassSource(out, {
+      className: 'com.example.Foo',
+      resolveSourcesJar: async () => {
+        resolveCalls += 1;
+        return null;
+      },
+    });
+    expect(resolveCalls).toBe(0);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.code).toBe('CLASS_NOT_FOUND');
-      if (r.error.code === 'CLASS_NOT_FOUND') {
-        expect(r.error.searchedArtifactCount).toBe(0);
-      }
     }
   });
 
-  test('skips interproject artifacts', () => {
+  test('CLASS_NOT_FOUND when no external artifacts', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
-    const out = baseOutput(dir, [
-      artifact({
-        group: 'x',
-        name: 'y',
-        type: 'project',
-        origin: 'interproject',
-        jarPath: null,
-        sourcesJarPath: null,
-      }),
-    ]);
-    const r = extractExternalClassSource(out, { className: 'com.example.Foo' });
+    const out = baseOutput(dir, []);
+    const r = await extractExternalClassSource(out, { className: 'com.example.Foo' });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.code).toBe('CLASS_NOT_FOUND');

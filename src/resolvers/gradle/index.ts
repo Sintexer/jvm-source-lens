@@ -1,18 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { getBundledResource } from '../../bundled-resources.js';
 import type { DependencyResolver, ResolutionResult, ResolveOptions } from '../base.js';
-import type { ResolutionOutput } from '../resolution-output.js';
-import { parseResolutionJson, validateResolutionOutput } from '../resolution-output.js';
+import { validateResolutionOutput, parseResolutionJson } from '../resolution-output.js';
+import { runGradleTask } from './spawn-gradle.js';
 
-async function streamToText(
-  stream: number | ReadableStream<Uint8Array> | undefined,
-): Promise<string> {
-  if (stream == null || typeof stream === 'number') {
-    return '';
-  }
-  return await Bun.readableStreamToText(stream);
-}
+export { resolveSourcesJar, type ResolveSourcesJarResult } from './resolve-sources-jar.js';
 
 export class GradleResolver implements DependencyResolver {
   detect(projectRoot: string): boolean {
@@ -38,80 +30,28 @@ export class GradleResolver implements DependencyResolver {
       };
     }
 
-    const initScript = getBundledResource('analyzer-init.gradle');
-    const useWrapper = fs.existsSync(path.join(root, 'gradlew'));
-    const wrapperProp = `-PjvmsrcWrapper=${useWrapper ? 'true' : 'false'}`;
-
-    const argv: string[] = [];
-    if (useWrapper) {
-      const gw = path.join(root, 'gradlew');
-      try {
-        fs.accessSync(gw, fs.constants.X_OK);
-        argv.push(gw);
-      } catch {
-        argv.push('bash', gw);
-      }
-    } else {
-      argv.push('gradle');
-    }
-
-    argv.push(
-      wrapperProp,
-      '--no-configuration-cache',
-      '--init-script',
-      initScript,
-      '--quiet',
-      'jvmsrcResolve',
-    );
-
-    let proc: ReturnType<typeof Bun.spawn>;
-    try {
-      proc = Bun.spawn(argv, {
-        cwd: root,
-        stdout: 'pipe',
-        stderr: 'pipe',
-        stdin: 'ignore',
-        env: process.env,
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return { ok: false, message: `Failed to start Gradle: ${msg}` };
-    }
-
-    const stdoutP = streamToText(proc.stdout);
-    const stderrP = streamToText(proc.stderr);
-    const [stdout, stderr, exitCode] = await Promise.all([
-      stdoutP,
-      stderrP,
-      proc.exited,
-    ]);
-
-    if (exitCode !== 0) {
-      return {
-        ok: false,
-        message: `Gradle exited with code ${exitCode}`,
-        stderr: stderr || undefined,
-      };
+    const spawned = await runGradleTask(root, 'jvmsrcResolve');
+    if (!spawned.ok) {
+      return { ok: false, message: spawned.message, stderr: spawned.stderr };
     }
 
     let raw: unknown;
     try {
-      raw = parseResolutionJson(stdout);
+      raw = parseResolutionJson(spawned.stdout);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       return {
         ok: false,
         message: `Could not parse Gradle JSON output: ${msg}`,
-        stderr: stderr || undefined,
+        stderr: spawned.stderr || undefined,
       };
     }
 
     const validated = validateResolutionOutput(raw);
     if (!validated.ok) {
-      return { ok: false, message: validated.message, stderr: stderr || undefined };
+      return { ok: false, message: validated.message, stderr: spawned.stderr || undefined };
     }
 
-    const output: ResolutionOutput = validated.output;
-    return { ok: true, output };
+    return { ok: true, output: validated.output };
   }
 }
