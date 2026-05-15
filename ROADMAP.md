@@ -32,7 +32,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] CLI `get --json` (single structured object on stdout)
 - [x] CLI progress indicators (long Gradle / decompile waits)
 - [x] Failure diagnostics: structured logs, `JVMSRC_LOG_DIR`, `jvmsrc diagnostics` CLI — [README §6.3](README.md)
-- [ ] Hardening: Gradle timeouts, clearer errors, integration smoke test
+- [x] Hardening: Gradle timeouts, clearer errors, integration smoke test
 
 ### P2 — Post-MVP
 
@@ -224,10 +224,10 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ### Hardening: Gradle timeouts, clearer errors, integration smoke test
 
-- [ ] Timeout / kill long-running Gradle spawns (`jvmsrcResolve`, `jvmsrcResolveSources`)
-- [ ] Actionable messages for common failures (no wrapper, repo auth, unsupported project)
-- [ ] CI or scripted smoke: resolve + `get` against a minimal Gradle fixture (skip when no Gradle)
-- [ ] Optional: document `jvmsrcResolveSources` latency expectations
+- [x] Timeout / kill long-running Gradle spawns (`jvmsrcResolve`, `jvmsrcResolveSources`)
+- [x] Actionable messages for common failures (no wrapper, repo auth, unsupported project)
+- [x] CI or scripted smoke: resolve + `get` against a minimal Gradle fixture (skip when no Gradle)
+- [x] Optional: document `jvmsrcResolveSources` latency expectations
 
 ---
 

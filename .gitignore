@@ -202,5 +202,8 @@ gradle-app.setting
 # Java heap dump
 *.hprof
 
+# Integration smoke fixture: exclude wrapper JAR (gradle-wrapper.jar is re-included above for other trees)
+test/fixtures/gradle-smoke/gradle/wrapper/gradle-wrapper.jar
+
 # End of https://www.toptal.com/developers/gitignore/api/node,gradle,macos
 

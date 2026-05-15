@@ -1,0 +1,5 @@
+.gradle/
+build/
+**/build/
+# Generated locally / in CI via scripts/ensure-gradle-smoke-wrapper.sh — not committed
+gradle/wrapper/gradle-wrapper.jar

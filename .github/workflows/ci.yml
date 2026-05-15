@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 9.3.1
+
+      - name: Ensure Gradle smoke wrapper JAR (not committed)
+        run: bash scripts/ensure-gradle-smoke-wrapper.sh
+
+      - name: Install and verify
+        run: |
+          bun install
+          bun run setup:cfr
+          bun test
+          bun run typecheck
+          bun run build
+          bun run scripts/validate-bundled-resources.ts
