@@ -1,10 +1,11 @@
 import { decompileExternalClass } from '../decompiler/decompile-external-class.js';
 import type { ArtifactCoordinates, ClassSourceLookupOptions, ClassSourceLookupResult } from './class-source-types.js';
 import { isExternalJarArtifact } from './class-source-types.js';
+import { findExternalJarAmongArtifacts } from './find-external-class-jar.js';
 import { fqnToZipRelPaths } from './fqn-paths.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
-import { readZipEntryUtf8, zipEntryExists } from './zip-entry.js';
+import { readZipEntryUtf8 } from './zip-entry.js';
 
 function tryReadSourceFromJar(
   sourcesJarPath: string,
@@ -59,13 +60,12 @@ export async function extractExternalClassSource(
   const searchedArtifactCount = artifacts.length;
 
   for (const a of artifacts) {
-    const coordinates: ArtifactCoordinates = {
-      group: a.group,
-      name: a.name,
-      version: a.version,
-    };
-
     if (a.sourcesJarPath !== null && a.sourcesJarPath.length > 0) {
+      const coordinates: ArtifactCoordinates = {
+        group: a.group,
+        name: a.name,
+        version: a.version,
+      };
       const fromCached = tryReadSourceFromJar(
         a.sourcesJarPath,
         paths.sourceRelPath,
@@ -76,56 +76,43 @@ export async function extractExternalClassSource(
         return fromCached;
       }
     }
-
-    if (a.jarPath === null || a.jarPath.length === 0) {
-      continue;
-    }
-
-    const pres = zipEntryExists(a.jarPath, paths.classRelPath);
-    if (!pres.ok) {
-      return { ok: false, error: pres.error };
-    }
-    if (!pres.exists) {
-      continue;
-    }
-
-    let sourcesJarPath = a.sourcesJarPath;
-    if ((sourcesJarPath === null || sourcesJarPath.length === 0) && opts.resolveSourcesJar) {
-      sourcesJarPath = await opts.resolveSourcesJar(coordinates);
-    }
-
-    if (sourcesJarPath !== null && sourcesJarPath.length > 0) {
-      const fromResolved = tryReadSourceFromJar(
-        sourcesJarPath,
-        paths.sourceRelPath,
-        opts.className,
-        coordinates,
-      );
-      if (fromResolved !== null) {
-        return fromResolved;
-      }
-    }
-
-    const decompile = opts.decompileExternalClass ?? decompileExternalClass;
-    const decompiled = await decompile({
-      className: opts.className,
-      jarPath: a.jarPath,
-      entryRelPath: paths.classRelPath,
-      coordinates,
-    });
-    if (decompiled.ok) {
-      return decompiled;
-    }
-    return { ok: false, error: decompiled.error };
   }
 
-  return {
-    ok: false,
-    error: {
-      code: 'CLASS_NOT_FOUND',
-      message: `Class not found in external JARs on this classpath (${searchedArtifactCount} artifact(s) scanned). Interproject sources are not searched in this version.`,
-      className: opts.className,
-      searchedArtifactCount,
-    },
-  };
+  const jarHit = findExternalJarAmongArtifacts(artifacts, paths.classRelPath, opts.className);
+  if (!jarHit.ok) {
+    return jarHit;
+  }
+
+  const { hit } = jarHit;
+  const a = hit.artifact;
+  const coordinates = hit.coordinates;
+
+  let sourcesJarPath = a.sourcesJarPath;
+  if ((sourcesJarPath === null || sourcesJarPath.length === 0) && opts.resolveSourcesJar) {
+    sourcesJarPath = await opts.resolveSourcesJar(coordinates);
+  }
+
+  if (sourcesJarPath !== null && sourcesJarPath.length > 0) {
+    const fromResolved = tryReadSourceFromJar(
+      sourcesJarPath,
+      paths.sourceRelPath,
+      opts.className,
+      coordinates,
+    );
+    if (fromResolved !== null) {
+      return fromResolved;
+    }
+  }
+
+  const decompile = opts.decompileExternalClass ?? decompileExternalClass;
+  const decompiled = await decompile({
+    className: opts.className,
+    jarPath: hit.jarPath,
+    entryRelPath: paths.classRelPath,
+    coordinates,
+  });
+  if (decompiled.ok) {
+    return decompiled;
+  }
+  return { ok: false, error: decompiled.error };
 }

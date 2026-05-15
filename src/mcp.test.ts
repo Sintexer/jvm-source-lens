@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { mcpClassSourceToolPayloadSchema, mcpResolveDependenciesPayloadSchema } from './mcp.js';
-import { mcpToolResultFromResolutionResult } from './mcp-tool-result.js';
+import { mcpClassSourceToolPayloadSchema, mcpGetMethodSignaturePayloadSchema, mcpResolveDependenciesPayloadSchema } from './mcp.js';
+import { mcpToolResultFromMethodSignature, mcpToolResultFromResolutionResult } from './mcp-tool-result.js';
 
 test('mcpClassSourceToolPayloadSchema accepts success with found=true', () => {
   const parsed = mcpClassSourceToolPayloadSchema.safeParse({
@@ -68,6 +68,93 @@ test('mcpResolveDependenciesPayloadSchema accepts RESOLUTION_FAILED failure', ()
     error: { code: 'RESOLUTION_FAILED', message: 'Gradle failed.' },
   });
   expect(parsed.success).toBe(true);
+});
+
+test('mcpGetMethodSignaturePayloadSchema accepts success with overloads', () => {
+  const parsed = mcpGetMethodSignaturePayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    querySucceeded: true,
+    className: 'java.lang.String',
+    methodName: 'substring',
+    methodFound: true,
+    sourceAvailable: false,
+    overloads: [
+      {
+        declarationLine: 'public java.lang.String substring(int);',
+        visibility: 'public',
+        jvmDescriptor: '(I)Ljava/lang/String;',
+        genericSignature: null,
+        returnTypeDisplay: 'java.lang.String',
+        parameters: [{ name: 'beginIndex', typeDisplay: 'int' }],
+        thrownExceptions: [],
+        flagsLine: '(0x0001) ACC_PUBLIC',
+      },
+    ],
+    provenance: {
+      kind: 'classpathJar',
+      coordinates: { group: 'g', name: 'a', version: '1' },
+      jarPath: '/tmp/a.jar',
+    },
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpGetMethodSignaturePayloadSchema accepts SIGNATURE_EXTRACT_FAILED failure', () => {
+  const parsed = mcpGetMethodSignaturePayloadSchema.safeParse({
+    ok: false,
+    code: 'SIGNATURE_EXTRACT_FAILED',
+    errorCategory: 'business',
+    isRetryable: false,
+    description: 'javap failed.',
+    error: {
+      code: 'SIGNATURE_EXTRACT_FAILED',
+      message: 'javap exited',
+      className: 'a.B',
+      methodName: 'm',
+      jarPath: '/x.jar',
+    },
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpToolResultFromMethodSignature CLASS_NOT_FOUND is not MCP error', () => {
+  const r = mcpToolResultFromMethodSignature(
+    {
+      ok: false,
+      error: {
+        code: 'CLASS_NOT_FOUND',
+        message: 'missing',
+        className: 'com.example.Missing',
+        searchedArtifactCount: 4,
+      },
+    },
+    { projectRoot: '/tmp/app', methodName: 'run' },
+  );
+  expect(r.isError).toBe(false);
+  const sc = r.structuredContent as { found: boolean; methodName: string };
+  expect(sc.found).toBe(false);
+  expect(sc.methodName).toBe('run');
+});
+
+test('mcpToolResultFromMethodSignature timeout-like SIGNATURE_EXTRACT_FAILED is transient', () => {
+  const r = mcpToolResultFromMethodSignature(
+    {
+      ok: false,
+      error: {
+        code: 'SIGNATURE_EXTRACT_FAILED',
+        message: 'javap timed out after 100ms',
+        className: 'a.B',
+        methodName: 'm',
+        jarPath: '/x.jar',
+      },
+    },
+    { projectRoot: '/tmp/app', methodName: 'm' },
+  );
+  expect(r.isError).toBe(true);
+  const sc = r.structuredContent as { errorCategory: string; isRetryable: boolean };
+  expect(sc.errorCategory).toBe('transient');
+  expect(sc.isRetryable).toBe(true);
 });
 
 test('mcpToolResultFromResolutionResult success sets isError false and resolution payload', () => {

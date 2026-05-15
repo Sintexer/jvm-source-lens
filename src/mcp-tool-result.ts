@@ -3,6 +3,7 @@ import type { ClassSourceError } from './extractor/class-source-types.js';
 import type { DecompiledProvenance, SourcesJarProvenance } from './extractor/class-source-types.js';
 import type { ResolutionResult } from './resolvers/base.js';
 import type { ResolutionOutput } from './resolvers/resolution-output.js';
+import type { GetMethodSignatureResult } from './get-method-signatures.js';
 
 /** MCP agent recovery categories (transient / validation / business / permission). */
 export type McpErrorCategory = 'transient' | 'validation' | 'business' | 'permission';
@@ -54,6 +55,49 @@ export type ClassSourceQueryContext = {
   configuration?: string;
   includeTest?: boolean;
 };
+
+export type McpMethodSignatureSuccessPayload = {
+  ok: true;
+  found: true;
+  querySucceeded: true;
+  className: string;
+  methodName: string;
+  methodFound: boolean;
+  sourceAvailable: false;
+  overloads: Array<{
+    declarationLine: string;
+    visibility: 'public' | 'protected' | 'package' | 'private';
+    jvmDescriptor: string;
+    genericSignature: string | null;
+    returnTypeDisplay: string | null;
+    parameters: Array<{ name: string | null; typeDisplay: string }>;
+    thrownExceptions: string[];
+    flagsLine: string | null;
+  }>;
+  provenance: {
+    kind: 'classpathJar';
+    coordinates: DecompiledProvenance['coordinates'];
+    jarPath: string;
+  };
+};
+
+export type McpMethodSignatureNotFoundPayload = {
+  ok: true;
+  found: false;
+  className: string;
+  methodName: string;
+  searchedArtifactCount: number;
+  querySucceeded: true;
+  code: 'CLASS_NOT_FOUND';
+  description: string;
+};
+
+export type McpMethodSignatureToolPayload =
+  | McpMethodSignatureSuccessPayload
+  | McpMethodSignatureNotFoundPayload
+  | McpClassSourceFailurePayload;
+
+export type MethodSignatureQueryContext = ClassSourceQueryContext & { methodName: string };
 
 export function mcpToolResultFromClassSource(
   result: { ok: true; source: string; sourceAvailable: boolean; className: string; provenance: SourcesJarProvenance | DecompiledProvenance } | { ok: false; error: ClassSourceError },
@@ -121,6 +165,77 @@ export function mcpToolResultFromUnexpectedError(e: unknown): CallToolResult {
   const message = e instanceof Error ? e.message : String(e);
   const envelope = classifyUnexpectedError(message);
   return buildMcpErrorCallResult(envelope.summary, envelope.payload);
+}
+
+export function mcpToolResultFromMethodSignature(
+  result: GetMethodSignatureResult,
+  query: MethodSignatureQueryContext,
+): CallToolResult {
+  if (result.ok) {
+    const payload: McpMethodSignatureSuccessPayload = {
+      ok: true,
+      found: true,
+      querySucceeded: true,
+      className: result.className,
+      methodName: result.methodName,
+      methodFound: result.methodFound,
+      sourceAvailable: false,
+      overloads: result.overloads,
+      provenance: result.provenance,
+    };
+    const summary = result.methodFound
+      ? `Found ${result.overloads.length} overload(s) for ${result.methodName} on ${result.className} (javap metadata; sourceAvailable=false).`
+      : `Class ${result.className} found on the classpath, but no overloads matched method ${JSON.stringify(result.methodName)} (constructors use <init>).`;
+    return {
+      isError: false,
+      content: [{ type: 'text', text: summary }],
+      structuredContent: payload,
+    };
+  }
+
+  if (result.error.code === 'CLASS_NOT_FOUND') {
+    return mcpMethodSignatureNotFoundResult(result.error, query);
+  }
+
+  return mcpFailureResult(result.error, query);
+}
+
+function mcpMethodSignatureNotFoundResult(
+  error: Extract<ClassSourceError, { code: 'CLASS_NOT_FOUND' }>,
+  query: MethodSignatureQueryContext,
+): CallToolResult {
+  const scope = formatQueryScope(query);
+  const description =
+    `The project classpath was resolved successfully${scope}, and ${error.searchedArtifactCount} external JAR(s) were scanned, ` +
+    `but no .class entry was found for ${JSON.stringify(error.className)} while looking up ${JSON.stringify(query.methodName)}. ` +
+    `This is not a tool or network failure — the class is absent from the selected classpath. ` +
+    `Verify the fully-qualified name, ensure the dependency is declared, try a different modulePath or configuration ` +
+    `(default compileClasspath; use includeTest for testCompileClasspath), or use forceRefresh after dependency changes. ` +
+    `Inter-project module sources are not searched in this version.`;
+
+  const payload: McpMethodSignatureNotFoundPayload = {
+    ok: true,
+    found: false,
+    className: error.className,
+    methodName: query.methodName,
+    searchedArtifactCount: error.searchedArtifactCount,
+    querySucceeded: true,
+    code: 'CLASS_NOT_FOUND',
+    description,
+  };
+
+  return {
+    isError: false,
+    content: [
+      {
+        type: 'text',
+        text:
+          `No class found for ${JSON.stringify(error.className)} after scanning ${error.searchedArtifactCount} artifact(s)${scope} ` +
+          `(method query ${JSON.stringify(query.methodName)}). The lookup completed successfully; the class is not on this classpath.`,
+      },
+    ],
+    structuredContent: payload,
+  };
 }
 
 function mcpNotFoundResult(error: Extract<ClassSourceError, { code: 'CLASS_NOT_FOUND' }>, query: ClassSourceQueryContext): CallToolResult {
@@ -226,6 +341,8 @@ function classifyClassSourceError(error: ClassSourceError, query: ClassSourceQue
       );
     case 'DECOMPILE_FAILED':
       return classifyDecompileFailed(error);
+    case 'SIGNATURE_EXTRACT_FAILED':
+      return classifySignatureExtractFailed(error);
     case 'CLASS_NOT_FOUND':
       throw new Error('CLASS_NOT_FOUND must be handled via mcpNotFoundResult (valid empty result, not MCP error)');
   }
@@ -343,6 +460,32 @@ function classifyDecompileFailed(
     `${error.message} Sources JAR was unavailable and bytecode decompilation failed for ${JSON.stringify(error.className)} ` +
       `in ${JSON.stringify(error.jarPath)} (${error.coordinates.group}:${error.coordinates.name}). ` +
       `Retrying the same request will not help unless dependencies or JDK change.` +
+      diagnosticSuffix(error.stderr),
+  );
+}
+
+function classifySignatureExtractFailed(
+  error: Extract<ClassSourceError, { code: 'SIGNATURE_EXTRACT_FAILED' }>,
+): ErrorEnvelope {
+  const blob = joinDiagnosticBlob(error.message, error.stderr);
+  if (matchesTransient(blob)) {
+    return envelope(
+      error,
+      'transient',
+      true,
+      `javap failed transiently for ${error.methodName} on ${error.className}.`,
+      `${error.message} Signature extraction via javap from ${JSON.stringify(error.jarPath)} failed temporarily (timeout, process, or I/O). ` +
+        `Retry once; ensure JAVA_HOME points to a JDK that includes javap next to java.` +
+        diagnosticSuffix(error.stderr),
+    );
+  }
+  return envelope(
+    error,
+    'business',
+    false,
+    `Could not extract method signatures for ${error.methodName}.`,
+    `${error.message} javap could not produce bytecode metadata for ${JSON.stringify(error.methodName)} on ${JSON.stringify(error.className)} ` +
+      `from ${JSON.stringify(error.jarPath)}. Fix JDK availability or verify the class exists in that JAR.` +
       diagnosticSuffix(error.stderr),
   );
 }

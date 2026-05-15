@@ -7,14 +7,17 @@ import * as z from 'zod';
 import { getClassSource } from './get-class-source.js';
 import {
   mcpToolResultFromClassSource,
+  mcpToolResultFromMethodSignature,
   mcpToolResultFromProjectRootError,
   mcpToolResultFromResolutionResult,
   mcpToolResultFromUnexpectedError,
   type ClassSourceQueryContext,
+  type MethodSignatureQueryContext,
 } from './mcp-tool-result.js';
 import { resolveProjectRoot } from './project-path.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 import { UnsupportedProjectError } from './resolvers/index.js';
+import { getMethodSignatures } from './get-method-signatures.js';
 
 const artifactCoordinatesSchema = z.object({
   group: z.string(),
@@ -78,6 +81,14 @@ const classSourceErrorSchema = z.discriminatedUnion('code', [
     coordinates: artifactCoordinatesSchema,
     stderr: z.string().optional(),
   }),
+  z.object({
+    code: z.literal('SIGNATURE_EXTRACT_FAILED'),
+    message: z.string(),
+    className: z.string(),
+    methodName: z.string(),
+    jarPath: z.string(),
+    stderr: z.string().optional(),
+  }),
 ]);
 
 const mcpErrorCategorySchema = z.enum(['transient', 'validation', 'business', 'permission']);
@@ -91,6 +102,7 @@ const classSourceErrorCodeSchema = z.enum([
   'ZIP_READ_ERROR',
   'RESOLUTION_FAILED',
   'SOURCES_RESOLVE_FAILED',
+  'SIGNATURE_EXTRACT_FAILED',
 ]);
 
 /** Documented MCP tool payloads (success, not-found, or categorized failure). */
@@ -181,6 +193,73 @@ const resolveDependenciesInputSchema = z.object({
   forceRefresh: z.boolean().optional(),
 });
 
+const javapParameterSchema = z.object({
+  name: z.string().nullable(),
+  typeDisplay: z.string(),
+});
+
+const javapOverloadSchema = z.object({
+  declarationLine: z.string(),
+  visibility: z.enum(['public', 'protected', 'package', 'private']),
+  jvmDescriptor: z.string(),
+  genericSignature: z.string().nullable(),
+  returnTypeDisplay: z.string().nullable(),
+  parameters: z.array(javapParameterSchema),
+  thrownExceptions: z.array(z.string()),
+  flagsLine: z.string().nullable(),
+});
+
+const classpathJarProvenanceSchema = z.object({
+  kind: z.literal('classpathJar'),
+  coordinates: artifactCoordinatesSchema,
+  jarPath: z.string(),
+});
+
+const getMethodSignatureInputSchema = z.object({
+  className: z.string().min(1),
+  methodName: z.string().min(1),
+  projectRoot: z.string().min(1),
+  modulePath: z.string().optional(),
+  configuration: z.string().optional(),
+  includeTest: z.boolean().optional(),
+  forceRefresh: z.boolean().optional(),
+});
+
+const mcpMethodSignatureFailureSchema = z.object({
+  ok: z.literal(false),
+  error: classSourceErrorSchema,
+  code: classSourceErrorCodeSchema,
+  errorCategory: mcpErrorCategorySchema,
+  isRetryable: z.boolean(),
+  description: z.string(),
+});
+
+/** Documented MCP tool payloads for get_method_signature. */
+export const mcpGetMethodSignaturePayloadSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+    found: z.literal(true),
+    querySucceeded: z.literal(true),
+    className: z.string(),
+    methodName: z.string(),
+    methodFound: z.boolean(),
+    sourceAvailable: z.literal(false),
+    overloads: z.array(javapOverloadSchema),
+    provenance: classpathJarProvenanceSchema,
+  }),
+  z.object({
+    ok: z.literal(true),
+    found: z.literal(false),
+    className: z.string(),
+    methodName: z.string(),
+    searchedArtifactCount: z.number(),
+    querySucceeded: z.literal(true),
+    code: z.literal('CLASS_NOT_FOUND'),
+    description: z.string(),
+  }),
+  mcpMethodSignatureFailureSchema,
+]);
+
 export async function startMcpServer(): Promise<void> {
   const pkgPath = fileURLToPath(new URL('../package.json', import.meta.url));
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
@@ -190,9 +269,12 @@ export async function startMcpServer(): Promise<void> {
     {
       instructions:
         'JVM Source Lens (Gradle first): use get_class_source with a fully-qualified class name and projectRoot. ' +
-        'Use resolve_dependencies to warm or refresh the resolution cache and obtain ResolutionOutput (all modules); then get_class_source reuses the cache. ' +
+        'Use get_method_signature when you know className and methodName and need overloads (parameters, return type, generics Signature attribute, checked exceptions) via javap on the resolved binary JAR — sourceAvailable is always false for this tool (README §7.1). ' +
+        'Constructors are queried with methodName <init>. Inter-project classes are not supported yet (same as get_class_source). ' +
+        'Use resolve_dependencies to warm or refresh the resolution cache and obtain ResolutionOutput (all modules); then get_class_source / get_method_signature reuse the cache. ' +
         'Failures return errorCategory (transient | validation | business | permission), isRetryable, and a detailed description. ' +
         'CLASS_NOT_FOUND after a successful classpath scan is NOT an error (found=false, querySucceeded=true) — do not retry as if the tool failed. ' +
+        'When the class exists but no overloads match: found=true, methodFound=false (not an MCP error). ' +
         'Transient errors: retry after a delay. Validation: fix inputs. Business and permission: do not retry the same request.',
     },
   );
@@ -264,6 +346,49 @@ export async function startMcpServer(): Promise<void> {
         if (e instanceof UnsupportedProjectError) {
           return mcpToolResultFromProjectRootError(e.message, args.projectRoot);
         }
+        return mcpToolResultFromUnexpectedError(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_method_signature',
+    {
+      title: 'Get Java method overload signatures',
+      description:
+        'Resolves the classpath (cached), finds the binary JAR owning the class, runs javap -verbose, and returns all overloads of methodName ' +
+        '(parameters with optional names from LocalVariableTable, JVM descriptors, generic Signature attribute when present, checked exceptions). ' +
+        'sourceAvailable is always false (bytecode metadata). Use methodName <init> for constructors. ' +
+        'On failure: isError=true with errorCategory, isRetryable, description, and stable code (README §7). ' +
+        'CLASS_NOT_FOUND after scan: isError=false, found=false. Class found but no overloads: found=true, methodFound=false.',
+      inputSchema: getMethodSignatureInputSchema,
+      outputSchema: mcpGetMethodSignaturePayloadSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async (args) => {
+      const query: MethodSignatureQueryContext = {
+        projectRoot: args.projectRoot,
+        modulePath: args.modulePath,
+        configuration: args.configuration,
+        includeTest: args.includeTest,
+        methodName: args.methodName,
+      };
+
+      const root = resolveProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
+      }
+
+      try {
+        const result = await getMethodSignatures(args.className, args.methodName, {
+          projectRoot: root.path,
+          modulePath: args.modulePath,
+          configuration: args.configuration,
+          includeTest: Boolean(args.includeTest),
+          forceRefresh: Boolean(args.forceRefresh),
+        });
+        return mcpToolResultFromMethodSignature(result, query);
+      } catch (e) {
         return mcpToolResultFromUnexpectedError(e);
       }
     },

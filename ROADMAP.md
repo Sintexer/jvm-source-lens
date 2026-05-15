@@ -20,7 +20,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] CFR decompilation fallback + `decompiled/` cache
 - [x] MCP server — `get_class_source`
 - [x] MCP server — `resolve_dependencies`
-- [ ] MCP server — `get_method_signature`
+- [x] MCP server — `get_method_signature`
 - [ ] MCP server — `get_class_structure` (effective API / inherited methods — §12.2)
 - [ ] MCP server — `list_modules`
 - [ ] Inter-project source lookup (`origin: interproject`)
@@ -103,13 +103,16 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ### MCP server — `get_method_signature`
 
-**Goal:** Common agent path — caller knows `className` and `methodName`, needs exact overloads and contract (including checked exceptions). Projection over shared `ClassStructure` (README §8.2, §12.2).
+**Goal:** Common agent path — caller knows `className` and `methodName`, needs exact overloads and contract (including checked exceptions).
 
-**References:** [README.md §12.2](README.md), planned parser / `get_class_structure` pipeline
+**Implementation (v1):** After resolving Gradle output (cached), locate the owning external JAR for the class (same ordering as `get_class_source`), run **`javap -private -verbose`**, and parse overload metadata (`descriptor`, optional **`Signature`**, `Exceptions`, `LocalVariableTable` names). **`sourceAvailable` is always false** (§7.1). Optional later: back this tool with a shared **`ClassStructure`** parse used by `get_class_structure` (§12).
 
-- [ ] Tool `get_method_signature`: `className`, `methodName`, `projectRoot`, optional classpath scoping (`modulePath?`, `configuration?`, `includeTest?`, `forceRefresh?`)
-- [ ] Response: all overloads — parameters (types + names), return type, generic bounds, checked exceptions; `sourceAvailable` per §7.1 where applicable
-- [ ] Errors: same structured pattern as `get_class_source`
+**References:** [README.md §8.2](README.md), [README.md §12.2](README.md), [src/get-method-signatures.ts](src/get-method-signatures.ts), [src/class-structure/javap-parse.ts](src/class-structure/javap-parse.ts)
+
+- [x] Tool `get_method_signature`: `className`, `methodName`, `projectRoot`, optional classpath scoping (`modulePath?`, `configuration?`, `includeTest?`, `forceRefresh?`)
+- [x] Response: all overloads — parameters (types + names), return type, generic bounds, checked exceptions; `sourceAvailable` per §7.1 where applicable
+- [x] Errors: same structured pattern as `get_class_source`
+- [x] README §8.2 marked implemented for this tool
 
 ---
 

@@ -65,6 +65,14 @@ export type ClassSourceError =
       message: string;
       coordinates: ArtifactCoordinates;
       stderr?: string;
+    }
+  | {
+      code: 'SIGNATURE_EXTRACT_FAILED';
+      message: string;
+      className: string;
+      methodName: string;
+      jarPath: string;
+      stderr?: string;
     };
 
 export type ClassSourceLookupResult =
