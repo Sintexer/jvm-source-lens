@@ -1,7 +1,18 @@
 import type { ClassStructureMethod } from './types.js';
+import { isSyntheticJvmDescriptor } from './parse-java-type-metadata.js';
 
 export function methodMergeKey(jvmMethodName: string, jvmDescriptor: string): string {
   return `${jvmMethodName}\0${jvmDescriptor}`;
+}
+
+export function structureMethodMergeKey(
+  m: Pick<ClassStructureMethod, 'jvmMethodName' | 'jvmDescriptor' | 'parameters'>,
+): string {
+  if (!isSyntheticJvmDescriptor(m.jvmDescriptor)) {
+    return methodMergeKey(m.jvmMethodName, m.jvmDescriptor);
+  }
+  const paramJoin = m.parameters.map((p) => p.type).join('|');
+  return `${m.jvmMethodName}\0${m.jvmDescriptor}\0${paramJoin}`;
 }
 
 /**
@@ -15,7 +26,7 @@ export function mergeDeclaredWithInheritedLayers(
   const inheritedOnly = new Map<string, ClassStructureMethod>();
   for (const layer of inheritedLayers) {
     for (const m of layer) {
-      const k = methodMergeKey(m.jvmMethodName, m.jvmDescriptor);
+      const k = structureMethodMergeKey(m);
       if (!inheritedOnly.has(k)) {
         inheritedOnly.set(k, m);
       }
@@ -26,13 +37,13 @@ export function mergeDeclaredWithInheritedLayers(
   const out: ClassStructureMethod[] = [];
 
   for (const m of declared) {
-    const k = methodMergeKey(m.jvmMethodName, m.jvmDescriptor);
+    const k = structureMethodMergeKey(m);
     declaredKeys.add(k);
     out.push(m);
   }
 
   for (const m of inheritedOnly.values()) {
-    const k = methodMergeKey(m.jvmMethodName, m.jvmDescriptor);
+    const k = structureMethodMergeKey(m);
     if (!declaredKeys.has(k)) {
       out.push(m);
     }

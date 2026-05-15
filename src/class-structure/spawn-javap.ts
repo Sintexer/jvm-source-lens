@@ -71,7 +71,8 @@ async function readStreamCapped(
 }
 
 export type JavapVerboseOptions = {
-  jarPath: string;
+  /** Classpath entry: JAR file or exploded classes directory (e.g. Gradle `build/classes/java/main`). */
+  classpath: string;
   className: string;
   javaPath?: string;
   javapPath?: string;
@@ -95,7 +96,7 @@ export function resolveJavapExecutable(): { ok: true; javapPath: string } | { ok
 }
 
 /**
- * Runs `javap -classpath <jar> -private -verbose <fqn>` for signature extraction.
+ * Runs `javap -classpath <classpath> -private -verbose <fqn>` for signature extraction.
  */
 export async function spawnJavapVerbose(opts: JavapVerboseOptions): Promise<JavapVerboseResult> {
   let javapPath = opts.javapPath;
@@ -114,7 +115,7 @@ export async function spawnJavapVerbose(opts: JavapVerboseOptions): Promise<Java
   const argv = [
     javapPath,
     '-classpath',
-    opts.jarPath,
+    opts.classpath,
     '-private',
     '-verbose',
     opts.className,

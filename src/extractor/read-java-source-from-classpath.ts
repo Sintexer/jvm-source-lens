@@ -1,5 +1,10 @@
-import { decompileExternalClass } from '../decompiler/decompile-external-class.js';
-import type { ArtifactCoordinates, ClassSourceLookupOptions, ClassSourceLookupResult } from './class-source-types.js';
+import type {
+  ArtifactCoordinates,
+  ClassSourceError,
+  ClassSourceLookupOptions,
+  InterprojectProvenance,
+  SourcesJarProvenance,
+} from './class-source-types.js';
 import { isExternalJarArtifact } from './class-source-types.js';
 import { findExternalJarAmongArtifacts } from './find-external-class-jar.js';
 import { fqnToZipRelPaths } from './fqn-paths.js';
@@ -13,14 +18,12 @@ function tryReadSourceFromJar(
   sourceRelPath: string,
   className: string,
   coordinates: ArtifactCoordinates,
-): ClassSourceLookupResult | null {
+): { ok: true; source: string; provenance: SourcesJarProvenance } | { ok: false; error: ClassSourceError } | null {
   const r = readZipEntryUtf8(sourcesJarPath, sourceRelPath);
   if (r.ok) {
     return {
       ok: true,
       source: r.text,
-      sourceAvailable: true,
-      className,
       provenance: {
         kind: 'sourcesJar',
         coordinates,
@@ -34,15 +37,19 @@ function tryReadSourceFromJar(
   return null;
 }
 
+export type TryReadJavaSourceFromClasspathResult =
+  | { ok: true; hit: true; sourceText: string; provenance: SourcesJarProvenance | InterprojectProvenance }
+  | { ok: true; hit: false }
+  | { ok: false; error: ClassSourceError };
+
 /**
- * Locates Java source for an external dependency class from a pre-resolved
- * classpath. Sources JARs are not bulk-fetched at resolve time; pass
- * `resolveSourcesJar` to download/read sources only for the winning artifact.
+ * Classpath-order `.java` read (inter-project edges first, then sources JARs on external jars),
+ * mirroring {@link extractExternalClassSource} / {@link tryReadPrimaryJavaSourceFromArtifacts}.
  */
-export async function extractExternalClassSource(
+export async function tryReadJavaSourceFromClasspath(
   output: ResolutionOutput,
   opts: ClassSourceLookupOptions,
-): Promise<ClassSourceLookupResult> {
+): Promise<TryReadJavaSourceFromClasspathResult> {
   const picked = pickResolvedConfiguration(output, {
     modulePath: opts.modulePath,
     configuration: opts.configuration,
@@ -65,12 +72,22 @@ export async function extractExternalClassSource(
       Boolean(opts.includeTest),
     );
     if (ip !== null) {
-      return ip;
+      if (!ip.ok) {
+        return { ok: false, error: ip.error };
+      }
+      const ipp = ip.provenance;
+      if (ipp.kind === 'interproject') {
+        return {
+          ok: true,
+          hit: true,
+          sourceText: ip.source,
+          provenance: ipp,
+        };
+      }
     }
   }
 
   const artifacts = picked.configuration.artifacts.filter(isExternalJarArtifact);
-  const searchedArtifactCount = artifacts.length;
 
   for (const a of artifacts) {
     if (a.sourcesJarPath !== null && a.sourcesJarPath.length > 0) {
@@ -79,21 +96,24 @@ export async function extractExternalClassSource(
         name: a.name,
         version: a.version,
       };
-      const fromCached = tryReadSourceFromJar(
-        a.sourcesJarPath,
-        paths.sourceRelPath,
-        opts.className,
-        coordinates,
-      );
+      const fromCached = tryReadSourceFromJar(a.sourcesJarPath, paths.sourceRelPath, opts.className, coordinates);
       if (fromCached !== null) {
-        return fromCached;
+        if (!fromCached.ok) {
+          return { ok: false, error: fromCached.error };
+        }
+        return {
+          ok: true,
+          hit: true,
+          sourceText: fromCached.source,
+          provenance: fromCached.provenance,
+        };
       }
     }
   }
 
   const jarHit = findExternalJarAmongArtifacts(artifacts, paths.classRelPath, opts.className);
   if (!jarHit.ok) {
-    return jarHit;
+    return { ok: false, error: jarHit.error };
   }
 
   const { hit } = jarHit;
@@ -106,26 +126,19 @@ export async function extractExternalClassSource(
   }
 
   if (sourcesJarPath !== null && sourcesJarPath.length > 0) {
-    const fromResolved = tryReadSourceFromJar(
-      sourcesJarPath,
-      paths.sourceRelPath,
-      opts.className,
-      coordinates,
-    );
+    const fromResolved = tryReadSourceFromJar(sourcesJarPath, paths.sourceRelPath, opts.className, coordinates);
     if (fromResolved !== null) {
-      return fromResolved;
+      if (!fromResolved.ok) {
+        return { ok: false, error: fromResolved.error };
+      }
+      return {
+        ok: true,
+        hit: true,
+        sourceText: fromResolved.source,
+        provenance: fromResolved.provenance,
+      };
     }
   }
 
-  const decompile = opts.decompileExternalClass ?? decompileExternalClass;
-  const decompiled = await decompile({
-    className: opts.className,
-    jarPath: hit.classpath,
-    entryRelPath: paths.classRelPath,
-    coordinates,
-  });
-  if (decompiled.ok) {
-    return decompiled;
-  }
-  return { ok: false, error: decompiled.error };
+  return { ok: true, hit: false };
 }

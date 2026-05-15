@@ -74,7 +74,84 @@ describe('extractExternalClassSource', () => {
     if (r.ok) {
       expect(r.source).toBe(body);
       expect(r.sourceAvailable).toBe(true);
-      expect(r.provenance.jarPath).toBe(sourcesJar);
+      expect(r.provenance.kind).toBe('sourcesJar');
+      if (r.provenance.kind === 'sourcesJar') {
+        expect(r.provenance.jarPath).toBe(sourcesJar);
+      }
+    }
+  });
+
+  test('returns inter-project .java before external JAR on classpath', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
+    const depRoot = path.join(dir, 'shared');
+    const javaPath = path.join(depRoot, 'src/main/java/com/shared/Util.java');
+    fs.mkdirSync(path.dirname(javaPath), { recursive: true });
+    const javaBody = 'package com.shared;\npublic class Util {}\n';
+    fs.writeFileSync(javaPath, javaBody);
+
+    const binJar = path.join(dir, 'lib.jar');
+    fs.writeFileSync(
+      binJar,
+      zipSync({
+        'com/shared/Util.class': fakeClassBytes,
+      }),
+    );
+
+    const inter: ResolvedArtifact = {
+      group: 'root',
+      name: 'shared',
+      version: null,
+      type: 'project',
+      jarPath: null,
+      sourcesJarPath: null,
+      origin: 'interproject',
+      direct: true,
+      interproject: { moduleName: ':shared', modulePath: depRoot },
+    };
+
+    const out = baseOutput(dir, [
+      inter,
+      artifact({ group: 'x', name: 'lib', jarPath: binJar, sourcesJarPath: null }),
+    ]);
+
+    const r = await extractExternalClassSource(out, { className: 'com.shared.Util' });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.source).toBe(javaBody);
+      expect(r.sourceAvailable).toBe(true);
+      expect(r.provenance.kind).toBe('interproject');
+    }
+  });
+
+  test('includeTest reads inter-project src/test/java', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
+    const depRoot = path.join(dir, 'shared');
+    const javaPath = path.join(depRoot, 'src/test/java/com/shared/TCase.java');
+    fs.mkdirSync(path.dirname(javaPath), { recursive: true });
+    const javaBody = 'package com.shared;\npublic class TCase {}\n';
+    fs.writeFileSync(javaPath, javaBody);
+
+    const inter: ResolvedArtifact = {
+      group: 'root',
+      name: 'shared',
+      version: null,
+      type: 'project',
+      jarPath: null,
+      sourcesJarPath: null,
+      origin: 'interproject',
+      direct: true,
+      interproject: { moduleName: ':shared', modulePath: depRoot },
+    };
+
+    const out = baseOutput(dir, [inter]);
+    const r = await extractExternalClassSource(out, {
+      className: 'com.shared.TCase',
+      includeTest: true,
+      configuration: 'compileClasspath',
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.provenance.kind).toBe('interproject');
     }
   });
 

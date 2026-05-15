@@ -41,6 +41,14 @@ const provenanceSchema = z.union([
     entryRelPath: z.string(),
     cachePath: z.string(),
   }),
+  z.object({
+    kind: z.literal('interproject'),
+    coordinates: artifactCoordinatesSchema,
+    moduleName: z.string(),
+    moduleRoot: z.string(),
+    sourceRelativePath: z.string(),
+    absoluteSourcePath: z.string(),
+  }),
 ]);
 
 const classSourceErrorSchema = z.discriminatedUnion('code', [
@@ -246,6 +254,36 @@ const classpathJarProvenanceSchema = z.object({
   jarPath: z.string(),
 });
 
+const interprojectBytecodeProvenanceSchema = z.object({
+  kind: z.literal('interprojectBytecode'),
+  coordinates: artifactCoordinatesSchema,
+  moduleName: z.string(),
+  moduleRoot: z.string(),
+  classpathRoot: z.string(),
+});
+
+const sourcesJarStructureProvenanceSchema = z.object({
+  kind: z.literal('sourcesJar'),
+  coordinates: artifactCoordinatesSchema,
+  jarPath: z.string(),
+});
+
+const interprojectSourceProvenanceSchema = z.object({
+  kind: z.literal('interprojectSource'),
+  coordinates: artifactCoordinatesSchema,
+  moduleName: z.string(),
+  moduleRoot: z.string(),
+  absoluteSourcePath: z.string(),
+  sourceRelativePath: z.string(),
+});
+
+const classStructureProvenanceSchema = z.union([
+  classpathJarProvenanceSchema,
+  interprojectBytecodeProvenanceSchema,
+  sourcesJarStructureProvenanceSchema,
+  interprojectSourceProvenanceSchema,
+]);
+
 const getMethodSignatureInputSchema = z.object({
   className: z.string().min(1),
   methodName: z.string().min(1),
@@ -274,9 +312,9 @@ export const mcpGetMethodSignaturePayloadSchema = z.union([
     className: z.string(),
     methodName: z.string(),
     methodFound: z.boolean(),
-    sourceAvailable: z.literal(false),
+    sourceAvailable: z.boolean(),
     overloads: z.array(javapOverloadSchema),
-    provenance: classpathJarProvenanceSchema,
+    provenance: classStructureProvenanceSchema,
   }),
   z.object({
     ok: z.literal(true),
@@ -357,7 +395,7 @@ export const mcpGetClassStructurePayloadSchema = z.union([
     fields: z.array(classStructureFieldSchema),
     methods: z.array(classStructureMethodSchema),
     sourceAvailable: z.boolean(),
-    provenance: classpathJarProvenanceSchema,
+    provenance: classStructureProvenanceSchema,
   }),
   z.object({
     ok: z.literal(true),
@@ -380,9 +418,9 @@ export async function startMcpServer(): Promise<void> {
     {
       instructions:
         'JVM Source Lens (Gradle first): use get_class_source with a fully-qualified class name and projectRoot. ' +
-        'Use get_class_structure for structured API metadata (kind, fields, methods including inherited public/protected instance methods) without full source — sourceAvailable is true when the primary type was read from a sources JAR (Javadoc enrichment), false when structure is bytecode-only. ' +
-        'Use get_method_signature when you know className and methodName and need overloads (parameters, return type, generics Signature attribute, checked exceptions) via javap on the resolved binary JAR — sourceAvailable is always false for this tool (README §7.1). ' +
-        'Constructors are queried with methodName <init>. Inter-project classes are not supported yet (same as get_class_source). ' +
+        'Use get_class_structure for structured API metadata (kind, fields, methods including inherited public/protected instance methods) without full source — sourceAvailable is true when the primary type was read from a sources JAR or inter-project `.java`; inherited members may still come from javap when bytecode is available or from parsed source when not. ' +
+        'Use get_method_signature when you know className and methodName and need overloads: the implementation prefers parsing `.java` from a sources JAR or inter-project `src/` when present (sourceAvailable=true; synthetic JVM descriptors and no Signature attribute), otherwise falls back to javap bytecode metadata (sourceAvailable=false). ' +
+        'Constructors are queried with methodName <init>. Inter-project classes (`origin: interproject`) resolve from sibling `src/main/java` (and `src/test/java` when includeTest) for source-first tools before requiring `build/classes/**` for javap. ' +
         'Use list_modules for submodule names and per-configuration dependency counts without full ResolutionOutput, or resolve_dependencies for the complete document. ' +
         'Both warm or refresh the resolution cache; then get_class_source / get_method_signature / get_class_structure reuse the cache. ' +
         'Failures return errorCategory (transient | validation | business | permission), isRetryable, and a detailed description. ' +
@@ -548,7 +586,7 @@ export async function startMcpServer(): Promise<void> {
         'Includes inherited public/protected instance methods from supertypes (javap on the resolved classpath). ' +
         'sourceAvailable is true when the primary type was loaded from a sources JAR (Javadoc on declared members); inherited entries are still bytecode-derived. ' +
         'Does not decompile (no CFR). Uses the same classpath selection as get_class_source. ' +
-        'Inter-project classes are not supported yet. On javap failure: code SIGNATURE_EXTRACT_FAILED.',
+        'Inter-project submodule classes (`origin: interproject`) resolve from Gradle output dirs for javap and from `src/main/java`/`src/test/java` for sourced metadata when available. On javap failure: code SIGNATURE_EXTRACT_FAILED.',
       inputSchema: getClassStructureInputSchema,
       outputSchema: mcpGetClassStructurePayloadSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },

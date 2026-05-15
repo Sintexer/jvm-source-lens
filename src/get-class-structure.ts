@@ -5,22 +5,27 @@ import {
   parseJavapVerboseAllMethods,
 } from './class-structure/javap-parse.js';
 import { mergeDeclaredWithInheritedLayers } from './class-structure/inherited-methods.js';
-import { parseJavaClassSkeleton, pickMethodJavadoc } from './class-structure/parse-java-class-skeleton.js';
+import { parseJavaClassSkeleton, pickMethodJavadoc, type JavaClassSkeleton } from './class-structure/parse-java-class-skeleton.js';
+import type { ParsedJavaTypeHeader, ParsedJavaTypeMetadata } from './class-structure/parse-java-type-metadata.js';
+import { parseJavaTypeMetadata } from './class-structure/parse-java-type-metadata.js';
 import { spawnJavapVerbose } from './class-structure/spawn-javap.js';
 import type {
   ClassStructureField,
   ClassStructureMethod,
+  ClassStructureProvenance,
   GetClassStructureResult,
   JavapClassHeader,
   JavapFieldInfo,
   JavapMethodWithName,
 } from './class-structure/types.js';
 import type { ArtifactCoordinates, ClassSourceLookupOptions } from './extractor/class-source-types.js';
-import { findExternalJarOwningClass } from './extractor/find-external-class-jar.js';
-import { tryReadPrimaryJavaSourceFromArtifacts } from './extractor/read-primary-java-source.js';
+import { findClasspathOwningClass } from './extractor/find-external-class-jar.js';
+import {
+  tryReadJavaSourceFromClasspath,
+  type TryReadJavaSourceFromClasspathResult,
+} from './extractor/read-java-source-from-classpath.js';
 import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
-import type { JavaClassSkeleton } from './class-structure/parse-java-class-skeleton.js';
 
 const MAX_GRAPH_VISITS = 64;
 
@@ -36,6 +41,63 @@ function coordinatesKey(c: ArtifactCoordinates): string {
   return `${c.group}:${c.name}:${c.version ?? ''}`;
 }
 
+function parsedHeaderToJavapHeader(h: ParsedJavaTypeHeader, simple: string): JavapClassHeader {
+  return {
+    kind: h.kind,
+    declarationLine: `${h.kind} ${simple}`,
+    flagsLine: null,
+    superClass: h.superClass,
+    directInterfaces: h.directInterfaces,
+    typeParameterNames: h.typeParameterNames,
+  };
+}
+
+function buildClassStructureProvenance(args: {
+  sourceRead: TryReadJavaSourceFromClasspathResult;
+  ownerHit: ReturnType<typeof findClasspathOwningClass>;
+}): ClassStructureProvenance {
+  const { sourceRead, ownerHit } = args;
+  if (!sourceRead.ok) {
+    throw new Error('jvmsrc internal error: provenance requires resolved source read');
+  }
+  if (sourceRead.hit && sourceRead.provenance.kind === 'interproject') {
+    const p = sourceRead.provenance;
+    return {
+      kind: 'interprojectSource',
+      coordinates: p.coordinates,
+      moduleName: p.moduleName,
+      moduleRoot: p.moduleRoot,
+      absoluteSourcePath: p.absoluteSourcePath,
+      sourceRelativePath: p.sourceRelativePath,
+    };
+  }
+  if (sourceRead.hit && sourceRead.provenance.kind === 'sourcesJar') {
+    const p = sourceRead.provenance;
+    return {
+      kind: 'sourcesJar',
+      coordinates: p.coordinates,
+      jarPath: p.jarPath,
+    };
+  }
+  if (!sourceRead.hit && ownerHit.ok && ownerHit.hit.kind === 'externalJar') {
+    return {
+      kind: 'classpathJar',
+      coordinates: ownerHit.hit.coordinates,
+      jarPath: ownerHit.hit.classpath,
+    };
+  }
+  if (!sourceRead.hit && ownerHit.ok && ownerHit.hit.kind === 'interprojectBytecode') {
+    return {
+      kind: 'interprojectBytecode',
+      coordinates: ownerHit.hit.coordinates,
+      moduleName: ownerHit.hit.moduleName,
+      moduleRoot: ownerHit.hit.moduleRoot,
+      classpathRoot: ownerHit.hit.classpath,
+    };
+  }
+  throw new Error('jvmsrc internal error: missing ClassStructure provenance');
+}
+
 function javapMethodToStructure(
   o: JavapMethodWithName,
   declaringClass: string,
@@ -49,6 +111,7 @@ function javapMethodToStructure(
     !inherited && sourceAvailable
       ? pickMethodJavadoc(skeleton, displayName, paramCount)
       : null;
+  const decl = o.declarationLine;
   return {
     name: displayName,
     jvmMethodName: o.jvmMethodName,
@@ -58,8 +121,10 @@ function javapMethodToStructure(
     parameters: o.parameters.map((p) => ({ name: p.name, type: p.typeDisplay })),
     typeParameters: [],
     javadoc,
-    abstract: Boolean(o.flagsLine?.includes('ACC_ABSTRACT')),
-    static: Boolean(o.flagsLine?.includes('ACC_STATIC')),
+    abstract:
+      Boolean(o.flagsLine?.includes('ACC_ABSTRACT')) ||
+      Boolean(/\babstract\b/.test(decl)),
+    static: Boolean(o.flagsLine?.includes('ACC_STATIC')) || Boolean(/\bstatic\b/.test(decl)),
     throws: o.thrownExceptions,
     genericSignature: o.genericSignature,
     jvmDescriptor: o.jvmDescriptor,
@@ -82,16 +147,27 @@ function javapFieldToStructure(
     const hit = skeleton.methods.find((m) => m.name === name);
     javadoc = hit?.javadoc ?? null;
   }
+  const dl = f.declarationLine;
   return {
     name,
     declaringClass,
     visibility: f.visibility,
     type,
-    static: Boolean(f.flagsLine?.includes('ACC_STATIC')),
-    final: Boolean(f.flagsLine?.includes('ACC_FINAL')),
+    static: Boolean(f.flagsLine?.includes('ACC_STATIC')) || /\bstatic\b/.test(dl),
+    final: Boolean(f.flagsLine?.includes('ACC_FINAL')) || /\bfinal\b/.test(dl),
     enumConstant: f.enumConstant,
     javadoc,
   };
+}
+
+function isInheritedInstanceApiMethod(m: JavapMethodWithName): boolean {
+  if (m.jvmMethodName === '<init>') {
+    return false;
+  }
+  if (/\bstatic\b/.test(m.declarationLine)) {
+    return false;
+  }
+  return m.visibility === 'public' || m.visibility === 'protected';
 }
 
 export async function getClassStructure(
@@ -115,16 +191,6 @@ export async function getClassStructure(
     includeTest: opts.includeTest,
   };
 
-  const jarHit = findExternalJarOwningClass(resolved.output, {
-    className,
-    modulePath: opts.modulePath,
-    configuration: opts.configuration,
-    includeTest: opts.includeTest,
-  });
-  if (!jarHit.ok) {
-    return jarHit;
-  }
-
   const sourcesJarCache = new Map<string, string | null>();
   const resolveSourcesJarFn = async (coordinates: ArtifactCoordinates): Promise<string | null> => {
     const key = coordinatesKey(coordinates);
@@ -144,16 +210,12 @@ export async function getClassStructure(
     return path;
   };
 
-  let sourceReadHit: { hit: true; sourceText: string } | { hit: false } = { hit: false };
+  let sourceRead: TryReadJavaSourceFromClasspathResult;
   try {
-    const src = await tryReadPrimaryJavaSourceFromArtifacts(resolved.output, {
+    sourceRead = await tryReadJavaSourceFromClasspath(resolved.output, {
       ...lookupOpts,
       resolveSourcesJar: resolveSourcesJarFn,
     });
-    if (!src.ok) {
-      return src;
-    }
-    sourceReadHit = src.hit ? { hit: true, sourceText: src.sourceText } : { hit: false };
   } catch (e) {
     const err = e as { code?: string; message?: string; stderr?: string; coordinates?: ArtifactCoordinates };
     if (err.code === 'SOURCES_RESOLVE_FAILED') {
@@ -170,42 +232,70 @@ export async function getClassStructure(
     throw e;
   }
 
-  const sourceAvailable = sourceReadHit.hit === true;
-  const skeleton =
-    sourceReadHit.hit === true ? parseJavaClassSkeleton(sourceReadHit.sourceText, className) : null;
-
-  const primaryJavap = await spawnJavapVerbose({
-    jarPath: jarHit.hit.jarPath,
-    className,
-  });
-  if (!primaryJavap.ok) {
-    return {
-      ok: false,
-      error: {
-        code: 'SIGNATURE_EXTRACT_FAILED',
-        message: primaryJavap.message,
-        className,
-        jarPath: jarHit.hit.jarPath,
-        stderr: primaryJavap.stderr,
-      },
-    };
+  if (!sourceRead.ok) {
+    return { ok: false, error: sourceRead.error };
   }
 
-  const primaryHeader = parseJavapClassHeader(primaryJavap.stdout);
+  const ownerHit = findClasspathOwningClass(resolved.output, {
+    className,
+    modulePath: opts.modulePath,
+    configuration: opts.configuration,
+    includeTest: opts.includeTest,
+  });
+
+  if (!ownerHit.ok && !sourceRead.hit) {
+    return ownerHit;
+  }
+
+  let parsedPrimary: ParsedJavaTypeMetadata | null = null;
+  if (sourceRead.hit) {
+    parsedPrimary = parseJavaTypeMetadata(sourceRead.sourceText, className);
+  }
+
+  let primaryJavapStdout: string | null = null;
+  if (ownerHit.ok) {
+    const primaryJavap = await spawnJavapVerbose({
+      classpath: ownerHit.hit.classpath,
+      className,
+    });
+    if (primaryJavap.ok) {
+      primaryJavapStdout = primaryJavap.stdout;
+    }
+  }
+
+  let primaryHeader: JavapClassHeader | null = null;
+  if (parsedPrimary) {
+    primaryHeader = parsedHeaderToJavapHeader(parsedPrimary.header, declaringSimpleName(className));
+  } else if (primaryJavapStdout) {
+    primaryHeader = parseJavapClassHeader(primaryJavapStdout);
+  }
+
   if (!primaryHeader) {
     return {
       ok: false,
       error: {
         code: 'SIGNATURE_EXTRACT_FAILED',
-        message: 'Could not parse class header from javap output',
+        message:
+          'Could not obtain class header from Java source parse or javap — ensure the type is valid bytecode and/or readable source on the classpath.',
         className,
-        jarPath: jarHit.hit.jarPath,
+        jarPath: ownerHit.ok ? ownerHit.hit.classpath : '',
       },
     };
   }
 
-  const javapCache = new Map<string, string>([[className, primaryJavap.stdout]]);
+  const sourceAvailable = sourceRead.hit === true;
+  const skeleton =
+    sourceRead.hit === true ? parseJavaClassSkeleton(sourceRead.sourceText, className) : null;
+
+  const javapCache = new Map<string, string>();
+  if (primaryJavapStdout) {
+    javapCache.set(className, primaryJavapStdout);
+  }
   const headerCache = new Map<string, JavapClassHeader>([[className, primaryHeader]]);
+  const sourceMemberCache = new Map<string, ParsedJavaTypeMetadata>();
+  if (parsedPrimary) {
+    sourceMemberCache.set(className, parsedPrimary);
+  }
 
   const visitQueue: string[] = [];
   const visitSeen = new Set<string>([className]);
@@ -241,48 +331,60 @@ export async function getClassStructure(
     }
 
     visitsStarted++;
-    const superJar = findExternalJarOwningClass(resolved.output, {
+    const superOwner = findClasspathOwningClass(resolved.output, {
       className: fqn,
       modulePath: opts.modulePath,
       configuration: opts.configuration,
       includeTest: opts.includeTest,
     });
-    if (!superJar.ok) {
-      continue;
+
+    let jpCaptured = false;
+    if (superOwner.ok) {
+      const jp = await spawnJavapVerbose({
+        classpath: superOwner.hit.classpath,
+        className: fqn,
+      });
+      if (jp.ok) {
+        jpCaptured = true;
+        javapCache.set(fqn, jp.stdout);
+        const hh = parseJavapClassHeader(jp.stdout);
+        if (hh) {
+          headerCache.set(fqn, hh);
+          enqueue(hh.superClass);
+          for (const x of hh.directInterfaces) {
+            enqueue(x);
+          }
+        }
+      }
     }
 
-    const jp = await spawnJavapVerbose({
-      jarPath: superJar.hit.jarPath,
-      className: fqn,
-    });
-    if (!jp.ok) {
-      return {
-        ok: false,
-        error: {
-          code: 'SIGNATURE_EXTRACT_FAILED',
-          message: jp.message,
-          className: fqn,
-          jarPath: superJar.hit.jarPath,
-          stderr: jp.stderr,
-        },
-      };
-    }
-
-    javapCache.set(fqn, jp.stdout);
-    const hh = parseJavapClassHeader(jp.stdout);
-    if (hh) {
-      headerCache.set(fqn, hh);
-      enqueue(hh.superClass);
-      for (const x of hh.directInterfaces) {
-        enqueue(x);
+    if (!jpCaptured) {
+      const srcSuper = await tryReadJavaSourceFromClasspath(resolved.output, {
+        ...lookupOpts,
+        className: fqn,
+        resolveSourcesJar: resolveSourcesJarFn,
+      });
+      if (srcSuper.ok && srcSuper.hit) {
+        const meta = parseJavaTypeMetadata(srcSuper.sourceText, fqn);
+        if (meta) {
+          sourceMemberCache.set(fqn, meta);
+          headerCache.set(fqn, parsedHeaderToJavapHeader(meta.header, declaringSimpleName(fqn)));
+          enqueue(meta.header.superClass);
+          for (const x of meta.header.directInterfaces) {
+            enqueue(x);
+          }
+        }
       }
     }
   }
 
-  const declaredRaw = parseJavapVerboseAllMethods(primaryJavap.stdout, className, { includeStatic: true });
-  const declared = declaredRaw.map((m) =>
-    javapMethodToStructure(m, className, false, sourceAvailable, skeleton),
-  );
+  const declared = parsedPrimary
+    ? parsedPrimary.methods.map((m) => javapMethodToStructure(m, className, false, sourceAvailable, skeleton))
+    : primaryJavapStdout
+      ? parseJavapVerboseAllMethods(primaryJavapStdout, className, { includeStatic: true }).map((m) =>
+          javapMethodToStructure(m, className, false, sourceAvailable, skeleton),
+        )
+      : [];
 
   const classChainTowardsObject: string[] = [];
   let sc = primaryHeader.superClass;
@@ -298,66 +400,62 @@ export async function getClassStructure(
 
   const ifaceOrdered: string[] = [];
   const ifaceSeen = new Set<string>();
-  function walkIface(i: string): void {
-    if (ifaceSeen.has(i) || i === 'java.lang.Object') {
+  function walkIface(iface: string): void {
+    if (ifaceSeen.has(iface) || iface === 'java.lang.Object') {
       return;
     }
-    ifaceSeen.add(i);
-    const h = headerCache.get(i);
+    ifaceSeen.add(iface);
+    const h = headerCache.get(iface);
     if (h) {
       for (const p of h.directInterfaces) {
         walkIface(p);
       }
     }
-    ifaceOrdered.push(i);
+    ifaceOrdered.push(iface);
   }
   for (const di of primaryHeader.directInterfaces) {
     walkIface(di);
   }
 
+  function methodsForInheritedLayer(fqn: string): ClassStructureMethod[] {
+    const text = javapCache.get(fqn);
+    if (text) {
+      const layerRaw = parseJavapVerboseAllMethods(text, fqn, {
+        visibilityIn: ['public', 'protected'],
+        includeStatic: false,
+      });
+      return layerRaw
+        .filter((m) => m.jvmMethodName !== '<init>')
+        .map((m) => javapMethodToStructure(m, fqn, true, false, null));
+    }
+    const meta = sourceMemberCache.get(fqn);
+    if (!meta) {
+      return [];
+    }
+    return meta.methods
+      .filter(isInheritedInstanceApiMethod)
+      .map((m) => javapMethodToStructure(m, fqn, true, false, null));
+  }
+
   const inheritedLayers: ClassStructureMethod[][] = [];
   for (const fqn of classLayersOrderedFarToNear) {
-    const text = javapCache.get(fqn);
-    if (!text) {
-      continue;
-    }
-    const layerRaw = parseJavapVerboseAllMethods(text, fqn, {
-      visibilityIn: ['public', 'protected'],
-      includeStatic: false,
-    });
-    inheritedLayers.push(
-      layerRaw
-        .filter((m) => m.jvmMethodName !== '<init>')
-        .map((m) => javapMethodToStructure(m, fqn, true, false, null)),
-    );
+    inheritedLayers.push(methodsForInheritedLayer(fqn));
   }
 
   for (const fqn of ifaceOrdered) {
-    const text = javapCache.get(fqn);
-    if (!text) {
-      continue;
-    }
-    const layerRaw = parseJavapVerboseAllMethods(text, fqn, {
-      visibilityIn: ['public', 'protected'],
-      includeStatic: false,
-    });
-    inheritedLayers.push(
-      layerRaw
-        .filter((m) => m.jvmMethodName !== '<init>')
-        .map((m) => javapMethodToStructure(m, fqn, true, false, null)),
-    );
+    inheritedLayers.push(methodsForInheritedLayer(fqn));
   }
 
   const methods = mergeDeclaredWithInheritedLayers(declared, inheritedLayers);
 
-  const rawFields = parseJavapFields(primaryJavap.stdout);
+  const rawFields: JavapFieldInfo[] = parsedPrimary
+    ? parsedPrimary.fields
+    : primaryJavapStdout
+      ? parseJavapFields(primaryJavapStdout)
+      : [];
   const fields = rawFields.map((f) => javapFieldToStructure(f, className, skeleton, sourceAvailable));
 
-  const provenance = {
-    kind: 'classpathJar' as const,
-    coordinates: jarHit.hit.coordinates,
-    jarPath: jarHit.hit.jarPath,
-  };
+  const provenance = buildClassStructureProvenance({ sourceRead, ownerHit });
 
   return {
     ok: true,

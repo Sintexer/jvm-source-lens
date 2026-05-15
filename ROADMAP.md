@@ -23,7 +23,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] MCP server — `get_method_signature`
 - [x] MCP server — `get_class_structure` (effective API / inherited methods — §12.2)
 - [x] MCP server — `list_modules`
-- [ ] Inter-project source lookup (`origin: interproject`)
+- [x] Inter-project source lookup (`origin: interproject`)
 
 ### P1 — MVP polish
 
@@ -105,12 +105,13 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **Goal:** Common agent path — caller knows `className` and `methodName`, needs exact overloads and contract (including checked exceptions).
 
-**Implementation (v1):** After resolving Gradle output (cached), locate the owning external JAR for the class (same ordering as `get_class_source`), run **`javap -private -verbose`**, and parse overload metadata (`descriptor`, optional **`Signature`**, `Exceptions`, `LocalVariableTable` names). **`sourceAvailable` is always false** (§7.1). Optional later: back this tool with a shared **`ClassStructure`** parse used by `get_class_structure` (§12).
+**Implementation:** After resolving Gradle output (cached), read classpath-order **`.java`** (**inter-project** `src/` then **sources JAR** / on-demand fetch). When **`parseJavaTypeMetadata`** succeeds, return overloads from source (**`sourceAvailable: true`**, synthetic **`#SRC:`** **`jvmDescriptor`**, typically no **`Signature`** attribute). Otherwise locate the owning classpath element (same ordering as **`get_class_source`**) and run **`javap -private -verbose`** (**`sourceAvailable: false`**). Optional later: richer convergence with **`get_class_structure`** beyond shared **`parseJavaTypeMetadata`**.
 
-**References:** [README.md §8.2](README.md), [README.md §12.2](README.md), [src/get-method-signatures.ts](src/get-method-signatures.ts), [src/class-structure/javap-parse.ts](src/class-structure/javap-parse.ts)
+**References:** [README.md §8.2](README.md), [README.md §12.2](README.md), [src/get-method-signatures.ts](src/get-method-signatures.ts), [src/class-structure/javap-parse.ts](src/class-structure/javap-parse.ts), [src/class-structure/parse-java-type-metadata.ts](src/class-structure/parse-java-type-metadata.ts)
 
 - [x] Tool `get_method_signature`: `className`, `methodName`, `projectRoot`, optional classpath scoping (`modulePath?`, `configuration?`, `includeTest?`, `forceRefresh?`)
-- [x] Response: all overloads — parameters (types + names), return type, generic bounds, checked exceptions; `sourceAvailable` per §7.1 where applicable
+- [x] Response: all overloads — parameters (types + names), return type, generic bounds, checked exceptions; **`sourceAvailable: true`** when parsed from **`.java`**, else **`javap`** metadata with **`sourceAvailable: false`**
+- [x] Shared **`parseJavaTypeMetadata`** with **`get_class_structure`** for the source-first path
 - [x] Errors: same structured pattern as `get_class_source`
 - [x] README §8.2 marked implemented for this tool
 
@@ -146,11 +147,11 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **References:** [resources/analyzer-init.gradle](resources/analyzer-init.gradle) (`interproject` artifacts), [src/extractor/extract-external-class-source.ts](src/extractor/extract-external-class-source.ts)
 
-- [ ] New extractor path (or extend pipeline): map FQN → `src/main/java/...` under `interproject.modulePath`
-- [ ] Optional `src/test/java` when `--include-test` / test classpath
-- [ ] `sourceAvailable: true`, provenance kind `interproject` (extend types if needed)
-- [ ] Tests with synthetic `ResolutionOutput`
-- [ ] README §7 “current behavior” updated
+- [x] New extractor path (or extend pipeline): map FQN → `src/main/java/...` under `interproject.modulePath`
+- [x] Optional `src/test/java` when `--include-test` / test classpath
+- [x] `sourceAvailable: true`, provenance kind `interproject` (extend types if needed)
+- [x] Tests with synthetic `ResolutionOutput`
+- [x] README §7 “current behavior” updated
 
 ---
 

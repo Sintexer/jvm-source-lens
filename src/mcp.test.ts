@@ -12,6 +12,136 @@ import {
   mcpToolResultFromResolutionResult,
 } from './mcp-tool-result.js';
 
+test('mcpClassSourceToolPayloadSchema accepts interproject provenance', () => {
+  const parsed = mcpClassSourceToolPayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    source: 'package x;\npublic class Y {}\n',
+    sourceAvailable: true,
+    className: 'x.Y',
+    provenance: {
+      kind: 'interproject',
+      coordinates: { group: 'root', name: 'lib', version: null },
+      moduleName: ':lib',
+      moduleRoot: '/tmp/proj/lib',
+      sourceRelativePath: 'x/Y.java',
+      absoluteSourcePath: '/tmp/proj/lib/src/main/java/x/Y.java',
+    },
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpGetMethodSignaturePayloadSchema accepts interprojectBytecode provenance', () => {
+  const parsed = mcpGetMethodSignaturePayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    querySucceeded: true,
+    className: 'x.Y',
+    methodName: 'run',
+    methodFound: true,
+    sourceAvailable: false,
+    overloads: [],
+    provenance: {
+      kind: 'interprojectBytecode',
+      coordinates: { group: 'root', name: 'lib', version: null },
+      moduleName: ':lib',
+      moduleRoot: '/tmp/proj/lib',
+      classpathRoot: '/tmp/proj/lib/build/classes/java/main',
+    },
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpGetMethodSignaturePayloadSchema accepts interprojectSource provenance', () => {
+  const parsed = mcpGetMethodSignaturePayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    querySucceeded: true,
+    className: 'x.Y',
+    methodName: 'run',
+    methodFound: true,
+    sourceAvailable: true,
+    overloads: [],
+    provenance: {
+      kind: 'interprojectSource',
+      coordinates: { group: 'root', name: 'lib', version: null },
+      moduleName: ':lib',
+      moduleRoot: '/tmp/proj/lib',
+      absoluteSourcePath: '/tmp/proj/lib/src/main/java/x/Y.java',
+      sourceRelativePath: 'x/Y.java',
+    },
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpGetMethodSignaturePayloadSchema accepts sourcesJar provenance', () => {
+  const parsed = mcpGetMethodSignaturePayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    querySucceeded: true,
+    className: 'g.a.Foo',
+    methodName: 'bar',
+    methodFound: false,
+    sourceAvailable: true,
+    overloads: [],
+    provenance: {
+      kind: 'sourcesJar',
+      coordinates: { group: 'g', name: 'a', version: '1' },
+      jarPath: '/tmp/a-sources.jar',
+    },
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpGetClassStructurePayloadSchema accepts interprojectBytecode provenance', () => {
+  const parsed = mcpGetClassStructurePayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    querySucceeded: true,
+    className: 'x.Y',
+    kind: 'class',
+    superclass: 'java.lang.Object',
+    interfaces: [],
+    typeParameters: [],
+    fields: [],
+    methods: [],
+    sourceAvailable: true,
+    provenance: {
+      kind: 'interprojectBytecode',
+      coordinates: { group: 'root', name: 'lib', version: null },
+      moduleName: ':lib',
+      moduleRoot: '/tmp/proj/lib',
+      classpathRoot: '/tmp/proj/lib/build/classes/java/main',
+    },
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpGetClassStructurePayloadSchema accepts interprojectSource provenance', () => {
+  const parsed = mcpGetClassStructurePayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    querySucceeded: true,
+    className: 'x.Y',
+    kind: 'class',
+    superclass: 'java.lang.Object',
+    interfaces: [],
+    typeParameters: [],
+    fields: [],
+    methods: [],
+    sourceAvailable: true,
+    provenance: {
+      kind: 'interprojectSource',
+      coordinates: { group: 'root', name: 'lib', version: null },
+      moduleName: ':lib',
+      moduleRoot: '/tmp/proj/lib',
+      absoluteSourcePath: '/tmp/proj/lib/src/main/java/x/Y.java',
+      sourceRelativePath: 'x/Y.java',
+    },
+  });
+  expect(parsed.success).toBe(true);
+});
+
 test('mcpClassSourceToolPayloadSchema accepts success with found=true', () => {
   const parsed = mcpClassSourceToolPayloadSchema.safeParse({
     ok: true,

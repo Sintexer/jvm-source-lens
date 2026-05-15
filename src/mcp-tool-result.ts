@@ -1,10 +1,19 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { ClassSourceError } from './extractor/class-source-types.js';
-import type { DecompiledProvenance, SourcesJarProvenance } from './extractor/class-source-types.js';
+import type {
+  DecompiledProvenance,
+  InterprojectProvenance,
+  SourcesJarProvenance,
+} from './extractor/class-source-types.js';
 import type { ResolutionResult } from './resolvers/base.js';
 import type { ResolutionOutput } from './resolvers/resolution-output.js';
 import type { GetMethodSignatureResult } from './get-method-signatures.js';
-import type { ClassStructureMethod, GetClassStructureResult } from './class-structure/types.js';
+import type {
+  ClassStructureMethod,
+  ClassStructureProvenance,
+  GetClassStructureResult,
+  MethodSignatureProvenance,
+} from './class-structure/types.js';
 import type { ListModulesPayloadData } from './list-modules-payload.js';
 import { buildListModulesPayload } from './list-modules-payload.js';
 
@@ -17,7 +26,7 @@ export type McpClassSourceSuccessPayload = {
   source: string;
   sourceAvailable: boolean;
   className: string;
-  provenance: SourcesJarProvenance | DecompiledProvenance;
+  provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
 };
 
 /** Classpath was resolved and scanned; the class is not on it (not an access failure). */
@@ -70,7 +79,7 @@ export type McpMethodSignatureSuccessPayload = {
   className: string;
   methodName: string;
   methodFound: boolean;
-  sourceAvailable: false;
+  sourceAvailable: boolean;
   overloads: Array<{
     declarationLine: string;
     visibility: 'public' | 'protected' | 'package' | 'private';
@@ -81,11 +90,7 @@ export type McpMethodSignatureSuccessPayload = {
     thrownExceptions: string[];
     flagsLine: string | null;
   }>;
-  provenance: {
-    kind: 'classpathJar';
-    coordinates: DecompiledProvenance['coordinates'];
-    jarPath: string;
-  };
+  provenance: MethodSignatureProvenance;
 };
 
 export type McpMethodSignatureNotFoundPayload = {
@@ -140,11 +145,7 @@ export type McpClassStructureSuccessPayload = {
     inherited: boolean;
   }>;
   sourceAvailable: boolean;
-  provenance: {
-    kind: 'classpathJar';
-    coordinates: DecompiledProvenance['coordinates'];
-    jarPath: string;
-  };
+  provenance: ClassStructureProvenance;
 };
 
 export type McpClassStructureNotFoundPayload = {
@@ -165,7 +166,15 @@ export type McpClassStructureToolPayload =
 export type MethodSignatureQueryContext = ClassSourceQueryContext & { methodName: string };
 
 export function mcpToolResultFromClassSource(
-  result: { ok: true; source: string; sourceAvailable: boolean; className: string; provenance: SourcesJarProvenance | DecompiledProvenance } | { ok: false; error: ClassSourceError },
+  result:
+    | {
+        ok: true;
+        source: string;
+        sourceAvailable: boolean;
+        className: string;
+        provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
+      }
+    | { ok: false; error: ClassSourceError },
   query: ClassSourceQueryContext,
 ): CallToolResult {
   if (result.ok) {
@@ -276,12 +285,16 @@ export function mcpToolResultFromMethodSignature(
       className: result.className,
       methodName: result.methodName,
       methodFound: result.methodFound,
-      sourceAvailable: false,
+      sourceAvailable: result.sourceAvailable,
       overloads: result.overloads,
       provenance: result.provenance,
     };
+    const metaHint =
+      result.sourceAvailable === true
+        ? 'parsed `.java` on classpath'
+        : 'javap bytecode metadata';
     const summary = result.methodFound
-      ? `Found ${result.overloads.length} overload(s) for ${result.methodName} on ${result.className} (javap metadata; sourceAvailable=false).`
+      ? `Found ${result.overloads.length} overload(s) for ${result.methodName} on ${result.className} (${metaHint}; sourceAvailable=${result.sourceAvailable}).`
       : `Class ${result.className} found on the classpath, but no overloads matched method ${JSON.stringify(result.methodName)} (constructors use <init>).`;
     return {
       isError: false,

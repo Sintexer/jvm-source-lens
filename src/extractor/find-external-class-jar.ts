@@ -1,32 +1,59 @@
 import type { ArtifactCoordinates, ClassSourceLookupOptions } from './class-source-types.js';
 import { isExternalJarArtifact } from './class-source-types.js';
 import { fqnToZipRelPaths } from './fqn-paths.js';
-import { pickResolvedConfiguration } from './pick-classpath.js';
+import { resolveInterprojectClasspathRootForBinary } from './interproject-paths.js';
 import type { ResolvedArtifact } from '../resolvers/resolution-output.js';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
 import type { ClassSourceError } from './class-source-types.js';
+import { pickResolvedConfiguration } from './pick-classpath.js';
 import { zipEntryExists } from './zip-entry.js';
 
-export type ExternalJarOwningClassHit = {
-  artifact: ResolvedArtifact;
-  jarPath: string;
-  coordinates: ArtifactCoordinates;
-  classRelPath: string;
-  searchedArtifactCount: number;
-};
+export type ClasspathOwningClassHit =
+  | {
+      kind: 'externalJar';
+      artifact: ResolvedArtifact;
+      coordinates: ArtifactCoordinates;
+      classRelPath: string;
+      /** Classpath element for javap (`-classpath`): dependency JAR. */
+      classpath: string;
+      searchedArtifactCount: number;
+    }
+  | {
+      kind: 'interprojectBytecode';
+      artifact: ResolvedArtifact;
+      coordinates: ArtifactCoordinates;
+      classRelPath: string;
+      /** Classpath root dir for javap (`-classpath`): Gradle output (e.g. `build/classes/java/main`). */
+      classpath: string;
+      moduleName: string;
+      moduleRoot: string;
+      searchedArtifactCount: number;
+    };
 
-export type FindExternalJarResult =
-  | { ok: true; hit: ExternalJarOwningClassHit }
+/** @deprecated Use {@link ClasspathOwningClassHit} (`kind: 'externalJar'`). */
+export type ExternalJarOwningClassHit = Extract<ClasspathOwningClassHit, { kind: 'externalJar' }>;
+
+export type FindClasspathOwningClassResult =
+  | { ok: true; hit: ClasspathOwningClassHit }
   | { ok: false; error: ClassSourceError };
 
+/** @deprecated Use {@link FindClasspathOwningClassResult}. */
+export type FindExternalJarResult = FindClasspathOwningClassResult;
+
+function countClasspathSearchArtifacts(list: ResolvedArtifact[]): number {
+  return list.filter(
+    (a) => isExternalJarArtifact(a) || (a.origin === 'interproject' && Boolean(a.interproject)),
+  ).length;
+}
+
 /**
- * First external JAR on the resolved classpath that contains the given .class entry.
- * Iteration order matches {@link extractExternalClassSource}.
+ * Classpath order: first inter-project submodule output dir or external JAR that contains the `.class`,
+ * mirroring Gradle resolution order alongside {@link extractExternalClassSource}.
  */
-export function findExternalJarOwningClass(
+export function findClasspathOwningClass(
   output: ResolutionOutput,
   opts: Pick<ClassSourceLookupOptions, 'className' | 'modulePath' | 'configuration' | 'includeTest'>,
-): FindExternalJarResult {
+): FindClasspathOwningClassResult {
   const picked = pickResolvedConfiguration(output, {
     modulePath: opts.modulePath,
     configuration: opts.configuration,
@@ -41,18 +68,93 @@ export function findExternalJarOwningClass(
     return { ok: false, error: paths.error };
   }
 
-  return findExternalJarAmongArtifacts(
-    picked.configuration.artifacts.filter(isExternalJarArtifact),
-    paths.classRelPath,
-    opts.className,
-  );
+  const artifacts = picked.configuration.artifacts;
+  const searchedArtifactCount = countClasspathSearchArtifacts(artifacts);
+
+  for (const a of artifacts) {
+    const coordinates: ArtifactCoordinates = {
+      group: a.group,
+      name: a.name,
+      version: a.version,
+    };
+
+    if (a.origin === 'interproject' && a.interproject) {
+      const root = resolveInterprojectClasspathRootForBinary(
+        a.interproject.modulePath,
+        paths.classRelPath,
+        Boolean(opts.includeTest),
+      );
+      if (root !== null) {
+        return {
+          ok: true,
+          hit: {
+            kind: 'interprojectBytecode',
+            artifact: a,
+            coordinates,
+            classRelPath: paths.classRelPath,
+            classpath: root,
+            moduleName: a.interproject.moduleName,
+            moduleRoot: a.interproject.modulePath,
+            searchedArtifactCount,
+          },
+        };
+      }
+      continue;
+    }
+
+    if (!isExternalJarArtifact(a)) {
+      continue;
+    }
+
+    if (a.jarPath === null || a.jarPath.length === 0) {
+      continue;
+    }
+
+    const pres = zipEntryExists(a.jarPath, paths.classRelPath);
+    if (!pres.ok) {
+      return { ok: false, error: pres.error };
+    }
+    if (!pres.exists) {
+      continue;
+    }
+
+    return {
+      ok: true,
+      hit: {
+        kind: 'externalJar',
+        artifact: a,
+        coordinates,
+        classRelPath: paths.classRelPath,
+        classpath: a.jarPath,
+        searchedArtifactCount,
+      },
+    };
+  }
+
+  return {
+    ok: false,
+    error: {
+      code: 'CLASS_NOT_FOUND',
+      message: `Class not found on this classpath (${searchedArtifactCount} classpath edge(s) checked — inter-project outputs and external JARs). Verify the fully-qualified name, modulePath, configuration, or includeTest scope.`,
+      className: opts.className,
+      searchedArtifactCount,
+    },
+  };
+}
+
+/** @deprecated Use {@link findClasspathOwningClass}. */
+export function findExternalJarOwningClass(
+  output: ResolutionOutput,
+  opts: Pick<ClassSourceLookupOptions, 'className' | 'modulePath' | 'configuration' | 'includeTest'>,
+): FindClasspathOwningClassResult {
+  return findClasspathOwningClass(output, opts);
 }
 
 export function findExternalJarAmongArtifacts(
   artifacts: ResolvedArtifact[],
   classRelPath: string,
   className: string,
-): FindExternalJarResult {
+): FindClasspathOwningClassResult {
   const searchedArtifactCount = artifacts.length;
 
   for (const a of artifacts) {
@@ -77,10 +179,11 @@ export function findExternalJarAmongArtifacts(
     return {
       ok: true,
       hit: {
+        kind: 'externalJar',
         artifact: a,
-        jarPath: a.jarPath,
         coordinates,
         classRelPath,
+        classpath: a.jarPath,
         searchedArtifactCount,
       },
     };
@@ -90,7 +193,7 @@ export function findExternalJarAmongArtifacts(
     ok: false,
     error: {
       code: 'CLASS_NOT_FOUND',
-      message: `Class not found in external JARs on this classpath (${searchedArtifactCount} artifact(s) scanned). Interproject sources are not searched in this version.`,
+      message: `Class not found in external JARs on this classpath (${searchedArtifactCount} artifact(s) scanned).`,
       className,
       searchedArtifactCount,
     },

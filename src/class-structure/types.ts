@@ -24,11 +24,32 @@ export type JavapParameter = {
   typeDisplay: string;
 };
 
-export type MethodSignatureProvenance = {
-  kind: 'classpathJar';
-  coordinates: ArtifactCoordinates;
-  jarPath: string;
-};
+export type MethodSignatureProvenance =
+  | {
+      kind: 'classpathJar';
+      coordinates: ArtifactCoordinates;
+      jarPath: string;
+    }
+  | {
+      kind: 'interprojectBytecode';
+      coordinates: ArtifactCoordinates;
+      moduleName: string;
+      moduleRoot: string;
+      classpathRoot: string;
+    }
+  | {
+      kind: 'sourcesJar';
+      coordinates: ArtifactCoordinates;
+      jarPath: string;
+    }
+  | {
+      kind: 'interprojectSource';
+      coordinates: ArtifactCoordinates;
+      moduleName: string;
+      moduleRoot: string;
+      absoluteSourcePath: string;
+      sourceRelativePath: string;
+    };
 
 export type ClassStructureKind = 'class' | 'interface' | 'enum' | 'annotation' | 'record';
 

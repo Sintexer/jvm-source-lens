@@ -21,6 +21,17 @@ export type DecompiledProvenance = {
   cachePath: string;
 };
 
+/** Local `.java` in a depended Gradle submodule (`origin: interproject`). */
+export type InterprojectProvenance = {
+  kind: 'interproject';
+  coordinates: ArtifactCoordinates;
+  moduleName: string;
+  /** Absolute depended project dir (`projectDir`). */
+  moduleRoot: string;
+  sourceRelativePath: string;
+  absoluteSourcePath: string;
+};
+
 export type ResolveSourcesJarFn = (coordinates: ArtifactCoordinates) => Promise<string | null>;
 
 export type ClassSourceLookupOptions = {
@@ -82,7 +93,7 @@ export type ClassSourceLookupResult =
       source: string;
       sourceAvailable: boolean;
       className: string;
-      provenance: SourcesJarProvenance | DecompiledProvenance;
+      provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
     }
   | { ok: false; error: ClassSourceError };
 
