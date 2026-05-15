@@ -226,7 +226,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 - [x] Timeout / kill long-running Gradle spawns (`jvmsrcResolve`, `jvmsrcResolveSources`)
 - [x] Actionable messages for common failures (no wrapper, repo auth, unsupported project)
-- [x] CI or scripted smoke: resolve + `get` against a minimal Gradle fixture (skip when no Gradle)
+- [x] CI smoke: **`test/fixtures/gradle-smoke-fixture.test.ts`** — synthetic `ResolutionOutput` against the committed **`test/fixtures/gradle-smoke`** tree (inter-project **`get`** + class-search enrichment); **no Gradle** in default `bun test` (fast, deterministic)
 - [x] Optional: document `jvmsrcResolveSources` latency expectations
 
 ---

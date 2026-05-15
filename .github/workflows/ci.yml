@@ -20,13 +20,6 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 9.3.1
-
-      - name: Ensure Gradle smoke wrapper JAR (not committed)
-        run: bash scripts/ensure-gradle-smoke-wrapper.sh
-
       - name: Install and verify
         run: |
           bun install
