@@ -12,8 +12,15 @@ async function streamToText(
 }
 
 export type GradleSpawnResult =
-  | { ok: true; stdout: string; stderr: string }
-  | { ok: false; message: string; stderr?: string };
+  | { ok: true; stdout: string; stderr: string; command: string[] }
+  | {
+      ok: false;
+      message: string;
+      stderr?: string;
+      stdout?: string;
+      command: string[];
+      exitCode: number | null;
+    };
 
 export type RunGradleSpawnOptions = {
   /** When true, Gradle stderr is inherited by the process (stdout stays piped for JSON). */
@@ -68,7 +75,12 @@ export async function runGradleTask(
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, message: `Failed to start Gradle: ${msg}` };
+    return {
+      ok: false,
+      message: `Failed to start Gradle: ${msg}`,
+      command: argv,
+      exitCode: null,
+    };
   }
 
   const [stdout, stderr, exitCode] = await Promise.all([
@@ -82,8 +94,11 @@ export async function runGradleTask(
       ok: false,
       message: `Gradle exited with code ${exitCode}`,
       stderr: stderr || undefined,
+      stdout,
+      command: argv,
+      exitCode,
     };
   }
 
-  return { ok: true, stdout, stderr };
+  return { ok: true, stdout, stderr, command: argv };
 }

@@ -1,7 +1,8 @@
 import { createCliProgressReporter } from './cli-progress.js';
+import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import type { ArtifactCoordinates, ClassSourceLookupResult } from './extractor/class-source-types.js';
 import { extractExternalClassSource } from './extractor/extract-external-class-source.js';
-import type { ResolveOptions } from './resolvers/base.js';
+import type { GradleProcessCapture, ResolveOptions } from './resolvers/base.js';
 import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 
@@ -21,6 +22,28 @@ export type GetClassSourceOptions = {
   /** CLI-only: progress labels and Gradle verbose stderr. */
   cli?: GetClassSourceCliOptions;
 };
+
+function subprocessFromGradle(g: GradleProcessCapture | undefined) {
+  if (!g) {
+    return undefined;
+  }
+  return {
+    command: g.command,
+    exitCode: g.exitCode,
+    stdout: g.stdout,
+    stderr: g.stderr,
+  };
+}
+
+function commonInput(opts: GetClassSourceOptions, className: string): Record<string, unknown> {
+  return {
+    className,
+    modulePath: opts.modulePath,
+    configuration: opts.configuration,
+    includeTest: opts.includeTest,
+    forceRefresh: opts.forceRefresh,
+  };
+}
 
 function coordinatesKey(c: ArtifactCoordinates): string {
   return `${c.group}:${c.name}:${c.version ?? ''}`;
@@ -54,6 +77,7 @@ export async function getClassSource(
     const resolved = await resolveWithResolutionCache(opts.projectRoot, {
       forceRefresh: Boolean(opts.forceRefresh),
       resolveOptions: resolveOpts,
+      diagnosticOperation: 'get_class_source',
     });
     if (!resolved.ok) {
       return {
@@ -63,6 +87,7 @@ export async function getClassSource(
           message: resolved.message,
           stderr: resolved.stderr,
         },
+        ...(resolved.diagnosticId !== undefined ? { diagnosticId: resolved.diagnosticId, hint: resolved.hint } : {}),
       };
     }
 
@@ -88,6 +113,7 @@ export async function getClassSource(
           code: 'SOURCES_RESOLVE_FAILED' as const,
           stderr: result.stderr,
           coordinates,
+          gradle: result.gradle,
         });
       }
       const path = result.sourcesJarPath;
@@ -95,8 +121,9 @@ export async function getClassSource(
       return path;
     };
 
+    let extracted: ClassSourceLookupResult;
     try {
-      return await extractExternalClassSource(resolved.output, {
+      extracted = await extractExternalClassSource(resolved.output, {
         className,
         modulePath: opts.modulePath,
         configuration: opts.configuration,
@@ -105,8 +132,23 @@ export async function getClassSource(
         onBeforeDecompile: progressEnabled ? () => reporter.update('Decompiling with CFR…') : undefined,
       });
     } catch (e) {
-      const err = e as { code?: string; message?: string; stderr?: string; coordinates?: ArtifactCoordinates };
+      const err = e as {
+        code?: string;
+        message?: string;
+        stderr?: string;
+        coordinates?: ArtifactCoordinates;
+        gradle?: GradleProcessCapture;
+      };
       if (err.code === 'SOURCES_RESOLVE_FAILED') {
+        const diag = recordFailureDiagnostic({
+          operation: 'get_class_source',
+          publicCode: 'SOURCES_RESOLVE_FAILED',
+          message: err.message ?? 'Failed to resolve sources JAR',
+          projectRoot: opts.projectRoot,
+          buildSystem: 'gradle',
+          input: commonInput(opts, className),
+          subprocess: subprocessFromGradle(err.gradle),
+        });
         return {
           ok: false,
           error: {
@@ -115,10 +157,36 @@ export async function getClassSource(
             stderr: err.stderr,
             coordinates: err.coordinates!,
           },
+          ...diag,
         };
       }
       throw e;
     }
+
+    if (!extracted.ok) {
+      const e = extracted.error;
+      const subprocess =
+        e.code === 'DECOMPILE_FAILED' && e.command && e.command.length > 0
+          ? {
+              command: e.command,
+              exitCode: null as number | null,
+              stdout: '',
+              stderr: e.stderr ?? '',
+            }
+          : undefined;
+      const diag = recordFailureDiagnostic({
+        operation: 'get_class_source',
+        publicCode: e.code,
+        message: e.message,
+        projectRoot: opts.projectRoot,
+        buildSystem: 'gradle',
+        input: commonInput(opts, className),
+        subprocess,
+      });
+      return { ...extracted, ...diag };
+    }
+
+    return extracted;
   } finally {
     reporter.finalize();
   }

@@ -70,6 +70,8 @@ export type ClassSourceError =
       entryRelPath: string;
       coordinates: ArtifactCoordinates;
       stderr?: string;
+      /** CFR argv when a JVM process was started (README §6.3 diagnostics). */
+      command?: string[];
     }
   | { code: 'ZIP_READ_ERROR'; message: string; jarPath: string; entryRelPath?: string }
   | { code: 'RESOLUTION_FAILED'; message: string; stderr?: string }
@@ -97,7 +99,7 @@ export type ClassSourceLookupResult =
       className: string;
       provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
     }
-  | { ok: false; error: ClassSourceError };
+  | { ok: false; error: ClassSourceError; diagnosticId?: string; hint?: string };
 
 export function isExternalJarArtifact(a: ResolvedArtifact): boolean {
   return a.origin === 'external' && a.type === 'jar';

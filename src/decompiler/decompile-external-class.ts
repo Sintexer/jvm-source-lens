@@ -48,6 +48,7 @@ function failure(
   opts: DecompileExternalClassOptions,
   message: string,
   stderr?: string,
+  command?: string[],
 ): DecompileExternalClassError {
   return {
     ok: false,
@@ -59,6 +60,7 @@ function failure(
       entryRelPath: opts.entryRelPath,
       coordinates: opts.coordinates,
       stderr,
+      ...(command ? { command } : {}),
     },
   };
 }
@@ -103,7 +105,7 @@ export async function decompileExternalClass(
   });
 
   if (!cfr.ok) {
-    return failure(opts, cfr.message, cfr.stderr);
+    return failure(opts, cfr.message, cfr.stderr, cfr.command);
   }
 
   try {

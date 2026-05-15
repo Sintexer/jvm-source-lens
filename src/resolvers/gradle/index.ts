@@ -1,10 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { DependencyResolver, ResolutionResult, ResolveOptions } from '../base.js';
+import type { DependencyResolver, GradleProcessCapture, ResolutionResult, ResolveOptions } from '../base.js';
 import { validateResolutionOutput, parseResolutionJson } from '../resolution-output.js';
 import { runGradleTask, type GradleSpawnResult } from './spawn-gradle.js';
 
 export { resolveSourcesJar, type ResolveSourcesJarResult } from './resolve-sources-jar.js';
+
+function gradleCaptureFromSpawn(spawned: {
+  command: string[];
+  exitCode?: number | null;
+  stdout?: string;
+  stderr?: string;
+}): GradleProcessCapture {
+  return {
+    command: spawned.command,
+    exitCode: spawned.exitCode ?? null,
+    stdout: spawned.stdout ?? '',
+    stderr: spawned.stderr ?? '',
+  };
+}
 
 export class GradleResolver implements DependencyResolver {
   detect(projectRoot: string): boolean {
@@ -39,7 +53,12 @@ export class GradleResolver implements DependencyResolver {
     }
 
     if (!spawned.ok) {
-      return { ok: false, message: spawned.message, stderr: spawned.stderr };
+      return {
+        ok: false,
+        message: spawned.message,
+        stderr: spawned.stderr,
+        gradle: gradleCaptureFromSpawn(spawned),
+      };
     }
 
     let raw: unknown;
@@ -51,12 +70,18 @@ export class GradleResolver implements DependencyResolver {
         ok: false,
         message: `Could not parse Gradle JSON output: ${msg}`,
         stderr: spawned.stderr || undefined,
+        gradle: gradleCaptureFromSpawn({ ...spawned, exitCode: 0 }),
       };
     }
 
     const validated = validateResolutionOutput(raw);
     if (!validated.ok) {
-      return { ok: false, message: validated.message, stderr: spawned.stderr || undefined };
+      return {
+        ok: false,
+        message: validated.message,
+        stderr: spawned.stderr || undefined,
+        gradle: gradleCaptureFromSpawn({ ...spawned, exitCode: 0 }),
+      };
     }
 
     return { ok: true, output: validated.output };

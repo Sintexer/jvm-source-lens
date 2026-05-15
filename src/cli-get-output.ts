@@ -13,6 +13,11 @@ export function writeCliGetResult(result: CliGetResult, options?: CliGetOutputOp
   const quiet = options?.quiet ?? false;
   const json = options?.json ?? false;
 
+  const failureExtras =
+    !result.ok && result.diagnosticId !== undefined
+      ? { diagnosticId: result.diagnosticId, ...(result.hint !== undefined ? { hint: result.hint } : {}) }
+      : {};
+
   if (json) {
     if (result.ok) {
       console.log(
@@ -25,7 +30,7 @@ export function writeCliGetResult(result: CliGetResult, options?: CliGetOutputOp
       );
       return;
     }
-    console.log(JSON.stringify({ error: true, ...result.error }));
+    console.log(JSON.stringify({ error: true, ...result.error, ...failureExtras }));
     process.exitCode = 1;
     return;
   }
@@ -43,6 +48,6 @@ export function writeCliGetResult(result: CliGetResult, options?: CliGetOutputOp
     }
     return;
   }
-  console.error(JSON.stringify({ error: true, ...result.error }));
+  console.error(JSON.stringify({ error: true, ...result.error, ...failureExtras }));
   process.exitCode = 1;
 }

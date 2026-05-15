@@ -86,7 +86,7 @@ export type CfrDecompileOptions = {
 
 export type CfrDecompileResult =
   | { ok: true; source: string }
-  | { ok: false; message: string; stderr?: string };
+  | { ok: false; message: string; stderr?: string; command?: string[] };
 
 /**
  * Decompiles one class from a JAR via CFR (`java -jar cfr.jar <jar> <fqn> --silent true`).
@@ -120,6 +120,7 @@ export async function runCfrDecompile(opts: CfrDecompileOptions): Promise<CfrDec
     return {
       ok: false,
       message: `Failed to start Java for CFR: ${msg}. Set JAVA_HOME or ensure java is on PATH.`,
+      command: argv,
     };
   }
 
@@ -145,6 +146,7 @@ export async function runCfrDecompile(opts: CfrDecompileOptions): Promise<CfrDec
       ok: false,
       message: `CFR timed out after ${timeoutMs}ms`,
       stderr: stderr.text || undefined,
+      command: argv,
     };
   }
 
@@ -153,6 +155,7 @@ export async function runCfrDecompile(opts: CfrDecompileOptions): Promise<CfrDec
       ok: false,
       message: `CFR stdout exceeded ${maxOutputBytes} bytes`,
       stderr: stderr.text || undefined,
+      command: argv,
     };
   }
 
@@ -162,6 +165,7 @@ export async function runCfrDecompile(opts: CfrDecompileOptions): Promise<CfrDec
       ok: false,
       message: `CFR exited with code ${exitCode}`,
       stderr: stderr.text || undefined,
+      command: argv,
     };
   }
   if (source.length === 0) {
@@ -169,6 +173,7 @@ export async function runCfrDecompile(opts: CfrDecompileOptions): Promise<CfrDec
       ok: false,
       message: 'CFR produced no decompiled source',
       stderr: stderr.text || undefined,
+      command: argv,
     };
   }
 

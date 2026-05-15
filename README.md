@@ -187,7 +187,7 @@ src/
   public-api.ts             ← library entry (`package.json` `main` / `exports`)
   cli-get-output.ts         ← `get` stdout/stderr JSON formatting
   cli-progress.ts           ← phased stderr progress (CLI)
-  diagnostics/            ← planned: structured failure logs + record builder (§6.3)
+  diagnostics/            ← structured failure logs (`recordFailureDiagnostic`, rolling NDJSON, `jvmsrc diagnostics`; §6.3)
   decompiler/
     decompile-external-class.ts  ← cache + CFR orchestration
     spawn-cfr.ts                 ← `java -jar cfr.jar` subprocess
@@ -556,6 +556,8 @@ Gradle invocation is expensive (often ~5–10 seconds; less when the Gradle daem
 
 The top-level `decompiled/` directory under the same cache root is reserved for the shared decompile store (§6.2). A top-level `gc.json` is reserved for a future GC pass over stale project buckets.
 
+**Optional override:** **`JVMSRC_LOG_DIR`** (structured failure diagnostics, **§6.3**) uses the same absolute-path-only policy as **`JVMSRC_CACHE_ROOT`**.
+
 **Optional override:** if **`JVMSRC_CACHE_ROOT`** is set, it must be a **non-empty absolute** path; relative values are rejected with a structured error (they would depend on the process working directory). When valid, the tool uses that directory as the global cache root instead of the env-paths default (useful for tests and locked-down environments).
 
 **Durability:** bucket files (`resolution.json`, `resolution.hash`, `bucket-meta.json`) are each written via a **temporary file in the same directory followed by `rename`**, so concurrent readers are less likely to observe a torn combination than with in-place overwrites.
@@ -584,7 +586,7 @@ This means sequential agent calls for classes within the same dependency pay the
 - **Shared cache:** The `decompiled/` tree is machine-local and shared across projects. Another user or process with access to the same cache directory could read cached `.java` files; keep `JVMSRC_CACHE_ROOT` private on multi-user hosts.
 - **Agent trust:** Decompiled stdout is structurally useful but not authoritative (see §7.1 `sourceAvailable: false`). Agents must not treat decompiled text as ground truth for security-sensitive decisions (secrets, auth checks, crypto).
 
-### 6.3 Structured failure diagnostics (planned)
+### 6.3 Structured failure diagnostics
 
 **Problem.** Callers (agents, scripts) need concise, stable failures (public **`code`** values in §7). Operators debugging Gradle/CFR integration issues need subprocess output and environment context without filling the agent context window or manually reproducing every failure.
 
@@ -729,7 +731,7 @@ Once a **`ResolutionOutput`** is loaded (from cache or a fresh Gradle run), the 
 
 **Stable `code` values** on failures: **`RESOLUTION_FAILED`**, **`SOURCES_RESOLVE_FAILED`**, **`INVALID_FQN`**, **`MODULE_NOT_FOUND`**, **`CONFIGURATION_NOT_FOUND`**, **`ZIP_READ_ERROR`**, **`CLASS_NOT_FOUND`**, **`DECOMPILE_FAILED`**, **`SIGNATURE_EXTRACT_FAILED`**. The last also covers **javap** failures for **`get_method_signature`** (per-method) and **`get_class_structure`** (whole-class disassembly; `methodName` may be omitted in the error object).
 
-**Diagnostics (planned, §6.3):** public **`code`** values remain the **stable API contract** for callers. Diagnostic records add **`severity`** and granular **`errorCode`** (e.g. **`GRADLE_EXIT_NONZERO`**, **`JAVA_NOT_FOUND`**) for operators and bug reports; implementations map failures to both layers without renaming published **`code`** values.
+**Diagnostics (§6.3):** public **`code`** values remain the **stable API contract** for callers. Diagnostic records add **`severity`** and granular **`errorCode`** (e.g. **`GRADLE_EXIT_NONZERO`**, **`JAVA_NOT_FOUND`**) for operators and bug reports; implementations map failures to both layers without renaming published **`code`** values.
 
 The tool **never falls back to scanning the global cache** without a resolved tree. If Gradle resolution fails, the tool reports the failure — it does not attempt to guess from `~/.gradle/caches`.
 
@@ -820,7 +822,7 @@ Example success metadata (stderr, default mode):
 
 **`--json`:** write **one compact JSON line** to **stdout** for both success and failure; **nothing** to stderr. **Success:** `source`, `sourceAvailable`, `className`, `provenance` (same shape as MCP **`get_class_source`**, §8.2). **Failure:** `{ "error": true, "code": "…", … }` using the same stable **`code`** values as default mode (§7). **Invalid `--project`:** stdout only: `{ "error": true, "code": "INVALID_PROJECT_ROOT", "message": "…" }` (CLI validation; not an extractor error). Non-zero exit on failure. With **`--json`**, **`--quiet` / `-q`** has no extra effect (stdout is already a single structured object).
 
-**Failure diagnostics (planned, §6.3):** when a diagnostic file is written for a failure, CLI error JSON (**stderr** one-liner or **`--json`** stdout object) **may** include **`diagnosticId`** and **`hint`** pointing to **`jvmsrc diagnostics show <id>`** — same conceptual bridge as MCP (**§8.2**).
+**Failure diagnostics:** when a diagnostic file is written for a failure, CLI error JSON (**stderr** one-liner or **`--json`** stdout object) **may** include **`diagnosticId`** and **`hint`** pointing to **`jvmsrc diagnostics show <id>`** — same conceptual bridge as MCP (**§8.2**).
 
 The **MCP** server tool **`get_class_source`** (§8.2) exposes the same facts in a single structured result (`source`, `sourceAvailable`, provenance fields) — no stdout/stderr split — which is better for IDE agents.
 
@@ -830,7 +832,7 @@ A **`jvmsrc config`** command inspects the environment (build system markers, `J
 
 Goals: remove hand-edited JSON mistakes (`command`, `args`, `env`) and improve first-run success rate. Low implementation cost, high UX leverage (same idea as dedicated MCP config-generator utilities in other ecosystems).
 
-#### 8.1.3 `diagnostics` subcommand (planned)
+#### 8.1.3 `diagnostics` subcommand
 
 Developer-facing commands over structured logs (**§6.3**) — list recent failures, print one record, filter by severity, prune old files — without **`grep`** or manual NDJSON parsing.
 
@@ -878,7 +880,7 @@ Primary intent for **`get_method_signature`** / **`get_class_structure`**: **IDE
 | `list_modules` | **Implemented** | Lists Gradle **submodules** with **`path`** and **per-configuration** dependency counts (**`artifactCount`**, **`directArtifactCount`**) without returning full **`ResolutionOutput`**. Tool arguments: **`projectRoot`**, optional **`forceRefresh`** (same as **`resolve_dependencies`** / §6.1). **Success:** **`isError: false`**, **`ok: true`**, **`schemaVersion`**, **`resolvedAt`**, **`projectRoot`**, **`buildSystem`**, **`modules[]`** (each with **`name`**, **`path`**, **`configurations[]`** with **`name`**, **`scope`**, counts), **`resolutionWarningCount`** (length of Gradle partial **`errors[]`** — call **`resolve_dependencies`** for full **`errors`** and artifact lists). **Failures:** same structured envelope as **`resolve_dependencies`** (**`code: RESOLUTION_FAILED`**). |
 | `resolve_dependencies` | **Implemented** | Returns validated **`ResolutionOutput`** (§5.5.2) for the whole project (all `modules[]`). Tool arguments: **`projectRoot`**, optional **`forceRefresh`** (same semantics as CLI `resolve` / §6.1). **Success:** **`isError: false`**, **`ok: true`**, **`resolution`** (full document). **Failures:** **`isError: true`** with **`errorCategory`**, **`isRetryable`**, **`description`**, **`code: RESOLUTION_FAILED`**, and domain **`error`**. Use before batch **`get_class_source`** calls to warm the resolution cache without per-class Gradle runs. |
 
-**Failure diagnostics (planned, §6.3):** tool error payloads **may** include **`diagnosticId`** and **`hint`** (e.g. **`jvmsrc diagnostics show …`**) when a full diagnostic file is written, so agents can surface an opaque id to the developer without embedding subprocess output.
+**Failure diagnostics:** tool error payloads **may** include **`diagnosticId`** and **`hint`** (e.g. **`jvmsrc diagnostics show …`**) when a full diagnostic file is written, so agents can surface an opaque id to the developer without embedding subprocess output.
 
 **MCP error categories (`get_class_source`, **`get_class_structure`**, **`get_method_signature`**, **`get_method_signature_bytecode`**, **`resolve_dependencies`**, **`list_modules`**):** Tool failures set **`isError: true`** and include **`errorCategory`**, **`isRetryable`**, and a **`description`** explaining what failed and why. **`transient`** — Gradle/network/timeouts, CFR timeouts, **javap** timeouts / spawn issues; retry after a delay. **`validation`** — bad `projectRoot`, FQN, **`methodName`**, `modulePath`, or `configuration`; fix inputs. **`business`** — e.g. CFR cannot decompile, sources permanently unavailable, **javap** exited non-zero without transient hints; do not retry the same request. **`permission`** — repository auth denied; escalate credentials. A class missing after a **successful** classpath scan is **`found: false`** with **`isError: false`** (not confused with “could not reach Gradle”). For **`get_method_signature`**, when the class is found but **`methodFound: false`**, the tool still returns **`isError: false`** — adjust **`methodName`** (constructors **`<init>`**) or inspect declarations via **`get_class_source`** or **`get_class_structure`**.
 
@@ -1115,7 +1117,7 @@ The following represents the minimum build that validates the architecture end-t
 | Medium | Enrich `get_class_structure` (optional `include`: hierarchy, fields, annotations) — **implemented** (§8.2); parameter-level annotations deferred | §12 |
 | Medium | `forceRefresh` on `resolve_dependencies` + `--force-refresh` on CLI | §6.1, §8.1 — **done** for MCP and CLI |
 | Medium | **`search_classes`** / class search index (capability discovery; index-backed) | §12 |
-| Medium | Structured failure diagnostics + **`jvmsrc diagnostics`** CLI (planned) | §6.3, §8.1.3 |
+| Medium | Structured failure diagnostics + **`jvmsrc diagnostics`** CLI | §6.3, §8.1.3 |
 | Low | `jvmsrc config` MCP snippet generator | §8.1.1 |
 | Low | `JVMSRC_CFR_PATH` CFR JAR override | §9.3 |
 | Future | `get_implementors` (inverted index; post–v2) | §12 |
@@ -1206,5 +1208,5 @@ parse class (once, cached)
 
 ### 12.4 Failure diagnostics (operator UX)
 
-**Planned:** structured diagnostic logging (**§6.3**) plus **`jvmsrc diagnostics`** (**§8.1.3**) so operators can fix Gradle/CFR/environment issues from retained subprocess tails and context without burdening agents. See **[ROADMAP.md](ROADMAP.md)** P1 — failure diagnostics.
+**Implemented:** structured diagnostic logging (**§6.3**) plus **`jvmsrc diagnostics`** (**§8.1.3**) so operators can inspect Gradle/CFR/environment issues from retained subprocess tails and context without burdening agents. See **[ROADMAP.md](ROADMAP.md)** P1 — failure diagnostics.
 

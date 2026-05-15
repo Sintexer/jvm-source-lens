@@ -2,6 +2,8 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
+import { registerDiagnosticsCli } from './diagnostics/cli-diagnostics-command.js';
+import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import { writeCliGetResult } from './cli-get-output.js';
 import { createCliProgressReporter } from './cli-progress.js';
 import { getClassSource } from './get-class-source.js';
@@ -10,7 +12,7 @@ import { resolveWithResolutionCache } from './resolve-with-cache.js';
 
 /** `jvmsrc com.example.Foo` → same as `jvmsrc get com.example.Foo` */
 function injectImplicitGetSubcommand(): void {
-  const subcommands = new Set(['get', 'mcp', 'config', 'resolve']);
+  const subcommands = new Set(['get', 'mcp', 'config', 'resolve', 'diagnostics']);
   const raw = process.argv.slice(2);
   if (raw.length === 0) {
     return;
@@ -70,12 +72,23 @@ program
       const verboseGradle = Boolean(options.verbose);
       const root = resolveProjectRoot(options.project);
       if (!root.ok) {
+        const d = recordFailureDiagnostic({
+          operation: 'cli_get',
+          publicCode: 'INVALID_PROJECT_ROOT',
+          message: root.message,
+          projectRoot: options.project,
+          buildSystem: null,
+          input: { className },
+        });
+        const extra =
+          d.diagnosticId !== undefined ? { diagnosticId: d.diagnosticId, ...(d.hint ? { hint: d.hint } : {}) } : {};
         if (json) {
           console.log(
             JSON.stringify({
               error: true,
               code: 'INVALID_PROJECT_ROOT',
               message: root.message,
+              ...extra,
             }),
           );
         } else {
@@ -116,6 +129,7 @@ program
     try {
       const result = await resolveWithResolutionCache(root.path, {
         forceRefresh: Boolean(options.forceRefresh),
+        diagnosticOperation: 'cli_resolve',
         resolveOptions: verbose
           ? { inheritGradleStderr: true }
           : {
@@ -128,6 +142,9 @@ program
         if (result.stderr) {
           console.error(result.stderr);
         }
+        if (result.hint) {
+          console.error(result.hint);
+        }
         process.exitCode = 1;
         return;
       }
@@ -136,6 +153,8 @@ program
       progress.finalize();
     }
   });
+
+registerDiagnosticsCli(program);
 
 program
   .command('mcp')

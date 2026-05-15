@@ -24,12 +24,14 @@ import type {
   JavapFieldInfo,
   JavapMethodWithName,
 } from './class-structure/types.js';
-import type { ArtifactCoordinates, ClassSourceLookupOptions } from './extractor/class-source-types.js';
+import type { ArtifactCoordinates, ClassSourceError, ClassSourceLookupOptions } from './extractor/class-source-types.js';
 import { findClasspathOwningClass } from './extractor/find-external-class-jar.js';
 import {
   tryReadJavaSourceFromClasspath,
   type TryReadJavaSourceFromClasspathResult,
 } from './extractor/read-java-source-from-classpath.js';
+import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
+import type { GradleProcessCapture } from './resolvers/base.js';
 import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 
@@ -54,6 +56,47 @@ function wantsSection(include: ClassStructureIncludeSection[] | undefined, secti
 
 function coordinatesKey(c: ArtifactCoordinates): string {
   return `${c.group}:${c.name}:${c.version ?? ''}`;
+}
+
+function subprocessFromGradle(g: GradleProcessCapture | undefined) {
+  if (!g) {
+    return undefined;
+  }
+  return {
+    command: g.command,
+    exitCode: g.exitCode,
+    stdout: g.stdout,
+    stderr: g.stderr,
+  };
+}
+
+function classStructureFail(
+  opts: GetClassStructureOptions,
+  className: string,
+  error: ClassSourceError,
+  subprocess?: {
+    command: string[];
+    exitCode: number | null;
+    stdout: string;
+    stderr: string;
+  },
+): GetClassStructureResult {
+  const d = recordFailureDiagnostic({
+    operation: 'get_class_structure',
+    publicCode: error.code,
+    message: error.message,
+    projectRoot: opts.projectRoot,
+    buildSystem: 'gradle',
+    input: {
+      className,
+      modulePath: opts.modulePath,
+      configuration: opts.configuration,
+      includeTest: opts.includeTest,
+      forceRefresh: opts.forceRefresh,
+    },
+    subprocess,
+  });
+  return { ok: false, error, ...d };
 }
 
 function parsedHeaderToJavapHeader(h: ParsedJavaTypeHeader, simple: string): JavapClassHeader {
@@ -218,11 +261,13 @@ export async function getClassStructure(
 ): Promise<GetClassStructureResult> {
   const resolved = await resolveWithResolutionCache(opts.projectRoot, {
     forceRefresh: Boolean(opts.forceRefresh),
+    diagnosticOperation: 'get_class_structure',
   });
   if (!resolved.ok) {
     return {
       ok: false,
       error: { code: 'RESOLUTION_FAILED', message: resolved.message, stderr: resolved.stderr },
+      ...(resolved.diagnosticId !== undefined ? { diagnosticId: resolved.diagnosticId, hint: resolved.hint } : {}),
     };
   }
 
@@ -245,6 +290,7 @@ export async function getClassStructure(
         code: 'SOURCES_RESOLVE_FAILED' as const,
         stderr: result.stderr,
         coordinates,
+        gradle: result.gradle,
       });
     }
     const path = result.sourcesJarPath;
@@ -259,23 +305,31 @@ export async function getClassStructure(
       resolveSourcesJar: resolveSourcesJarFn,
     });
   } catch (e) {
-    const err = e as { code?: string; message?: string; stderr?: string; coordinates?: ArtifactCoordinates };
+    const err = e as {
+      code?: string;
+      message?: string;
+      stderr?: string;
+      coordinates?: ArtifactCoordinates;
+      gradle?: GradleProcessCapture;
+    };
     if (err.code === 'SOURCES_RESOLVE_FAILED') {
-      return {
-        ok: false,
-        error: {
+      return classStructureFail(
+        opts,
+        className,
+        {
           code: 'SOURCES_RESOLVE_FAILED',
           message: err.message ?? 'Failed to resolve sources JAR',
           stderr: err.stderr,
           coordinates: err.coordinates!,
         },
-      };
+        subprocessFromGradle(err.gradle),
+      );
     }
     throw e;
   }
 
   if (!sourceRead.ok) {
-    return { ok: false, error: sourceRead.error };
+    return classStructureFail(opts, className, sourceRead.error);
   }
 
   const ownerHit = findClasspathOwningClass(resolved.output, {
@@ -286,7 +340,7 @@ export async function getClassStructure(
   });
 
   if (!ownerHit.ok && !sourceRead.hit) {
-    return ownerHit;
+    return classStructureFail(opts, className, ownerHit.error);
   }
 
   let parsedPrimary: ParsedJavaTypeMetadata | null = null;
@@ -313,16 +367,13 @@ export async function getClassStructure(
   }
 
   if (!primaryHeader) {
-    return {
-      ok: false,
-      error: {
-        code: 'SIGNATURE_EXTRACT_FAILED',
-        message:
-          'Could not obtain class header from Java source parse or javap — ensure the type is valid bytecode and/or readable source on the classpath.',
-        className,
-        jarPath: ownerHit.ok ? ownerHit.hit.classpath : '',
-      },
-    };
+    return classStructureFail(opts, className, {
+      code: 'SIGNATURE_EXTRACT_FAILED',
+      message:
+        'Could not obtain class header from Java source parse or javap — ensure the type is valid bytecode and/or readable source on the classpath.',
+      className,
+      jarPath: ownerHit.ok ? ownerHit.hit.classpath : '',
+    });
   }
 
   const sourceAvailable = sourceRead.hit === true;

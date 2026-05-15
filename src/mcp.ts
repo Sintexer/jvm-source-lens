@@ -513,6 +513,7 @@ export async function startMcpServer(): Promise<void> {
       try {
         const result = await resolveWithResolutionCache(root.path, {
           forceRefresh: Boolean(args.forceRefresh),
+          diagnosticOperation: 'resolve_dependencies',
         });
         return mcpToolResultFromResolutionResult(result, args.projectRoot);
       } catch (e) {
@@ -545,6 +546,7 @@ export async function startMcpServer(): Promise<void> {
       try {
         const result = await resolveWithResolutionCache(root.path, {
           forceRefresh: Boolean(args.forceRefresh),
+          diagnosticOperation: 'list_modules',
         });
         return mcpToolResultFromListModules(result, args.projectRoot);
       } catch (e) {

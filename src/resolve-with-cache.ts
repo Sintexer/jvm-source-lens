@@ -1,11 +1,12 @@
 import type { DependencyResolver, ResolutionResult, ResolveOptions } from './resolvers/base.js';
-import { detectResolver } from './resolvers/index.js';
+import { detectResolver, UnsupportedProjectError } from './resolvers/index.js';
 import {
   computeBuildInputsDigest,
   readCachedResolution,
   writeCachedResolution,
 } from './cache/index.js';
 import { canonicalProjectRoot } from './cache/paths.js';
+import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 
 export type ResolveWithResolutionCacheOptions = {
   forceRefresh: boolean;
@@ -13,6 +14,8 @@ export type ResolveWithResolutionCacheOptions = {
   resolver?: DependencyResolver;
   /** Passed through to `resolver.resolve` (Gradle hooks / verbose stderr). */
   resolveOptions?: ResolveOptions;
+  /** Used in structured diagnostics (default `resolve_dependencies`). */
+  diagnosticOperation?: string;
 };
 
 const defaultOptions: ResolveWithResolutionCacheOptions = { forceRefresh: false };
@@ -28,7 +31,27 @@ export async function resolveWithResolutionCache(
 ): Promise<ResolutionResult> {
   const forceRefresh = options?.forceRefresh ?? defaultOptions.forceRefresh;
   const canonical = canonicalProjectRoot(projectRoot);
-  const resolver = options?.resolver ?? detectResolver(canonical);
+  const diagnosticOp = options?.diagnosticOperation ?? 'resolve_dependencies';
+
+  let resolver: DependencyResolver;
+  try {
+    resolver = options?.resolver ?? detectResolver(canonical);
+  } catch (e) {
+    const message =
+      e instanceof UnsupportedProjectError
+        ? e.message
+        : e instanceof Error
+          ? e.message
+          : String(e);
+    const diag = recordFailureDiagnostic({
+      operation: diagnosticOp,
+      publicCode: 'RESOLUTION_FAILED',
+      message,
+      projectRoot: canonical,
+      input: { forceRefresh },
+    });
+    return { ok: false, message, ...diag };
+  }
 
   if (!forceRefresh) {
     const cached = readCachedResolution(canonical);
@@ -43,8 +66,40 @@ export async function resolveWithResolutionCache(
     const digest = computeBuildInputsDigest(canonical);
     const written = writeCachedResolution(canonical, result.output, digest);
     if (!written.ok) {
-      return { ok: false, message: written.message };
+      const diag = recordFailureDiagnostic({
+        operation: diagnosticOp,
+        publicCode: 'CACHE_WRITE_FAILED',
+        message: written.message,
+        projectRoot: canonical,
+        buildSystem: 'gradle',
+        input: { forceRefresh },
+      });
+      return { ok: false, message: written.message, ...diag };
     }
+  } else {
+    const diag = recordFailureDiagnostic({
+      operation: diagnosticOp,
+      publicCode: 'RESOLUTION_FAILED',
+      message: result.message,
+      projectRoot: canonical,
+      buildSystem: 'gradle',
+      input: { forceRefresh },
+      subprocess: result.gradle
+        ? {
+            command: result.gradle.command,
+            exitCode: result.gradle.exitCode,
+            stdout: result.gradle.stdout,
+            stderr: result.gradle.stderr,
+          }
+        : undefined,
+    });
+    return {
+      ok: false,
+      message: result.message,
+      stderr: result.stderr,
+      gradle: result.gradle,
+      ...diag,
+    };
   }
 
   return result;

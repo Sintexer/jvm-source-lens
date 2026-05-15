@@ -14,6 +14,8 @@ import type {
 } from './extractor/class-source-types.js';
 import { findClasspathOwningClass } from './extractor/find-external-class-jar.js';
 import { tryReadJavaSourceFromClasspath } from './extractor/read-java-source-from-classpath.js';
+import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
+import type { GradleProcessCapture } from './resolvers/base.js';
 import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 
@@ -36,7 +38,52 @@ export type GetMethodSignatureSuccess = {
   provenance: MethodSignatureProvenance;
 };
 
-export type GetMethodSignatureResult = GetMethodSignatureSuccess | { ok: false; error: ClassSourceError };
+export type GetMethodSignatureResult =
+  | GetMethodSignatureSuccess
+  | { ok: false; error: ClassSourceError; diagnosticId?: string; hint?: string };
+
+export function methodSignatureFail(
+  opts: GetMethodSignatureOptions,
+  className: string,
+  methodName: string,
+  error: ClassSourceError,
+  subprocess?: {
+    command: string[];
+    exitCode: number | null;
+    stdout: string;
+    stderr: string;
+  },
+): GetMethodSignatureResult {
+  const d = recordFailureDiagnostic({
+    operation: 'get_method_signature',
+    publicCode: error.code,
+    message: error.message,
+    projectRoot: opts.projectRoot,
+    buildSystem: 'gradle',
+    input: {
+      className,
+      methodName,
+      modulePath: opts.modulePath,
+      configuration: opts.configuration,
+      includeTest: opts.includeTest,
+      forceRefresh: opts.forceRefresh,
+    },
+    subprocess,
+  });
+  return { ok: false, error, ...d };
+}
+
+function subprocessFromGradle(g: GradleProcessCapture | undefined) {
+  if (!g) {
+    return undefined;
+  }
+  return {
+    command: g.command,
+    exitCode: g.exitCode,
+    stdout: g.stdout,
+    stderr: g.stderr,
+  };
+}
 
 function coordinatesKey(c: ArtifactCoordinates): string {
   return `${c.group}:${c.name}:${c.version ?? ''}`;
@@ -87,14 +134,15 @@ export async function getMethodSignatures(
 ): Promise<GetMethodSignatureResult> {
   const mn = methodName.trim();
   if (mn.length === 0) {
-    return {
-      ok: false,
-      error: { code: 'INVALID_FQN', message: 'methodName must be non-empty (use <init> for constructors).' },
-    };
+    return methodSignatureFail(opts, className, methodName, {
+      code: 'INVALID_FQN',
+      message: 'methodName must be non-empty (use <init> for constructors).',
+    });
   }
 
   const resolved = await resolveWithResolutionCache(opts.projectRoot, {
     forceRefresh: Boolean(opts.forceRefresh),
+    diagnosticOperation: 'get_method_signature',
   });
   if (!resolved.ok) {
     return {
@@ -104,6 +152,7 @@ export async function getMethodSignatures(
         message: resolved.message,
         stderr: resolved.stderr,
       },
+      ...(resolved.diagnosticId !== undefined ? { diagnosticId: resolved.diagnosticId, hint: resolved.hint } : {}),
     };
   }
 
@@ -126,6 +175,7 @@ export async function getMethodSignatures(
         code: 'SOURCES_RESOLVE_FAILED' as const,
         stderr: result.stderr,
         coordinates,
+        gradle: result.gradle,
       });
     }
     const path = result.sourcesJarPath;
@@ -140,23 +190,32 @@ export async function getMethodSignatures(
       resolveSourcesJar: resolveSourcesJarFn,
     });
   } catch (e) {
-    const err = e as { code?: string; message?: string; stderr?: string; coordinates?: ArtifactCoordinates };
+    const err = e as {
+      code?: string;
+      message?: string;
+      stderr?: string;
+      coordinates?: ArtifactCoordinates;
+      gradle?: GradleProcessCapture;
+    };
     if (err.code === 'SOURCES_RESOLVE_FAILED') {
-      return {
-        ok: false,
-        error: {
+      return methodSignatureFail(
+        opts,
+        className,
+        mn,
+        {
           code: 'SOURCES_RESOLVE_FAILED',
           message: err.message ?? 'Failed to resolve sources JAR',
           stderr: err.stderr,
           coordinates: err.coordinates!,
         },
-      };
+        subprocessFromGradle(err.gradle),
+      );
     }
     throw e;
   }
 
   if (!sourceRead.ok) {
-    return { ok: false, error: sourceRead.error };
+    return methodSignatureFail(opts, className, mn, sourceRead.error);
   }
 
   if (sourceRead.hit) {
@@ -184,7 +243,7 @@ export async function getMethodSignatures(
     includeTest: opts.includeTest,
   });
   if (!ownerHit.ok) {
-    return ownerHit;
+    return methodSignatureFail(opts, className, mn, ownerHit.error);
   }
 
   const { hit } = ownerHit;
@@ -211,7 +270,7 @@ export async function getMethodSignatures(
     methodName: mn,
   });
   if (!javap.ok) {
-    return { ok: false, error: javap.error };
+    return methodSignatureFail(opts, className, mn, javap.error);
   }
 
   const { overloads } = javap;

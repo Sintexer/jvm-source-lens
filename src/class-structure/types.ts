@@ -146,4 +146,6 @@ export type GetClassStructureSuccess = {
   classAnnotations?: ClassStructureDeclaredAnnotation[];
 };
 
-export type GetClassStructureResult = GetClassStructureSuccess | { ok: false; error: ClassSourceError };
+export type GetClassStructureResult =
+  | GetClassStructureSuccess
+  | { ok: false; error: ClassSourceError; diagnosticId?: string; hint?: string };

@@ -1,10 +1,23 @@
 import type { ArtifactCoordinates } from '../../extractor/class-source-types.js';
+import type { GradleProcessCapture } from '../base.js';
 import { parseSourcesJarJson } from './sources-jar-output.js';
 import { runGradleTask, type GradleSpawnResult } from './spawn-gradle.js';
 
 export type ResolveSourcesJarResult =
   | { ok: true; sourcesJarPath: string | null }
-  | { ok: false; message: string; stderr?: string };
+  | { ok: false; message: string; stderr?: string; gradle?: GradleProcessCapture };
+
+function gradleCaptureFromSpawn(s: GradleSpawnResult): GradleProcessCapture {
+  if (s.ok) {
+    return { command: s.command, exitCode: 0, stdout: s.stdout, stderr: s.stderr };
+  }
+  return {
+    command: s.command,
+    exitCode: s.exitCode,
+    stdout: s.stdout ?? '',
+    stderr: s.stderr ?? '',
+  };
+}
 
 export type ResolveSourcesJarGradleOptions = {
   inheritStderr?: boolean;
@@ -44,12 +57,22 @@ export async function resolveSourcesJar(
   }
 
   if (!spawned.ok) {
-    return { ok: false, message: spawned.message, stderr: spawned.stderr };
+    return {
+      ok: false,
+      message: spawned.message,
+      stderr: spawned.stderr,
+      gradle: gradleCaptureFromSpawn(spawned),
+    };
   }
 
   const parsed = parseSourcesJarJson(spawned.stdout);
   if (!parsed.ok) {
-    return { ok: false, message: parsed.message, stderr: spawned.stderr || undefined };
+    return {
+      ok: false,
+      message: parsed.message,
+      stderr: spawned.stderr || undefined,
+      gradle: gradleCaptureFromSpawn(spawned),
+    };
   }
 
   return { ok: true, sourcesJarPath: parsed.output.sourcesJarPath };

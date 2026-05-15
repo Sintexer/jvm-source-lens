@@ -1,10 +1,13 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { ClassSourceError } from './extractor/class-source-types.js';
 import type {
+  ClassSourceError,
+  ClassSourceLookupResult,
   DecompiledProvenance,
   InterprojectProvenance,
   SourcesJarProvenance,
 } from './extractor/class-source-types.js';
+import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
+import { FailureSeverity } from './diagnostics/failure-severity.js';
 import type { ResolutionResult } from './resolvers/base.js';
 import type { ResolutionOutput } from './resolvers/resolution-output.js';
 import type { GetMethodSignatureResult } from './get-method-signatures.js';
@@ -48,6 +51,8 @@ export type McpClassSourceFailurePayload = {
   errorCategory: McpErrorCategory;
   isRetryable: boolean;
   description: string;
+  diagnosticId?: string;
+  hint?: string;
 };
 
 export type McpClassSourceToolPayload =
@@ -176,18 +181,7 @@ export type McpClassStructureToolPayload =
 
 export type MethodSignatureQueryContext = ClassSourceQueryContext & { methodName: string };
 
-export function mcpToolResultFromClassSource(
-  result:
-    | {
-        ok: true;
-        source: string;
-        sourceAvailable: boolean;
-        className: string;
-        provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
-      }
-    | { ok: false; error: ClassSourceError },
-  query: ClassSourceQueryContext,
-): CallToolResult {
+export function mcpToolResultFromClassSource(result: ClassSourceLookupResult, query: ClassSourceQueryContext): CallToolResult {
   if (result.ok) {
     const payload: McpClassSourceSuccessPayload = {
       ok: true,
@@ -209,27 +203,39 @@ export function mcpToolResultFromClassSource(
     return mcpNotFoundResult(result.error, query);
   }
 
-  return mcpFailureResult(result.error, query);
+  return mcpFailureResult(result.error, query, pickDiag(result));
 }
 
 export function mcpToolResultFromProjectRootError(message: string, projectRoot: string): CallToolResult {
+  const diag = recordFailureDiagnostic({
+    operation: 'mcp_tool',
+    publicCode: 'INVALID_PROJECT_ROOT',
+    message,
+    projectRoot,
+    buildSystem: null,
+    input: {},
+  });
   const error: ClassSourceError = { code: 'RESOLUTION_FAILED', message };
   const envelope = classifyClassSourceError(error, { projectRoot });
-  return buildMcpErrorCallResult(envelope.summary, envelope.payload);
+  const payload: McpClassSourceFailurePayload = { ...envelope.payload, ...diag };
+  return buildMcpErrorCallResult(envelope.summary, payload);
 }
 
 function mcpToolResultFromResolutionFailure(
-  message: string,
-  stderr: string | undefined,
+  failed: Extract<ResolutionResult, { ok: false }>,
   projectRoot: string,
 ): CallToolResult {
   const error: ClassSourceError = {
     code: 'RESOLUTION_FAILED',
-    message,
-    stderr,
+    message: failed.message,
+    stderr: failed.stderr,
   };
   const envelope = classifyClassSourceError(error, { projectRoot });
-  return buildMcpErrorCallResult(envelope.summary, envelope.payload);
+  const payload: McpClassSourceFailurePayload = {
+    ...envelope.payload,
+    ...(failed.diagnosticId !== undefined ? { diagnosticId: failed.diagnosticId, hint: failed.hint } : {}),
+  };
+  return buildMcpErrorCallResult(envelope.summary, payload);
 }
 
 export function mcpToolResultFromResolutionResult(
@@ -251,7 +257,7 @@ export function mcpToolResultFromResolutionResult(
     };
   }
 
-  return mcpToolResultFromResolutionFailure(result.message, result.stderr, projectRoot);
+  return mcpToolResultFromResolutionFailure(result, projectRoot);
 }
 
 export function mcpToolResultFromListModules(
@@ -275,13 +281,26 @@ export function mcpToolResultFromListModules(
     };
   }
 
-  return mcpToolResultFromResolutionFailure(result.message, result.stderr, projectRoot);
+  return mcpToolResultFromResolutionFailure(result, projectRoot);
 }
 
 export function mcpToolResultFromUnexpectedError(e: unknown): CallToolResult {
   const message = e instanceof Error ? e.message : String(e);
+  const stack = e instanceof Error ? e.stack ?? null : null;
+  const diag = recordFailureDiagnostic({
+    operation: 'mcp_tool',
+    publicCode: 'RESOLUTION_FAILED',
+    message,
+    projectRoot: process.cwd(),
+    buildSystem: null,
+    input: {},
+    stack,
+    forceSeverity: FailureSeverity.INTERNAL,
+    forceErrorCode: 'UNEXPECTED_EXCEPTION',
+  });
   const envelope = classifyUnexpectedError(message);
-  return buildMcpErrorCallResult(envelope.summary, envelope.payload);
+  const payload: McpClassSourceFailurePayload = { ...envelope.payload, ...diag };
+  return buildMcpErrorCallResult(envelope.summary, payload);
 }
 
 export function mcpToolResultFromMethodSignature(
@@ -337,7 +356,7 @@ export function mcpToolResultFromMethodSignature(
     return mcpMethodSignatureNotFoundResult(result.error, query);
   }
 
-  return mcpFailureResult(result.error, query);
+  return mcpFailureResult(result.error, query, pickDiag(result));
 }
 
 function classStructureMethodsForMcpPayload(
@@ -392,7 +411,7 @@ export function mcpToolResultFromClassStructure(
     return mcpClassStructureNotFoundResult(result.error, query);
   }
 
-  return mcpFailureResult(result.error, query);
+  return mcpFailureResult(result.error, query, pickDiag(result));
 }
 
 function mcpClassStructureNotFoundResult(
@@ -500,9 +519,18 @@ function mcpNotFoundResult(error: Extract<ClassSourceError, { code: 'CLASS_NOT_F
   };
 }
 
-function mcpFailureResult(error: ClassSourceError, query: ClassSourceQueryContext): CallToolResult {
+function pickDiag(r: { diagnosticId?: string; hint?: string }): { diagnosticId: string; hint?: string } | undefined {
+  return r.diagnosticId !== undefined ? { diagnosticId: r.diagnosticId, hint: r.hint } : undefined;
+}
+
+function mcpFailureResult(
+  error: ClassSourceError,
+  query: ClassSourceQueryContext,
+  diagnostics?: { diagnosticId: string; hint?: string },
+): CallToolResult {
   const envelope = classifyClassSourceError(error, query);
-  return buildMcpErrorCallResult(envelope.summary, envelope.payload);
+  const payload: McpClassSourceFailurePayload = { ...envelope.payload, ...diagnostics };
+  return buildMcpErrorCallResult(envelope.summary, payload);
 }
 
 function mcpSuccessResult(summary: string, payload: McpClassSourceSuccessPayload): CallToolResult {

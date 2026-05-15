@@ -27,9 +27,23 @@ export interface ResolveOptions {
   onAfterGradle?: () => void;
 }
 
+export type GradleProcessCapture = {
+  command: string[];
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+};
+
 export type ResolutionResult =
   | { ok: true; output: ResolutionOutput }
-  | { ok: false; message: string; stderr?: string };
+  | {
+      ok: false;
+      message: string;
+      stderr?: string;
+      gradle?: GradleProcessCapture;
+      diagnosticId?: string;
+      hint?: string;
+    };
 
 export interface DependencyResolver {
   detect(projectRoot: string): boolean;
