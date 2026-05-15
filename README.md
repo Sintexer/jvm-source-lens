@@ -699,7 +699,8 @@ The same core logic is exposed as an MCP server, making the tool available to ID
 | Tool | Status | Description |
 |---|---|---|
 | `get_class_source` | **Implemented** | Returns full Java source (original or CFR-decompiled) for a **fully-qualified** class name. Tool arguments: **`className`**, **`projectRoot`**, optional **`modulePath`**, **`configuration`**, **`includeTest`**, **`forceRefresh`** (same semantics as CLI `get`). **Found:** **`isError: false`**, **`found: true`**, **`source`**, **`sourceAvailable`**, **`provenance`**. **Not on classpath (successful scan):** **`isError: false`**, **`found: false`**, **`querySucceeded: true`** — do not retry as a transient failure. **Failures:** **`isError: true`** with **`errorCategory`** (`transient` \| `validation` \| `business` \| `permission`), **`isRetryable`**, **`description`** (what/why + recovery), stable **`code`** (§7), and domain **`error`**. |
-| `get_class_structure` | Planned | Returns **structured metadata only** — kind, superclass, interfaces, type parameters, fields (type + visibility), method signatures (parameters, return type, generics), Javadoc when a sources JAR exists — **not** full file body. Lets agents answer “does this method take `String` or `CharSequence`?” without burning context on hundreds of lines; escalate to `get_class_source` when implementation is needed. |
+| `get_method_signature` | Planned | Returns **all overloads** of a method on a fully-qualified class: parameter types and names, return type, generic bounds, and **checked exceptions** (part of the contract). Same classpath options as `get_class_source`. Intended for the common case: agent saw a call site and needs the exact signature before reproducing it. Thin projection over the same `ClassStructure` pipeline as `get_class_structure` (see §12). |
+| `get_class_structure` | Planned | Returns **structured metadata only** — kind, hierarchy, type parameters, fields, method stubs, Javadoc when sources exist — **not** full file body. **MVP requirement:** include **inherited** methods (and relevant inherited API) so agents see the **effective** surface, not only declarations on the type. Further optional sections (full hierarchy walk, field/annotation detail) are specified in §12 (P1). Escalate to `get_class_source` when implementation text is needed. |
 | `list_modules` | Planned | Lists all submodules in a multimodule project with their dependency counts |
 | `resolve_dependencies` | **Implemented** | Returns validated **`ResolutionOutput`** (§5.5.2) for the whole project (all `modules[]`). Tool arguments: **`projectRoot`**, optional **`forceRefresh`** (same semantics as CLI `resolve` / §6.1). **Success:** **`isError: false`**, **`ok: true`**, **`resolution`** (full document). **Failures:** **`isError: true`** with **`errorCategory`**, **`isRetryable`**, **`description`**, **`code: RESOLUTION_FAILED`**, and domain **`error`**. Use before batch **`get_class_source`** calls to warm the resolution cache without per-class Gradle runs. |
 
@@ -866,19 +867,22 @@ The following represents the minimum build that validates the architecture end-t
 5. Source JAR extraction (preferred path)
 6. CFR decompilation with result caching (fallback path)
 7. CLI entry point with `--project` and `--module` flags
-8. MCP server entry point; **`get_class_source`** and **`resolve_dependencies`** are implemented (§8.2). Remaining tools **`get_class_structure`**, **`list_modules`** are specified but not yet registered.
+8. MCP server entry point; **`get_class_source`** and **`resolve_dependencies`** are implemented (§8.2). **MVP agent interface (§12):** register **`get_method_signature`** and **`get_class_structure`** (effective API including inherited methods). Remaining: **`list_modules`** and later enrichments per §12.
 9. Structured error responses (unsupported project, class not found, version conflict)
 
-**Near-term interface goals (specified in §7–§9; implement in priority order):**
+**Near-term interface goals** — priority order tracks **agent use-case frequency** (full breakdown in §12):
 
 | Priority | Item | Section |
 |---|---|---|
-| High | `get_class_structure` MCP tool (metadata without full source) | §8.2 |
+| High | `get_method_signature` MCP tool (overload + checked-exception contract) | §8.2, §12 |
+| High | `get_class_structure` MCP tool (metadata; **inherited** API on the type) | §8.2, §12 |
 | High | `sourceAvailable` on all source-bearing MCP/CLI/library responses | §7.1 |
+| Medium | Enrich `get_class_structure` (optional `include`: hierarchy, fields, annotations) | §12 |
 | Medium | `forceRefresh` on `resolve_dependencies` + `--force-refresh` on CLI | §6.1, §8.1 — **done** for MCP and CLI |
-| Medium | Class search by simple name / glob (disambiguation list) | §12 |
+| Medium | **`search_classes`** / class search index (capability discovery; index-backed) | §12 |
 | Low | `jvmsrc config` MCP snippet generator | §8.1.1 |
 | Low | `JVMSRC_CFR_PATH` CFR JAR override | §9.3 |
+| Future | `get_implementors` (inverted index; post–v2) | §12 |
 
 Maven resolver is explicitly out of scope for v1 but the architecture accommodates it as a drop-in addition.
 
@@ -886,9 +890,74 @@ Maven resolver is explicitly out of scope for v1 but the architecture accommodat
 
 ## 12. Future Work
 
+### 12.1 Resolver and toolchain
+
 | Item | Notes |
 |---|---|
 | `MavenResolver` | Parse `pom.xml`, invoke `mvn dependency:resolve`, same interface |
 | `BazelResolver` | Use Bazel query API |
 | Decompiler alternatives | Pluggable decompiler interface; allow Procyon or Fernflower as alternatives to CFR |
-| Class search by simple name or glob | Accept `MyClass`, `com.foo.*Bar`, or `*Repository` in addition to FQN; resolve against an index built from `ResolutionOutput` + classpath scan; return **ranked candidates** (FQN, module, artifact coordinates) for the agent to choose or disambiguate. Moves from “exact FQN or fail” to “best effort with disambiguation” for stack traces and partial snippets. Medium effort, medium impact on autonomy. |
+
+### 12.2 Agent use-case interface expansion
+
+Analysis of how agents use JVM dependencies in practice suggests several query patterns. **`get_class_source`** alone covers a minority of calls; the items below expand MCP coverage. Priorities follow **estimated operation frequency** (not a promise of exact percentages).
+
+#### P0 — include in MVP (see also §11)
+
+| Tool / requirement | Approx. use-case share | Notes |
+|---|---|---|
+| **`get_method_signature(className, methodName)`** | ~30% | Most common: reproduce a method call; need overloads with parameter types/names, return type, generics, **checked exceptions**. Low incremental cost: projection over one **`ClassStructure`** parse (shared with `get_class_structure`). |
+| **`get_class_structure`** | ~20% | Browse API when the class is known; **must include inherited methods** so the agent sees the **effective** surface, not only declarations. Already sketched in §8.2. |
+
+#### P1 — first release after MVP
+
+**Enrich `get_class_structure`** (~22% combined across three sub-cases) using **optional response sections** (e.g. `include: ['hierarchy', 'fields', 'annotations']`) so one parser backs one tool:
+
+- **Type hierarchy** (~10%) — superclass and interfaces, recursively; substitutability checks.
+- **Fields** (~8%) — names, types, visibility, `final`; for DTOs and construction.
+- **Annotations** (~4%) — by target (class, method, field, parameter) with values; Spring, JPA, Jackson.
+
+#### P2 — v2
+
+| Item | Approx. share | Notes |
+|---|---|---|
+| **`search_classes(query)`** | ~7% | Capability discovery when FQN is unknown. Needs a **full-text index** over class names, method names, and Javadoc where sources exist; built in the resolution/indexing phase. Architecturally separate from per-class parse — operates on the index. |
+| **Enum constants** | ~2% | No new tool: when `kind === "enum"`, **`get_class_structure`** should expose constants in the fields array with Javadoc where available. |
+
+#### P3 — future / post–v2
+
+| Item | Approx. share | Notes |
+|---|---|---|
+| **`get_implementors(interfaceName)`** | ~1% | Templates from existing implementations. Requires **inverted index** (interface → implementors) over resolved JARs; high cost, low frequency. Defer until simpler tools and adoption justify index maintenance. |
+
+#### Internal architecture note
+
+**P0/P1** tools are **projections** over a single **`ClassStructure`** object: parse once per class (per session), cache in memory, expose different slices:
+
+```text
+parse class (once, cached)
+  └── ClassStructure
+        ├── get_class_source       → full text (source JAR or CFR)
+        ├── get_class_structure    → metadata (+ optional sections in P1)
+        ├── get_method_signature   → one method slice (all overloads)
+        └── further projections
+```
+
+**`search_classes`** (P2) and **`get_implementors`** (P3) are **not** projections of one parse — they depend on **resolution-wide indexing** and dedicated index maintenance.
+
+#### Coverage summary (illustrative)
+
+| Tool | Role | Approx. ops covered | Target |
+|---|---|---|---|
+| `get_class_source` | Full source | ~15% | MVP (done) |
+| `get_method_signature` | Method contract | ~30% | MVP |
+| `get_class_structure` (enriched over releases) | Browse API, hierarchy, fields, annotations | ~42% | MVP + P1 |
+| `search_classes` | Discovery | ~7% | v2 |
+| `get_implementors` | Implementation templates | ~1% | Future |
+| **Total** | | **~88%** | |
+
+### 12.3 Class search and disambiguation (index)
+
+| Item | Notes |
+|---|---|
+| Class search by simple name or glob | Accept `MyClass`, `com.foo.*Bar`, or `*Repository` in addition to FQN; resolve against an index built from `ResolutionOutput` + classpath scan; return **ranked candidates** (FQN, module, artifact coordinates). Evolves toward **`search_classes`** (§12.2 P2) when full-text / Javadoc indexing lands. Medium effort, medium impact on autonomy. |

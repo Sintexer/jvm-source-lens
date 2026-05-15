@@ -20,25 +20,31 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] CFR decompilation fallback + `decompiled/` cache
 - [x] MCP server — `get_class_source`
 - [x] MCP server — `resolve_dependencies`
+- [ ] MCP server — `get_method_signature`
+- [ ] MCP server — `get_class_structure` (effective API / inherited methods — §12.2)
 - [ ] MCP server — `list_modules`
 - [ ] Inter-project source lookup (`origin: interproject`)
 
 ### P1 — MVP polish
 
-- [ ] MCP server — `get_class_structure`
+- [ ] Enrich `get_class_structure`: optional `include` (hierarchy, fields, annotations) — §12.2
 - [ ] CLI `get --json` (single structured object on stdout)
 - [ ] CLI progress indicators (long Gradle / decompile waits)
 - [ ] Hardening: Gradle timeouts, clearer errors, integration smoke test
 
 ### P2 — Post-MVP
 
-- [ ] Class search by simple name / glob + ranked candidates
+- [ ] MCP `search_classes` / class search index (capability discovery, full-text; §12.2)
 - [ ] `jvmsrc config` (paste-ready MCP snippet)
 - [ ] `JVMSRC_CFR_PATH` / `JVM_ORACLE_CFR_PATH` override for CFR
 - [ ] Classpath FQN index (diff-aware patch after resolve)
 - [ ] `local-file` artifact origin in extractor
 - [ ] Android / Kotlin MPP configuration coverage
 - [ ] Resolution schema: optional or remove rarely-used `sourcesJarPath`
+
+### P3 — Future / post–v2
+
+- [ ] MCP `get_implementors(interfaceName)` (inverted index over resolved JARs; §12.2)
 
 ### Done (baseline — do not uncheck)
 
@@ -95,6 +101,31 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ---
 
+### MCP server — `get_method_signature`
+
+**Goal:** Common agent path — caller knows `className` and `methodName`, needs exact overloads and contract (including checked exceptions). Projection over shared `ClassStructure` (README §8.2, §12.2).
+
+**References:** [README.md §12.2](README.md), planned parser / `get_class_structure` pipeline
+
+- [ ] Tool `get_method_signature`: `className`, `methodName`, `projectRoot`, optional classpath scoping (`modulePath?`, `configuration?`, `includeTest?`, `forceRefresh?`)
+- [ ] Response: all overloads — parameters (types + names), return type, generic bounds, checked exceptions; `sourceAvailable` per §7.1 where applicable
+- [ ] Errors: same structured pattern as `get_class_source`
+
+---
+
+### MCP server — `get_class_structure`
+
+**Goal:** API browsing without full file body; **effective surface must include inherited methods** (README §12.2 P0).
+
+**References:** [README.md §8.2](README.md), §12.2
+
+- [ ] Tool `get_class_structure` with documented input shape (+ inherited API in v1)
+- [ ] v1 implementation: parse `.java` from sources path (reuse lookup pipeline) and/or bytecode when sources missing
+- [ ] `sourceAvailable` on response per §7.1
+- [ ] P1 follow-up: optional `include` for full hierarchy, field detail, annotations (see §12.2 / ROADMAP P1)
+
+---
+
 ### MCP server — `list_modules`
 
 **Goal:** Agents discover submodule names and scope without parsing full resolution JSON by hand.
@@ -122,16 +153,14 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ## P1 — MVP polish
 
-### MCP server — `get_class_structure`
+### Enrich `get_class_structure`
 
-**Goal:** Signatures and metadata without full file body (README §8.2, §11 near-term).
+**Goal:** Optional sections (hierarchy, fields, annotations) on one tool; shared `ClassStructure` parse (README §12.2 P1).
 
-**References:** README §8.2 illustrative shape
-
-- [ ] Tool `get_class_structure` with documented input shape
-- [ ] v1 implementation: parse `.java` from sources path (reuse lookup pipeline)
-- [ ] Fallback: bytecode reader or CFR-based structure when no sources (optional for v1)
-- [ ] `sourceAvailable` on response per §7.1
+- [ ] Input: optional `include` (e.g. `hierarchy`, `fields`, `annotations`; exact shape TBD in §8.2)
+- [ ] Hierarchy: recursive superclass + interfaces for substitutability checks
+- [ ] Fields: visibility, `final`, annotations
+- [ ] Annotations: by target (class, method, field, parameter) with attribute values
 
 ---
 
@@ -171,13 +200,13 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ## P2 — Post-MVP
 
-### Class search by simple name / glob + ranked candidates
+### MCP `search_classes` / class search index
 
-**Goal:** README §12 — disambiguation for stack traces and partial names.
+**Goal:** README §12.2 P2 — discovery when FQN unknown (“what HTTP client classes exist?”). Architecturally distinct: index over resolution, not single-class parse.
 
-- [ ] Index FQNs from classpath JARs (and/or project sources) after resolve
-- [ ] Accept simple name, prefix/suffix patterns; return ranked candidate list
-- [ ] MCP tool or CLI subcommand (TBD in design)
+- [ ] Full-text index over class names, method names, Javadoc when sources available
+- [ ] MCP tool `search_classes` (or merged surface with CLI); ranked candidates
+- [ ] Builds on / relates to classpath FQN index (below)
 
 ---
 
@@ -226,6 +255,18 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ---
 
+## P3 — Future / post–v2
+
+### MCP `get_implementors`
+
+**Goal:** README §12.2 P3 — list known implementations of an interface for template/codegen. Requires inverted index (interface → implementors) across resolved artifacts; high implementation cost, low frequency.
+
+- [ ] Design index layout and invalidation with resolution cache
+- [ ] Tool `get_implementors`: `interfaceName` (FQN), `projectRoot`, optional scoping consistent with other tools
+- [ ] Structured errors; ranked or grouped results (TBD)
+
+---
+
 ## Out of scope (v1)
 
 - Maven resolver (`MavenResolver`)
@@ -241,6 +282,6 @@ The minimum **shippable** product checks off:
 
 1. All items under **Done** above (already shipped).
 2. All **P0 — MVP core** summary boxes.
-3. Enough **P1** to support agents in production (at minimum: one of `get_class_structure` or `--json`, plus basic hardening).
+3. Enough **P1 — MVP polish** items for production reliability (see summary checklist: at minimum **basic hardening** — timeouts, clearer errors, smoke test — as prioritized there).
 
 Track progress via the **summary checklist** at the top of this file.
