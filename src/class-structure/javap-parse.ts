@@ -1,4 +1,4 @@
-import type { JavapMethodOverload, JavapParameter } from './types.js';
+import type { JavapMethodOverload, JavapParameter, JavapClassHeader, JavapClassKind, JavapFieldInfo, JavapMethodWithName } from './types.js';
 
 export function declaringSimpleName(classFqn: string): string {
   const dollar = classFqn.lastIndexOf('$');
@@ -348,6 +348,10 @@ function parseVisibility(flagsLine: string | null | undefined): JavapMethodOverl
   return 'package';
 }
 
+export function parseJavapVisibility(flagsLine: string | null | undefined): JavapMethodOverload['visibility'] {
+  return parseVisibility(flagsLine);
+}
+
 function shouldSkipSyntheticMethod(flagsLine: string | null | undefined): boolean {
   if (!flagsLine) {
     return false;
@@ -473,5 +477,394 @@ export function parseJavapVerboseMethods(
     }
   }
 
+  return overloads;
+}
+
+function stripGenericsFromFqnLike(s: string): string {
+  let t = s.trim();
+  for (;;) {
+    const open = t.indexOf('<');
+    if (open < 0) {
+      return t;
+    }
+    let depth = 0;
+    let i = open;
+    for (; i < t.length; i++) {
+      const c = t[i];
+      if (c === '<') {
+        depth++;
+      } else if (c === '>') {
+        depth--;
+        if (depth === 0) {
+          t = (t.slice(0, open) + t.slice(i + 1)).trim();
+          break;
+        }
+      }
+    }
+    if (depth !== 0) {
+      return t.slice(0, open).trim();
+    }
+  }
+}
+
+function topLevelKeywordIndex(haystack: string, keyword: string): number {
+  let depth = 0;
+  for (let i = 0; i < haystack.length; i++) {
+    const c = haystack[i];
+    if (c === '<') {
+      depth++;
+    } else if (c === '>') {
+      depth--;
+    } else if (depth === 0 && haystack.startsWith(keyword, i)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function splitCommaTopLevel(inner: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (let i = 0; i < inner.length; i++) {
+    const c = inner[i];
+    if (c === '<') {
+      depth++;
+    } else if (c === '>') {
+      depth--;
+    }
+    if (c === ',' && depth === 0) {
+      const t = cur.trim();
+      if (t) {
+        out.push(stripGenericsFromFqnLike(t));
+      }
+      cur = '';
+      continue;
+    }
+    cur += c;
+  }
+  const last = cur.trim();
+  if (last) {
+    out.push(stripGenericsFromFqnLike(last));
+  }
+  return out;
+}
+
+function extractTypeParameterNames(declLine: string): string[] {
+  const open = declLine.indexOf('<');
+  if (open < 0) {
+    return [];
+  }
+  let depth = 0;
+  for (let i = open; i < declLine.length; i++) {
+    const c = declLine[i];
+    if (c === '<') {
+      depth++;
+    } else if (c === '>') {
+      depth--;
+      if (depth === 0) {
+        const inner = declLine.slice(open + 1, i);
+        const parts = splitCommaTopLevelInner(inner);
+        return parts.map((p) => p.trim().split(/\s+/)[0]!).filter(Boolean);
+      }
+    }
+  }
+  return [];
+}
+
+function splitCommaTopLevelInner(inner: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (let i = 0; i < inner.length; i++) {
+    const c = inner[i];
+    if (c === '<') {
+      depth++;
+    } else if (c === '>') {
+      depth--;
+    } else if (c === ',' && depth === 0) {
+      const t = cur.trim();
+      if (t) {
+        out.push(t);
+      }
+      cur = '';
+      continue;
+    }
+    cur += c;
+  }
+  const last = cur.trim();
+  if (last) {
+    out.push(last);
+  }
+  return out;
+}
+
+function kindFromFlags(flagsLine: string | null): JavapClassKind {
+  if (!flagsLine) {
+    return 'class';
+  }
+  if (flagsLine.includes('ACC_ENUM')) {
+    return 'enum';
+  }
+  if (flagsLine.includes('ACC_ANNOTATION') && flagsLine.includes('ACC_INTERFACE')) {
+    return 'annotation';
+  }
+  if (flagsLine.includes('ACC_INTERFACE')) {
+    return 'interface';
+  }
+  if (flagsLine.includes('ACC_RECORD')) {
+    return 'record';
+  }
+  return 'class';
+}
+
+function findMainDeclarationLine(head: string): string | null {
+  const lines = head.split(/\r?\n/);
+  for (const line of lines) {
+    const t = line.trim();
+    if (
+      /\b(class|enum|record)\s+/.test(t) ||
+      /\binterface\s+/.test(t) ||
+      /\@interface\b/.test(t)
+    ) {
+      return line.trimEnd();
+    }
+  }
+  return null;
+}
+
+function findFlagsLineRaw(head: string): string | null {
+  const m = head.match(/^\s*flags:\s*\([^)]+\)\s*(.+)$/m);
+  return m?.[1]?.trim() ?? null;
+}
+
+function parseSuperAndInterfaces(declLine: string, kind: JavapClassKind): { superClass: string | null; directInterfaces: string[] } {
+  if (kind === 'interface' || kind === 'annotation') {
+    const ix = topLevelKeywordIndex(declLine, ' extends ');
+    if (ix < 0) {
+      return { superClass: null, directInterfaces: [] };
+    }
+    const tail = declLine.slice(ix + ' extends '.length).trim();
+    return { superClass: null, directInterfaces: splitCommaTopLevel(tail) };
+  }
+
+  const implIx = topLevelKeywordIndex(declLine, ' implements ');
+  const extIx = topLevelKeywordIndex(declLine, ' extends ');
+
+  let superClass: string | null = null;
+  if (extIx >= 0) {
+    const end = implIx >= 0 ? implIx : declLine.length;
+    const extVal = declLine.slice(extIx + ' extends '.length, end).trim();
+    superClass = stripGenericsFromFqnLike(extVal);
+  }
+
+  let directInterfaces: string[] = [];
+  if (implIx >= 0) {
+    const implVal = declLine.slice(implIx + ' implements '.length).trim();
+    directInterfaces = splitCommaTopLevel(implVal);
+  }
+
+  return { superClass, directInterfaces };
+}
+
+export function parseJavapClassHeader(javapText: string): JavapClassHeader | null {
+  const poolIdx = javapText.indexOf('Constant pool:');
+  const head = poolIdx >= 0 ? javapText.slice(0, poolIdx) : javapText;
+  const flagsLine = findFlagsLineRaw(head);
+  const decl = findMainDeclarationLine(head);
+  if (!decl) {
+    return null;
+  }
+  const kind = kindFromFlags(flagsLine);
+  const { superClass, directInterfaces } = parseSuperAndInterfaces(decl, kind);
+  const typeParameterNames = extractTypeParameterNames(decl);
+  return {
+    kind,
+    declarationLine: decl,
+    flagsLine,
+    superClass,
+    directInterfaces,
+    typeParameterNames,
+  };
+}
+
+function isLikelyFieldBlock(block: string): boolean {
+  const first = block.split(/\r?\n/).find((l) => l.trim().length > 0) ?? '';
+  const t = first.trim();
+  if (!t.endsWith(';')) {
+    return false;
+  }
+  if (t.includes('(')) {
+    return false;
+  }
+  if (t.startsWith('static {') || t.startsWith('{')) {
+    return false;
+  }
+  return true;
+}
+
+function isFieldEnumConstant(flagsLine: string | null | undefined): boolean {
+  return Boolean(flagsLine?.includes('ACC_ENUM'));
+}
+
+function parseFieldBlock(block: string): JavapFieldInfo | null {
+  const lines = block.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const declarationLine = lines[0]?.trimEnd() ?? '';
+  const descriptor = findLineValue(block, 'descriptor:');
+  if (!descriptor) {
+    return null;
+  }
+  const flagsLine = findLineValue(block, 'flags:');
+  return {
+    declarationLine,
+    visibility: parseVisibility(flagsLine),
+    jvmDescriptor: descriptor,
+    flagsLine: flagsLine ?? null,
+    enumConstant: isFieldEnumConstant(flagsLine),
+  };
+}
+
+export function parseJavapFields(javapText: string): JavapFieldInfo[] {
+  const body = extractClassMemberSection(javapText);
+  if (!body) {
+    return [];
+  }
+  const blocks = splitMemberBlocks(body);
+  const out: JavapFieldInfo[] = [];
+  for (const block of blocks) {
+    if (!isLikelyFieldBlock(block)) {
+      continue;
+    }
+    const parsed = parseFieldBlock(block);
+    if (parsed) {
+      out.push(parsed);
+    }
+  }
+  return out;
+}
+
+function extractJvmMethodName(declLine: string, classFqn: string): string | null {
+  if (isConstructorDeclaration(declLine, classFqn)) {
+    return '<init>';
+  }
+  const inner = stripMethodGenericsPrefix(stripLeadingModifiers(declLine.trim().replace(/;$/, '')));
+  const open = inner.indexOf('(');
+  if (open < 0) {
+    return null;
+  }
+  const head = inner.slice(0, open).trim();
+  const parts = head.split(/\s+/).filter(Boolean);
+  const name = parts[parts.length - 1];
+  return name ?? null;
+}
+
+function parseMethodBlockAny(block: string, classFqn: string): JavapMethodWithName | null {
+  const lines = block.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const declarationLine = lines[0]?.trimEnd() ?? '';
+  const descriptor = findLineValue(block, 'descriptor:');
+  if (!descriptor) {
+    return null;
+  }
+  const flagsLine = findLineValue(block, 'flags:');
+  if (shouldSkipSyntheticMethod(flagsLine)) {
+    return null;
+  }
+
+  const jvmMethodName = extractJvmMethodName(declarationLine, classFqn);
+  if (!jvmMethodName || jvmMethodName === '<clinit>') {
+    return null;
+  }
+
+  const genericSigRaw = findLineValue(block, 'Signature:');
+  const visibility = parseVisibility(flagsLine);
+  const thrownExceptions = parseThrownExceptions(block);
+  const isStatic = Boolean(flagsLine?.includes('ACC_STATIC'));
+  const paramCount = countJvmParameters(descriptor);
+  const slotNames = parseLocalVariableSlots(block);
+  const jvmParamDescriptors = splitJvmParameters(descriptor);
+  const parenInner = extractParenContent(declarationLine);
+  const declSegments =
+    parenInner !== null && parenInner.trim().length > 0 ? splitJavaParameters(parenInner) : [];
+
+  const parameters: JavapParameter[] = [];
+  for (let pi = 0; pi < paramCount; pi++) {
+    const slot = isStatic ? pi : pi + 1;
+    const tableName = slotNames.get(slot) ?? null;
+    let typeDisplay = jvmParamDescriptors[pi] ?? '';
+    let name: string | null = tableName;
+    const seg = declSegments[pi];
+    if (seg) {
+      const parsedP = parseOneParamSegment(seg);
+      typeDisplay = parsedP.typeDisplay;
+      if (parsedP.name && (!name || name === '<no name>')) {
+        name = parsedP.name;
+      }
+    }
+    if (name === '<no name>') {
+      name = null;
+    }
+    parameters.push({ name, typeDisplay });
+  }
+
+  const strippedReturn = stripMethodGenericsPrefix(
+    stripLeadingModifiers(declarationLine.replace(/;$/, '').trim()),
+  );
+  const openParen = strippedReturn.indexOf('(');
+  let returnTypeDisplay: string | null = null;
+  if (jvmMethodName !== '<init>' && openParen > 0) {
+    const head = strippedReturn.slice(0, openParen).trim();
+    const parts2 = head.split(/\s+/);
+    if (parts2.length >= 2) {
+      returnTypeDisplay = parts2.slice(0, -1).join(' ');
+    }
+  }
+
+  return {
+    declarationLine,
+    visibility,
+    jvmDescriptor: descriptor,
+    genericSignature: genericSigRaw && genericSigRaw.length > 0 ? genericSigRaw : null,
+    returnTypeDisplay,
+    parameters,
+    thrownExceptions,
+    flagsLine: flagsLine ?? null,
+    jvmMethodName,
+  };
+}
+
+export type JavapMethodFilter = {
+  /** When set, only these visibilities (e.g. public+protected for inheritance). */
+  visibilityIn?: Array<JavapMethodOverload['visibility']>;
+  includeStatic: boolean;
+};
+
+export function parseJavapVerboseAllMethods(
+  javapText: string,
+  classFqn: string,
+  filter?: JavapMethodFilter,
+): JavapMethodWithName[] {
+  const body = extractClassMemberSection(javapText);
+  if (!body) {
+    return [];
+  }
+  const visSet = filter?.visibilityIn;
+  const blocks = splitMemberBlocks(body);
+  const overloads: JavapMethodWithName[] = [];
+  for (const block of blocks) {
+    if (!isLikelyMethodBlock(block)) {
+      continue;
+    }
+    const parsed = parseMethodBlockAny(block, classFqn);
+    if (!parsed) {
+      continue;
+    }
+    if (!filter?.includeStatic && parsed.flagsLine?.includes('ACC_STATIC')) {
+      continue;
+    }
+    if (visSet && !visSet.includes(parsed.visibility)) {
+      continue;
+    }
+    overloads.push(parsed);
+  }
   return overloads;
 }

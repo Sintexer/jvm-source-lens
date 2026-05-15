@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
-import { mcpClassSourceToolPayloadSchema, mcpGetMethodSignaturePayloadSchema, mcpResolveDependenciesPayloadSchema } from './mcp.js';
+import {
+  mcpClassSourceToolPayloadSchema,
+  mcpGetClassStructurePayloadSchema,
+  mcpGetMethodSignaturePayloadSchema,
+  mcpResolveDependenciesPayloadSchema,
+} from './mcp.js';
 import { mcpToolResultFromMethodSignature, mcpToolResultFromResolutionResult } from './mcp-tool-result.js';
 
 test('mcpClassSourceToolPayloadSchema accepts success with found=true', () => {
@@ -112,6 +117,62 @@ test('mcpGetMethodSignaturePayloadSchema accepts SIGNATURE_EXTRACT_FAILED failur
       message: 'javap exited',
       className: 'a.B',
       methodName: 'm',
+      jarPath: '/x.jar',
+    },
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpGetClassStructurePayloadSchema accepts success', () => {
+  const parsed = mcpGetClassStructurePayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    querySucceeded: true,
+    className: 'com.example.T',
+    kind: 'class',
+    superclass: 'com.example.Base',
+    interfaces: ['java.io.Serializable'],
+    typeParameters: ['T'],
+    fields: [],
+    methods: [
+      {
+        name: 'foo',
+        jvmMethodName: 'foo',
+        declaringClass: 'com.example.T',
+        visibility: 'public',
+        returnType: 'void',
+        parameters: [],
+        typeParameters: [],
+        javadoc: null,
+        abstract: false,
+        static: false,
+        throws: [],
+        genericSignature: null,
+        jvmDescriptor: '()V',
+        inherited: false,
+      },
+    ],
+    sourceAvailable: false,
+    provenance: {
+      kind: 'classpathJar',
+      coordinates: { group: 'g', name: 'a', version: '1' },
+      jarPath: '/tmp/a.jar',
+    },
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpGetClassStructurePayloadSchema accepts SIGNATURE_EXTRACT_FAILED without methodName', () => {
+  const parsed = mcpGetClassStructurePayloadSchema.safeParse({
+    ok: false,
+    code: 'SIGNATURE_EXTRACT_FAILED',
+    errorCategory: 'business',
+    isRetryable: false,
+    description: 'javap failed.',
+    error: {
+      code: 'SIGNATURE_EXTRACT_FAILED',
+      message: 'javap exited',
+      className: 'a.B',
       jarPath: '/x.jar',
     },
   });

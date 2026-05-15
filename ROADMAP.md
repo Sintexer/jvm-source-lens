@@ -21,7 +21,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] MCP server — `get_class_source`
 - [x] MCP server — `resolve_dependencies`
 - [x] MCP server — `get_method_signature`
-- [ ] MCP server — `get_class_structure` (effective API / inherited methods — §12.2)
+- [x] MCP server — `get_class_structure` (effective API / inherited methods — §12.2)
 - [ ] MCP server — `list_modules`
 - [ ] Inter-project source lookup (`origin: interproject`)
 
@@ -122,10 +122,10 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **References:** [README.md §8.2](README.md), §12.2
 
-- [ ] Tool `get_class_structure` with documented input shape (+ inherited API in v1)
-- [ ] v1 implementation: parse `.java` from sources path (reuse lookup pipeline) and/or bytecode when sources missing
-- [ ] `sourceAvailable` on response per §7.1
-- [ ] P1 follow-up: optional `include` for full hierarchy, field detail, annotations (see §12.2 / ROADMAP P1)
+- [x] Tool `get_class_structure` with documented input shape (+ inherited API in v1)
+- [x] v1 implementation: parse `.java` from sources path (reuse lookup pipeline) and/or bytecode when sources missing
+- [x] `sourceAvailable` on response per §7.1
+- [x] P1 follow-up: optional `include` for full hierarchy, field detail, annotations (see §12.2 / ROADMAP P1)
 
 ---
 

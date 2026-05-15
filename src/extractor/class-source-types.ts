@@ -70,7 +70,8 @@ export type ClassSourceError =
       code: 'SIGNATURE_EXTRACT_FAILED';
       message: string;
       className: string;
-      methodName: string;
+      /** Present for `get_method_signature`; omitted for `get_class_structure` (whole-class javap). */
+      methodName?: string;
       jarPath: string;
       stderr?: string;
     };

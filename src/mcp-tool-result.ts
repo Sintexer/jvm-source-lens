@@ -4,6 +4,7 @@ import type { DecompiledProvenance, SourcesJarProvenance } from './extractor/cla
 import type { ResolutionResult } from './resolvers/base.js';
 import type { ResolutionOutput } from './resolvers/resolution-output.js';
 import type { GetMethodSignatureResult } from './get-method-signatures.js';
+import type { ClassStructureMethod, GetClassStructureResult } from './class-structure/types.js';
 
 /** MCP agent recovery categories (transient / validation / business / permission). */
 export type McpErrorCategory = 'transient' | 'validation' | 'business' | 'permission';
@@ -95,6 +96,64 @@ export type McpMethodSignatureNotFoundPayload = {
 export type McpMethodSignatureToolPayload =
   | McpMethodSignatureSuccessPayload
   | McpMethodSignatureNotFoundPayload
+  | McpClassSourceFailurePayload;
+
+export type McpClassStructureSuccessPayload = {
+  ok: true;
+  found: true;
+  querySucceeded: true;
+  className: string;
+  kind: 'class' | 'interface' | 'enum' | 'annotation' | 'record';
+  superclass: string | null;
+  interfaces: string[];
+  typeParameters: string[];
+  fields: Array<{
+    name: string;
+    declaringClass: string;
+    visibility: 'public' | 'protected' | 'package' | 'private';
+    type: string;
+    static: boolean;
+    final: boolean;
+    enumConstant: boolean;
+    javadoc: string | null;
+  }>;
+  methods: Array<{
+    name: string;
+    jvmMethodName: string;
+    declaringClass: string;
+    visibility: 'public' | 'protected' | 'package' | 'private';
+    returnType: string;
+    parameters: Array<{ name: string | null; type: string }>;
+    typeParameters: string[];
+    javadoc: string | null;
+    abstract: boolean;
+    static: boolean;
+    throws: string[];
+    genericSignature: string | null;
+    jvmDescriptor: string;
+    inherited: boolean;
+  }>;
+  sourceAvailable: boolean;
+  provenance: {
+    kind: 'classpathJar';
+    coordinates: DecompiledProvenance['coordinates'];
+    jarPath: string;
+  };
+};
+
+export type McpClassStructureNotFoundPayload = {
+  ok: true;
+  found: false;
+  className: string;
+  searchedArtifactCount: number;
+  querySucceeded: true;
+  code: 'CLASS_NOT_FOUND';
+  description: string;
+};
+
+export type McpClassStructureToolPayload =
+  | McpClassStructureSuccessPayload
+  | McpClassStructureNotFoundPayload
   | McpClassSourceFailurePayload;
 
 export type MethodSignatureQueryContext = ClassSourceQueryContext & { methodName: string };
@@ -198,6 +257,78 @@ export function mcpToolResultFromMethodSignature(
   }
 
   return mcpFailureResult(result.error, query);
+}
+
+export function mcpToolResultFromClassStructure(
+  result: GetClassStructureResult,
+  query: ClassSourceQueryContext,
+): CallToolResult {
+  if (result.ok) {
+    const payload: McpClassStructureSuccessPayload = {
+      ok: true,
+      found: true,
+      querySucceeded: true,
+      className: result.className,
+      kind: result.kind,
+      superclass: result.superclass,
+      interfaces: result.interfaces,
+      typeParameters: result.typeParameters,
+      fields: result.fields,
+      methods: result.methods,
+      sourceAvailable: result.sourceAvailable,
+      provenance: result.provenance,
+    };
+    const inh = result.methods.filter((m: ClassStructureMethod) => m.inherited).length;
+    const summary =
+      `Structure for ${result.className}: ${result.methods.length} method(s) (${inh} inherited), ${result.fields.length} field(s); ` +
+      `sourceAvailable=${result.sourceAvailable}.`;
+    return {
+      isError: false,
+      content: [{ type: 'text', text: summary }],
+      structuredContent: payload,
+    };
+  }
+
+  if (result.error.code === 'CLASS_NOT_FOUND') {
+    return mcpClassStructureNotFoundResult(result.error, query);
+  }
+
+  return mcpFailureResult(result.error, query);
+}
+
+function mcpClassStructureNotFoundResult(
+  error: Extract<ClassSourceError, { code: 'CLASS_NOT_FOUND' }>,
+  query: ClassSourceQueryContext,
+): CallToolResult {
+  const scope = formatQueryScope(query);
+  const description =
+    `The project classpath was resolved successfully${scope}, and ${error.searchedArtifactCount} external JAR(s) were scanned, ` +
+    `but no .class entry was found for ${JSON.stringify(error.className)}. ` +
+    `This is not a tool or network failure — the class is absent from the selected classpath. ` +
+    `Verify the fully-qualified name, ensure the dependency is declared, try a different modulePath or configuration ` +
+    `(default compileClasspath; use includeTest for testCompileClasspath), or use forceRefresh after dependency changes. ` +
+    `Inter-project module sources are not searched in this version.`;
+
+  const payload: McpClassStructureNotFoundPayload = {
+    ok: true,
+    found: false,
+    className: error.className,
+    searchedArtifactCount: error.searchedArtifactCount,
+    querySucceeded: true,
+    code: 'CLASS_NOT_FOUND',
+    description,
+  };
+
+  return {
+    isError: false,
+    content: [
+      {
+        type: 'text',
+        text: `No class found for ${JSON.stringify(error.className)} after scanning ${error.searchedArtifactCount} artifact(s)${scope}. The lookup completed successfully; the class is not on this classpath.`,
+      },
+    ],
+    structuredContent: payload,
+  };
 }
 
 function mcpMethodSignatureNotFoundResult(
@@ -468,12 +599,16 @@ function classifySignatureExtractFailed(
   error: Extract<ClassSourceError, { code: 'SIGNATURE_EXTRACT_FAILED' }>,
 ): ErrorEnvelope {
   const blob = joinDiagnosticBlob(error.message, error.stderr);
+  const detail =
+    error.methodName !== undefined
+      ? `${JSON.stringify(error.methodName)} on ${JSON.stringify(error.className)}`
+      : JSON.stringify(error.className);
   if (matchesTransient(blob)) {
     return envelope(
       error,
       'transient',
       true,
-      `javap failed transiently for ${error.methodName} on ${error.className}.`,
+      `javap failed transiently for ${detail}.`,
       `${error.message} Signature extraction via javap from ${JSON.stringify(error.jarPath)} failed temporarily (timeout, process, or I/O). ` +
         `Retry once; ensure JAVA_HOME points to a JDK that includes javap next to java.` +
         diagnosticSuffix(error.stderr),
@@ -483,8 +618,8 @@ function classifySignatureExtractFailed(
     error,
     'business',
     false,
-    `Could not extract method signatures for ${error.methodName}.`,
-    `${error.message} javap could not produce bytecode metadata for ${JSON.stringify(error.methodName)} on ${JSON.stringify(error.className)} ` +
+    `Could not extract bytecode metadata for ${detail}.`,
+    `${error.message} javap could not produce bytecode metadata for ${detail} ` +
       `from ${JSON.stringify(error.jarPath)}. Fix JDK availability or verify the class exists in that JAR.` +
       diagnosticSuffix(error.stderr),
   );

@@ -3,6 +3,9 @@ import {
   countJvmParameters,
   declaringSimpleName,
   extractClassMemberSection,
+  parseJavapClassHeader,
+  parseJavapFields,
+  parseJavapVerboseAllMethods,
   parseJavapVerboseMethods,
   skipJvmType,
 } from './javap-parse.js';
@@ -143,5 +146,72 @@ SourceFile: "String.java"
     const ctor = o[0];
     expect(ctor).toBeDefined();
     expect(ctor!.jvmDescriptor).toBe('(Ljava/lang/String;)V');
+  });
+});
+
+describe('parseJavapClassHeader', () => {
+  test('parses interface extends', () => {
+    const h = parseJavapClassHeader(javapCloseableVerbose);
+    expect(h).not.toBeNull();
+    expect(h!.kind).toBe('interface');
+    expect(h!.superClass).toBeNull();
+    expect(h!.directInterfaces).toEqual(['java.lang.AutoCloseable']);
+    expect(h!.typeParameterNames).toEqual([]);
+  });
+
+  test('parses class extends/implements', () => {
+    const text = `Classfile /tmp/x.jar
+Compiled from "X.java"
+public class com.foo.X extends com.foo.Base implements java.io.Serializable, java.lang.Cloneable
+  minor version: 0
+  flags: (0x0021) ACC_PUBLIC, ACC_SUPER
+Constant pool:
+    #1 = Utf8 foo
+{
+}
+SourceFile: "X.java"
+`;
+    const h = parseJavapClassHeader(text);
+    expect(h).not.toBeNull();
+    expect(h!.kind).toBe('class');
+    expect(h!.superClass).toBe('com.foo.Base');
+    expect(h!.directInterfaces).toEqual(['java.io.Serializable', 'java.lang.Cloneable']);
+  });
+});
+
+describe('parseJavapVerboseAllMethods', () => {
+  test('collects every non-synthetic method', () => {
+    const all = parseJavapVerboseAllMethods(javapSubstringMinimal, 'java.lang.String', { includeStatic: true });
+    expect(all.length).toBeGreaterThanOrEqual(2);
+    const subs = all.filter((m) => m.jvmMethodName === 'substring');
+    expect(subs.map((x) => x.jvmDescriptor).sort()).toEqual(['(I)Ljava/lang/String;', '(II)Ljava/lang/String;']);
+  });
+});
+
+describe('parseJavapFields', () => {
+  test('parses field block', () => {
+    const javapWithField = `Classfile /tmp/c.jar
+Compiled from "C.java"
+public class com.example.C
+  minor version: 0
+  flags: (0x0021) ACC_PUBLIC, ACC_SUPER
+Constant pool:
+   #1 = Utf8 FOO
+{
+  private static final int FOO;
+    descriptor: I
+    flags: (0x001a) ACC_PRIVATE, ACC_STATIC, ACC_FINAL
+
+  public void run();
+    descriptor: ()V
+    flags: (0x0001) ACC_PUBLIC
+}
+SourceFile: "C.java"
+`;
+    const fields = parseJavapFields(javapWithField);
+    expect(fields).toHaveLength(1);
+    expect(fields[0]!.declarationLine).toContain('FOO');
+    expect(fields[0]!.visibility).toBe('private');
+    expect(fields[0]!.jvmDescriptor).toBe('I');
   });
 });

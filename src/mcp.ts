@@ -11,12 +11,14 @@ import {
   mcpToolResultFromProjectRootError,
   mcpToolResultFromResolutionResult,
   mcpToolResultFromUnexpectedError,
+  mcpToolResultFromClassStructure,
   type ClassSourceQueryContext,
   type MethodSignatureQueryContext,
 } from './mcp-tool-result.js';
 import { resolveProjectRoot } from './project-path.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 import { UnsupportedProjectError } from './resolvers/index.js';
+import { getClassStructure } from './get-class-structure.js';
 import { getMethodSignatures } from './get-method-signatures.js';
 
 const artifactCoordinatesSchema = z.object({
@@ -85,7 +87,7 @@ const classSourceErrorSchema = z.discriminatedUnion('code', [
     code: z.literal('SIGNATURE_EXTRACT_FAILED'),
     message: z.string(),
     className: z.string(),
-    methodName: z.string(),
+    methodName: z.string().optional(),
     jarPath: z.string(),
     stderr: z.string().optional(),
   }),
@@ -260,6 +262,86 @@ export const mcpGetMethodSignaturePayloadSchema = z.union([
   mcpMethodSignatureFailureSchema,
 ]);
 
+const classStructureKindSchema = z.enum(['class', 'interface', 'enum', 'annotation', 'record']);
+
+const classStructureParameterSchema = z.object({
+  name: z.string().nullable(),
+  type: z.string(),
+});
+
+const classStructureMethodSchema = z.object({
+  name: z.string(),
+  jvmMethodName: z.string(),
+  declaringClass: z.string(),
+  visibility: z.enum(['public', 'protected', 'package', 'private']),
+  returnType: z.string(),
+  parameters: z.array(classStructureParameterSchema),
+  typeParameters: z.array(z.string()),
+  javadoc: z.string().nullable(),
+  abstract: z.boolean(),
+  static: z.boolean(),
+  throws: z.array(z.string()),
+  genericSignature: z.string().nullable(),
+  jvmDescriptor: z.string(),
+  inherited: z.boolean(),
+});
+
+const classStructureFieldSchema = z.object({
+  name: z.string(),
+  declaringClass: z.string(),
+  visibility: z.enum(['public', 'protected', 'package', 'private']),
+  type: z.string(),
+  static: z.boolean(),
+  final: z.boolean(),
+  enumConstant: z.boolean(),
+  javadoc: z.string().nullable(),
+});
+
+const getClassStructureInputSchema = z.object({
+  className: z.string().min(1),
+  projectRoot: z.string().min(1),
+  modulePath: z.string().optional(),
+  configuration: z.string().optional(),
+  includeTest: z.boolean().optional(),
+  forceRefresh: z.boolean().optional(),
+});
+
+const mcpClassStructureFailureSchema = z.object({
+  ok: z.literal(false),
+  error: classSourceErrorSchema,
+  code: classSourceErrorCodeSchema,
+  errorCategory: mcpErrorCategorySchema,
+  isRetryable: z.boolean(),
+  description: z.string(),
+});
+
+export const mcpGetClassStructurePayloadSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+    found: z.literal(true),
+    querySucceeded: z.literal(true),
+    className: z.string(),
+    kind: classStructureKindSchema,
+    superclass: z.string().nullable(),
+    interfaces: z.array(z.string()),
+    typeParameters: z.array(z.string()),
+    fields: z.array(classStructureFieldSchema),
+    methods: z.array(classStructureMethodSchema),
+    sourceAvailable: z.boolean(),
+    provenance: classpathJarProvenanceSchema,
+  }),
+  z.object({
+    ok: z.literal(true),
+    found: z.literal(false),
+    className: z.string(),
+    searchedArtifactCount: z.number(),
+    querySucceeded: z.literal(true),
+    code: z.literal('CLASS_NOT_FOUND'),
+    description: z.string(),
+  }),
+  mcpClassStructureFailureSchema,
+]);
+
 export async function startMcpServer(): Promise<void> {
   const pkgPath = fileURLToPath(new URL('../package.json', import.meta.url));
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
@@ -269,9 +351,10 @@ export async function startMcpServer(): Promise<void> {
     {
       instructions:
         'JVM Source Lens (Gradle first): use get_class_source with a fully-qualified class name and projectRoot. ' +
+        'Use get_class_structure for structured API metadata (kind, fields, methods including inherited public/protected instance methods) without full source — sourceAvailable is true when the primary type was read from a sources JAR (Javadoc enrichment), false when structure is bytecode-only. ' +
         'Use get_method_signature when you know className and methodName and need overloads (parameters, return type, generics Signature attribute, checked exceptions) via javap on the resolved binary JAR — sourceAvailable is always false for this tool (README §7.1). ' +
         'Constructors are queried with methodName <init>. Inter-project classes are not supported yet (same as get_class_source). ' +
-        'Use resolve_dependencies to warm or refresh the resolution cache and obtain ResolutionOutput (all modules); then get_class_source / get_method_signature reuse the cache. ' +
+        'Use resolve_dependencies to warm or refresh the resolution cache and obtain ResolutionOutput (all modules); then get_class_source / get_method_signature / get_class_structure reuse the cache. ' +
         'Failures return errorCategory (transient | validation | business | permission), isRetryable, and a detailed description. ' +
         'CLASS_NOT_FOUND after a successful classpath scan is NOT an error (found=false, querySucceeded=true) — do not retry as if the tool failed. ' +
         'When the class exists but no overloads match: found=true, methodFound=false (not an MCP error). ' +
@@ -388,6 +471,48 @@ export async function startMcpServer(): Promise<void> {
           forceRefresh: Boolean(args.forceRefresh),
         });
         return mcpToolResultFromMethodSignature(result, query);
+      } catch (e) {
+        return mcpToolResultFromUnexpectedError(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_class_structure',
+    {
+      title: 'Get structured Java class API',
+      description:
+        'Returns structured metadata for a fully-qualified class: kind, superclass, interfaces, type parameters, fields, and methods. ' +
+        'Includes inherited public/protected instance methods from supertypes (javap on the resolved classpath). ' +
+        'sourceAvailable is true when the primary type was loaded from a sources JAR (Javadoc on declared members); inherited entries are still bytecode-derived. ' +
+        'Does not decompile (no CFR). Uses the same classpath selection as get_class_source. ' +
+        'Inter-project classes are not supported yet. On javap failure: code SIGNATURE_EXTRACT_FAILED.',
+      inputSchema: getClassStructureInputSchema,
+      outputSchema: mcpGetClassStructurePayloadSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async (args) => {
+      const query: ClassSourceQueryContext = {
+        projectRoot: args.projectRoot,
+        modulePath: args.modulePath,
+        configuration: args.configuration,
+        includeTest: args.includeTest,
+      };
+
+      const root = resolveProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
+      }
+
+      try {
+        const result = await getClassStructure(args.className, {
+          projectRoot: root.path,
+          modulePath: args.modulePath,
+          configuration: args.configuration,
+          includeTest: Boolean(args.includeTest),
+          forceRefresh: Boolean(args.forceRefresh),
+        });
+        return mcpToolResultFromClassStructure(result, query);
       } catch (e) {
         return mcpToolResultFromUnexpectedError(e);
       }

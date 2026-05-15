@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { ClassSourceError } from './extractor/class-source-types.js';
 import {
   mcpToolResultFromClassSource,
+  mcpToolResultFromClassStructure,
   mcpToolResultFromProjectRootError,
 } from './mcp-tool-result.js';
 
@@ -28,6 +29,43 @@ test('CLASS_NOT_FOUND is not an MCP error (valid empty result)', () => {
   expect(sc.description).toContain('12');
 });
 
+test('mcpToolResultFromClassStructure CLASS_NOT_FOUND is not MCP error', () => {
+  const r = mcpToolResultFromClassStructure(
+    {
+      ok: false,
+      error: {
+        code: 'CLASS_NOT_FOUND',
+        message: 'missing',
+        className: 'com.example.Missing',
+        searchedArtifactCount: 5,
+      },
+    },
+    query,
+  );
+  expect(r.isError).toBe(false);
+  const sc = r.structuredContent as { found: boolean; searchedArtifactCount: number };
+  expect(sc.found).toBe(false);
+  expect(sc.searchedArtifactCount).toBe(5);
+});
+
+test('SIGNATURE_EXTRACT_FAILED without methodName classifies like javap failure', () => {
+  const r = mcpToolResultFromClassStructure(
+    {
+      ok: false,
+      error: {
+        code: 'SIGNATURE_EXTRACT_FAILED',
+        message: 'javap timed out after 100ms',
+        className: 'a.B',
+        jarPath: '/x.jar',
+      },
+    },
+    query,
+  );
+  expect(r.isError).toBe(true);
+  const sc = r.structuredContent as { errorCategory: string; isRetryable: boolean };
+  expect(sc.errorCategory).toBe('transient');
+  expect(sc.isRetryable).toBe(true);
+});
 test('INVALID_FQN is validation and retryable after fix', () => {
   const r = mcpToolResultFromClassSource(
     { ok: false, error: { code: 'INVALID_FQN', message: 'Empty class name' } },
