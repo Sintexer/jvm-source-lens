@@ -31,6 +31,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] Inspection split: bytecode-only MCP overload tool + declaration-centric default payloads — [README §7.2](README.md)
 - [x] CLI `get --json` (single structured object on stdout)
 - [x] CLI progress indicators (long Gradle / decompile waits)
+- [ ] Failure diagnostics: structured logs, `JVMSRC_LOG_DIR`, `jvmsrc diagnostics` CLI — [README §6.3](README.md)
 - [ ] Hardening: Gradle timeouts, clearer errors, integration smoke test
 
 ### P2 — Post-MVP
@@ -227,6 +228,23 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [ ] Actionable messages for common failures (no wrapper, repo auth, unsupported project)
 - [ ] CI or scripted smoke: resolve + `get` against a minimal Gradle fixture (skip when no Gradle)
 - [ ] Optional: document `jvmsrcResolveSources` latency expectations
+
+---
+
+### Failure diagnostics (structured logging)
+
+**Goal:** Operators get subprocess tails and environment context on failures without exposing them to agents; callers keep stable **`code`** values ([README §7](README.md)) while **`severity`** / **`errorCode`** enrich logs ([README §6.3](README.md)).
+
+**References:** [README.md §6.3](README.md), [README.md §8.1.3](README.md), [README.md §8.2](README.md)
+
+- [ ] Severity taxonomy + mapping from existing failure paths / stable `code`s
+- [ ] `DiagnosticRecord` schema + input sanitization (no secrets)
+- [ ] Log root via platform defaults (state/log dirs) + **`JVMSRC_LOG_DIR`** override (non-empty absolute only; reject relative — mirror **`JVMSRC_CACHE_ROOT`** policy)
+- [ ] NDJSON append to **`current.log`** + size-based rotation + **`diagnostics/<id>.json`** for configured severities
+- [ ] Subprocess capture hooks for Gradle (**`jvmsrcResolve`**, **`jvmsrcResolveSources`**) and CFR (stdout/stderr tail truncation)
+- [ ] CLI **`jvmsrc diagnostics`** (`list`, `show`, filters, **`clear --older-than`**)
+- [ ] Surface **`diagnosticId`** + **`hint`** on CLI failures (**`get`**, **`resolve`**, **`--json`**) and MCP tool errors where a full diagnostic file is written
+- [ ] Tests: record shape, rotation; diagnostics / rolling-log write failures must not fail the user-visible operation
 
 ---
 
