@@ -246,7 +246,7 @@ test('mcpSearchClassesPayloadSchema accepts success payload', () => {
       },
     ],
     indexMeta: {
-      indexFormatVersion: 1,
+      indexFormatVersion: 2,
       buildInputsDigest: 'abc',
       resolutionFingerprint: 'def',
       moduleName: 'root',
@@ -255,6 +255,8 @@ test('mcpSearchClassesPayloadSchema accepts success payload', () => {
       builtAt: '2026-05-15T12:00:00Z',
       entryCount: 100,
       skippedArtifacts: 0,
+      sourceEnrichedEntries: 12,
+      sourceEnrichmentBytesCap: 262144,
     },
   });
   expect(parsed.success).toBe(true);
@@ -282,7 +284,7 @@ test('mcpToolResultFromSearchClasses success', () => {
         },
       ],
       indexMeta: {
-        indexFormatVersion: 1,
+        indexFormatVersion: 2,
         buildInputsDigest: 'a',
         resolutionFingerprint: 'b',
         moduleName: 'root',
@@ -291,6 +293,8 @@ test('mcpToolResultFromSearchClasses success', () => {
         builtAt: '2026-05-15T12:00:00Z',
         entryCount: 1,
         skippedArtifacts: 0,
+        sourceEnrichedEntries: 1,
+        sourceEnrichmentBytesCap: 262144,
       },
     },
     { projectRoot: '/p', query: 'X' },

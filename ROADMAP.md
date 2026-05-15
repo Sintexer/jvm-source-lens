@@ -36,7 +36,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ### P2 — Post-MVP
 
-- [ ] MCP `search_classes` / class search index (capability discovery, full-text; §12.2)
+- [x] MCP `search_classes` / class search index (capability discovery, full-text; §12.2)
 - [ ] `jvmsrc config` (paste-ready MCP snippet)
 - [ ] `JVMSRC_CFR_PATH` / `JVM_ORACLE_CFR_PATH` override for CFR
 - [ ] Classpath FQN index (diff-aware patch after resolve)
@@ -256,7 +256,9 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **v1 shipped:** MCP tool **`search_classes`** + **`class-search-index.json`** sidecar (per resolution cache bucket): external JAR **`.class`** listing (ZIP central directory only) and inter-project **`src/main/java`** / **`src/test/java`** FQNs on the selected classpath; substring + simple-glob queries; ranked hits (`score`). See README §8.2.
 
-- [ ] Full-text index over class names, method names, Javadoc when sources available
+**v2 shipped:** **`searchText`** enrichment from **`.java`** when readable: declared method names (constructors mapped to the simple class name), field/enum-constant names from the same parse path as **`parseJavaTypeMetadata`**, and plain text from **`/** … */`** blocks; inter-project paths on disk; external **`-sources.jar`** ZIP entries per FQN when **`sourcesJarPath`** is already present on the artifact (no **`jvmsrcResolveSources`** during index build). **`indexMeta`:** **`sourceEnrichedEntries`**, **`sourceEnrichmentBytesCap`** (max bytes read per source file).
+
+- [x] Full-text index over class names, method names, Javadoc when sources available
 - [x] MCP tool `search_classes` (or merged surface with CLI); ranked candidates
 - [ ] Builds on / relates to classpath FQN index (below)
 

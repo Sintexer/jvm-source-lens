@@ -230,7 +230,7 @@ export const mcpListModulesPayloadSchema = z.union([
 ]);
 
 const classSearchIndexMetaSchema = z.object({
-  indexFormatVersion: z.literal(1),
+  indexFormatVersion: z.literal(2),
   buildInputsDigest: z.string(),
   resolutionFingerprint: z.string(),
   moduleName: z.string(),
@@ -239,6 +239,8 @@ const classSearchIndexMetaSchema = z.object({
   builtAt: z.string(),
   entryCount: z.number(),
   skippedArtifacts: z.number(),
+  sourceEnrichedEntries: z.number(),
+  sourceEnrichmentBytesCap: z.number(),
 });
 
 const searchClassesHitSchema = z.object({
@@ -496,7 +498,7 @@ export async function startMcpServer(): Promise<void> {
         'Use get_method_signature_bytecode when you need strict JVM descriptors and javap-only metadata — no sources/`src` fallback; requires a resolvable `.class` on the classpath. ' +
         'Constructors are queried with methodName <init>. Inter-project classes (`origin: interproject`) resolve from sibling `src/main/java` (and `src/test/java` when includeTest) for source-first tools before requiring `build/classes/**` for javap. ' +
         'Use list_modules for submodule names and per-configuration dependency counts without full ResolutionOutput, or resolve_dependencies for the complete document. ' +
-        'Use search_classes for discovery when the FQN is unknown: substring or simple glob (*, ?) over indexed class names on the selected compile/test classpath (v1 indexes external JAR .class entries and inter-project src/main/java + src/test/java when includeTest). ' +
+        'Use search_classes for discovery when the FQN is unknown: substring or simple glob (*, ?) over the class search index (v2 enriches hits with method names and Javadoc text from `.java` when available: inter-project sources on disk and external `-sources.jar` when `sourcesJarPath` is already set on the artifact). ' +
         'Both warm or refresh the resolution cache; then get_class_source / get_method_signature / get_method_signature_bytecode / get_class_structure reuse the cache. ' +
         'Failures return errorCategory (transient | validation | business | permission), isRetryable, and a detailed description. ' +
         'CLASS_NOT_FOUND after a successful classpath scan is NOT an error (found=false, querySucceeded=true) — do not retry as if the tool failed. ' +
@@ -617,9 +619,9 @@ export async function startMcpServer(): Promise<void> {
       title: 'Search classes on the resolved classpath',
       description:
         'Capability discovery when the FQN is unknown (README §12.3): resolves or loads cached Gradle output, builds or reuses a disk index for the selected module + configuration, ' +
-        'then returns ranked FQN hits. Query is a case-insensitive substring over class FQN/simple name, or a glob with * and ? matched against FQN or simple name. ' +
+        'then returns ranked FQN hits. Query is a case-insensitive substring over the index `searchText` (FQN, simple name, and when sources exist: declared method/field identifiers and Javadoc plain text), or a glob with * and ? matched against FQN or simple name only. ' +
         'Optional limit (default 50, max 200). Same projectRoot, modulePath, configuration, includeTest, and forceRefresh semantics as get_class_source. ' +
-        'v1 indexes external JAR .class paths (ZIP central directory only) and inter-project .java trees; origin:local-file artifacts are skipped. ' +
+        'v2 indexes external JAR .class paths (ZIP central directory) plus source enrichment from sibling `-sources.jar` when Gradle listed `sourcesJarPath`, and from inter-project `src/main/java` (+ `src/test/java` when includeTest); origin:local-file artifacts are skipped. ' +
         'On failure: isError=true with code RESOLUTION_FAILED or classpath validation codes.',
       inputSchema: searchClassesInputSchema,
       outputSchema: mcpSearchClassesPayloadSchema,

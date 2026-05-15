@@ -37,7 +37,9 @@ function parseIndexFile(raw: unknown): ClassSearchIndexFileV1 | null {
     typeof meta.includeTest !== 'boolean' ||
     typeof meta.builtAt !== 'string' ||
     typeof meta.entryCount !== 'number' ||
-    typeof meta.skippedArtifacts !== 'number'
+    typeof meta.skippedArtifacts !== 'number' ||
+    typeof meta.sourceEnrichedEntries !== 'number' ||
+    typeof meta.sourceEnrichmentBytesCap !== 'number'
   ) {
     return null;
   }

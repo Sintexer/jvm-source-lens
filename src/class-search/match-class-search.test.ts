@@ -67,4 +67,16 @@ describe('match-class-search', () => {
     expect(totalMatches).toBe(30);
     expect(hits).toHaveLength(5);
   });
+
+  test('substring matches v2-enriched searchText (method name absent from FQN)', () => {
+    const entries = [
+      entry({
+        className: 'com.example.Util',
+        searchText: 'com.example.util\nutil\ndoquerystuff',
+      }),
+    ];
+    const { hits } = matchAndRankClassSearch(entries, 'doquerystuff', 10);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.className).toBe('com.example.Util');
+  });
 });

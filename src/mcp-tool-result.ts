@@ -343,7 +343,7 @@ export function mcpToolResultFromSearchClasses(
     const scope = formatQueryScope(query);
     const summary =
       `search_classes: ${result.totalMatches} matching class(es) for ${JSON.stringify(result.query)}${scope}; returning ${hits.length} hit(s) (limit ${result.limit}). ` +
-      `Index v${result.indexMeta.indexFormatVersion}, ${result.indexMeta.entryCount} entr(ies), skippedArtifacts=${result.indexMeta.skippedArtifacts}.`;
+      `Index v${result.indexMeta.indexFormatVersion}, ${result.indexMeta.entryCount} entr(ies), sourceEnriched=${result.indexMeta.sourceEnrichedEntries}, skippedArtifacts=${result.indexMeta.skippedArtifacts}.`;
     return {
       isError: false,
       content: [{ type: 'text', text: summary }],

@@ -1,6 +1,6 @@
 import type { ClassSourceError } from '../extractor/class-source-types.js';
 
-export const CLASS_SEARCH_INDEX_FORMAT_VERSION = 1 as const;
+export const CLASS_SEARCH_INDEX_FORMAT_VERSION = 2 as const;
 
 export type ClassSearchArtifactOrigin = 'external' | 'interproject';
 
@@ -9,7 +9,7 @@ export type ClassSearchIndexEntry = {
   /** Fully qualified class name */
   className: string;
   simpleName: string;
-  /** Lowercased concat for substring ranking (v1: fqn + simpleName) */
+  /** Lowercased text for substring ranking: FQN + simpleName; v2 appends method/field/javadoc from sources when available */
   searchText: string;
   origin: ClassSearchArtifactOrigin;
   group: string;
@@ -37,6 +37,10 @@ export type ClassSearchIndexMeta = {
   builtAt: string;
   entryCount: number;
   skippedArtifacts: number;
+  /** Entries whose `searchText` includes source-derived method / field / Javadoc text */
+  sourceEnrichedEntries: number;
+  /** Per-file cap (bytes) applied when reading `.java` / sources-JAR entries for enrichment */
+  sourceEnrichmentBytesCap: number;
 };
 
 export type ClassSearchIndexFileV1 = {

@@ -1,6 +1,14 @@
+import fs from 'node:fs';
 import type { ResolvedArtifact, ResolvedConfiguration, ResolvedModule } from '../resolvers/resolution-output.js';
 import { isExternalJarArtifact } from '../extractor/class-source-types.js';
+import { fqnToZipRelPaths } from '../extractor/fqn-paths.js';
+import { readZipEntryUtf8 } from '../extractor/zip-entry.js';
+import {
+  buildJavaSourceSearchBlob,
+  MAX_JAVA_SOURCE_BYTES_FOR_SEARCH,
+} from './java-source-search-text.js';
 import { listFqnsFromJarClassEntries } from './jar-class-fqns.js';
+import { resolveInterprojectJavaAbsolutePath } from './interproject-java-path.js';
 import { listFqnsFromInterprojectSources } from './interproject-source-fqns.js';
 import {
   CLASS_SEARCH_INDEX_FORMAT_VERSION,
@@ -30,9 +38,12 @@ function makeEntry(
   jarPath: string | null,
   moduleRoot: string | null,
   interprojectModuleName: string | null,
+  sourceSearchBlob: string | null,
 ): ClassSearchIndexEntry {
   const simple = simpleNameOf(fqn);
-  const searchText = `${fqn}\n${simple}`.toLowerCase();
+  const base = `${fqn}\n${simple}`.toLowerCase();
+  const searchText =
+    sourceSearchBlob !== null && sourceSearchBlob.length > 0 ? `${base}\n${sourceSearchBlob}` : base;
   return {
     className: fqn,
     simpleName: simple,
@@ -58,6 +69,7 @@ export function buildClassSearchIndex(
   const { module, configuration, includeTest, buildInputsDigest, resolutionFingerprint } = params;
   const entries: ClassSearchIndexEntry[] = [];
   let skippedArtifacts = 0;
+  let sourceEnrichedEntries = 0;
 
   for (const a of configuration.artifacts) {
     if (a.origin === 'local-file' || a.type === 'local-file') {
@@ -76,8 +88,30 @@ export function buildClassSearchIndex(
         continue;
       }
       for (const fqn of new Set(listed.fqns)) {
+        let blob: string | null = null;
+        if (a.sourcesJarPath !== null && a.sourcesJarPath.length > 0) {
+          try {
+            if (fs.existsSync(a.sourcesJarPath)) {
+              const paths = fqnToZipRelPaths(fqn);
+              if (paths.ok) {
+                const z = readZipEntryUtf8(a.sourcesJarPath, paths.sourceRelPath);
+                if (z.ok && z.text.length > 0) {
+                  const b = buildJavaSourceSearchBlob(z.text, fqn);
+                  if (b.length > 0) {
+                    blob = b;
+                  }
+                }
+              }
+            }
+          } catch {
+            /* omit enrichment */
+          }
+        }
+        if (blob !== null) {
+          sourceEnrichedEntries += 1;
+        }
         entries.push(
-          makeEntry(fqn, a, module.name, configuration.name, 'external', a.jarPath, null, null),
+          makeEntry(fqn, a, module.name, configuration.name, 'external', a.jarPath, null, null, blob),
         );
       }
       continue;
@@ -91,8 +125,34 @@ export function buildClassSearchIndex(
         continue;
       }
       for (const fqn of new Set(listed.fqns)) {
+        let blob: string | null = null;
+        const abs = resolveInterprojectJavaAbsolutePath(root, fqn, includeTest);
+        if (abs !== null) {
+          try {
+            const text = fs.readFileSync(abs, 'utf8');
+            const b = buildJavaSourceSearchBlob(text, fqn);
+            if (b.length > 0) {
+              blob = b;
+            }
+          } catch {
+            /* omit enrichment */
+          }
+        }
+        if (blob !== null) {
+          sourceEnrichedEntries += 1;
+        }
         entries.push(
-          makeEntry(fqn, a, module.name, configuration.name, 'interproject', null, root, a.interproject.moduleName),
+          makeEntry(
+            fqn,
+            a,
+            module.name,
+            configuration.name,
+            'interproject',
+            null,
+            root,
+            a.interproject.moduleName,
+            blob,
+          ),
         );
       }
       continue;
@@ -111,6 +171,8 @@ export function buildClassSearchIndex(
     builtAt: new Date().toISOString(),
     entryCount: entries.length,
     skippedArtifacts,
+    sourceEnrichedEntries,
+    sourceEnrichmentBytesCap: MAX_JAVA_SOURCE_BYTES_FOR_SEARCH,
   };
 
   return {
