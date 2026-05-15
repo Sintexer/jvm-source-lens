@@ -9,10 +9,16 @@ import { parseJavaClassSkeleton, pickMethodJavadoc, type JavaClassSkeleton } fro
 import type { ParsedJavaTypeHeader, ParsedJavaTypeMetadata } from './class-structure/parse-java-type-metadata.js';
 import { parseJavaTypeMetadata } from './class-structure/parse-java-type-metadata.js';
 import { spawnJavapVerbose } from './class-structure/spawn-javap.js';
+import {
+  buildJavapDeclaredAnnotationsIndex,
+  lookupMethodDeclaredAnnotations,
+} from './class-structure/javap-runtime-visible-annotations.js';
 import type {
   ClassStructureField,
+  ClassStructureIncludeSection,
   ClassStructureMethod,
   ClassStructureProvenance,
+  ClassStructureTypeHierarchy,
   GetClassStructureResult,
   JavapClassHeader,
   JavapFieldInfo,
@@ -35,7 +41,16 @@ export type GetClassStructureOptions = {
   configuration?: string;
   includeTest?: boolean;
   forceRefresh?: boolean;
+  /** When set, selects optional response sections; omit for legacy defaults (fields on; hierarchy/annotations off). */
+  include?: ClassStructureIncludeSection[];
 };
+
+function wantsSection(include: ClassStructureIncludeSection[] | undefined, section: ClassStructureIncludeSection): boolean {
+  if (include === undefined) {
+    return section === 'fields';
+  }
+  return include.includes(section);
+}
 
 function coordinatesKey(c: ArtifactCoordinates): string {
   return `${c.group}:${c.name}:${c.version ?? ''}`;
@@ -378,12 +393,31 @@ export async function getClassStructure(
     }
   }
 
+  const wantHierarchy = wantsSection(opts.include, 'hierarchy');
+  const wantFields = wantsSection(opts.include, 'fields');
+  const wantAnnotations = wantsSection(opts.include, 'annotations');
+
+  const javapAnnIndex =
+    wantAnnotations && primaryJavapStdout ? buildJavapDeclaredAnnotationsIndex(primaryJavapStdout) : null;
+
   const declared = parsedPrimary
-    ? parsedPrimary.methods.map((m) => javapMethodToStructure(m, className, false, sourceAvailable, skeleton))
+    ? parsedPrimary.methods.map((m) => {
+        const row = javapMethodToStructure(m, className, false, sourceAvailable, skeleton);
+        if (!javapAnnIndex) {
+          return row;
+        }
+        const extra = lookupMethodDeclaredAnnotations(javapAnnIndex, m.jvmDescriptor, m.declarationLine);
+        return extra ? { ...row, annotations: extra } : row;
+      })
     : primaryJavapStdout
-      ? parseJavapVerboseAllMethods(primaryJavapStdout, className, { includeStatic: true }).map((m) =>
-          javapMethodToStructure(m, className, false, sourceAvailable, skeleton),
-        )
+      ? parseJavapVerboseAllMethods(primaryJavapStdout, className, { includeStatic: true }).map((m) => {
+          const row = javapMethodToStructure(m, className, false, sourceAvailable, skeleton);
+          if (!javapAnnIndex) {
+            return row;
+          }
+          const extra = lookupMethodDeclaredAnnotations(javapAnnIndex, m.jvmDescriptor, m.declarationLine);
+          return extra ? { ...row, annotations: extra } : row;
+        })
       : [];
 
   const classChainTowardsObject: string[] = [];
@@ -453,9 +487,34 @@ export async function getClassStructure(
     : primaryJavapStdout
       ? parseJavapFields(primaryJavapStdout)
       : [];
-  const fields = rawFields.map((f) => javapFieldToStructure(f, className, skeleton, sourceAvailable));
+  let fields: ClassStructureField[] = rawFields.map((f) => javapFieldToStructure(f, className, skeleton, sourceAvailable));
+  if (javapAnnIndex) {
+    fields = fields.map((ff) => {
+      const extra = javapAnnIndex.fields[ff.name];
+      return extra && extra.length > 0 ? { ...ff, annotations: extra } : ff;
+    });
+  }
 
   const provenance = buildClassStructureProvenance({ sourceRead, ownerHit });
+
+  let typeHierarchy: ClassStructureTypeHierarchy | undefined;
+  if (wantHierarchy) {
+    const superclassChain: ClassStructureTypeHierarchy['superclassChain'] = [
+      { className, kind: primaryHeader.kind },
+    ];
+    let sc = primaryHeader.superClass;
+    while (sc && sc !== 'java.lang.Object') {
+      const hh = headerCache.get(sc);
+      superclassChain.push({ className: sc, kind: hh?.kind ?? 'class' });
+      sc = hh?.superClass ?? null;
+    }
+    typeHierarchy = { superclassChain, allSuperinterfaces: ifaceOrdered };
+  }
+
+  const classAnnotations =
+    wantAnnotations && javapAnnIndex && javapAnnIndex.classAnnotations.length > 0
+      ? javapAnnIndex.classAnnotations
+      : undefined;
 
   return {
     ok: true,
@@ -464,9 +523,11 @@ export async function getClassStructure(
     superclass: primaryHeader.superClass,
     interfaces: primaryHeader.directInterfaces,
     typeParameters: primaryHeader.typeParameterNames,
-    fields,
+    fields: wantFields ? fields : [],
     methods,
     sourceAvailable,
     provenance,
+    ...(typeHierarchy ? { typeHierarchy } : {}),
+    ...(classAnnotations ? { classAnnotations } : {}),
   };
 }

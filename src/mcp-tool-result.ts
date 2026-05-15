@@ -127,6 +127,7 @@ export type McpClassStructureSuccessPayload = {
     final: boolean;
     enumConstant: boolean;
     javadoc: string | null;
+    annotations?: Array<{ summary: string }>;
   }>;
   methods: Array<{
     name: string;
@@ -143,9 +144,15 @@ export type McpClassStructureSuccessPayload = {
     genericSignature: string | null;
     jvmDescriptor: string;
     inherited: boolean;
+    annotations?: Array<{ summary: string }>;
   }>;
   sourceAvailable: boolean;
   provenance: ClassStructureProvenance;
+  typeHierarchy?: {
+    superclassChain: Array<{ className: string; kind: 'class' | 'interface' | 'enum' | 'annotation' | 'record' }>;
+    allSuperinterfaces: string[];
+  };
+  classAnnotations?: Array<{ summary: string }>;
 };
 
 export type McpClassStructureNotFoundPayload = {
@@ -328,6 +335,8 @@ export function mcpToolResultFromClassStructure(
       methods: result.methods,
       sourceAvailable: result.sourceAvailable,
       provenance: result.provenance,
+      ...(result.typeHierarchy ? { typeHierarchy: result.typeHierarchy } : {}),
+      ...(result.classAnnotations ? { classAnnotations: result.classAnnotations } : {}),
     };
     const inh = result.methods.filter((m: ClassStructureMethod) => m.inherited).length;
     const summary =

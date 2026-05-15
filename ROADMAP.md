@@ -27,7 +27,8 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ### P1 — MVP polish
 
-- [ ] Enrich `get_class_structure`: optional `include` (hierarchy, fields, annotations) — §12.2
+- [x] Enrich `get_class_structure`: optional `include` (hierarchy, fields, annotations) — §12.2
+- [ ] Inspection split: bytecode-only MCP overload tool + declaration-centric default payloads — [README §7.2](README.md)
 - [ ] CLI `get --json` (single structured object on stdout)
 - [ ] CLI progress indicators (long Gradle / decompile waits)
 - [ ] Hardening: Gradle timeouts, clearer errors, integration smoke test
@@ -103,30 +104,32 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ### MCP server — `get_method_signature`
 
-**Goal:** Common agent path — caller knows `className` and `methodName`, needs exact overloads and contract (including checked exceptions).
+**Goal:** IDE-like overload browsing — caller knows **`className`** and **`methodName`** and needs overloads and contracts **as you would read them from source** when **`.java`** is on the classpath (parameters, return types, **`throws`**); **`javap`** supplements bytecode-only artifacts and fills gaps. Not the primary home for JVM-descriptor archaeology; see **§7.2** and the P1 “Inspection tooling” item for a planned bytecode-only companion tool.
 
-**Implementation:** After resolving Gradle output (cached), read classpath-order **`.java`** (**inter-project** `src/` then **sources JAR** / on-demand fetch). When **`parseJavaTypeMetadata`** succeeds, return overloads from source (**`sourceAvailable: true`**, synthetic **`#SRC:`** **`jvmDescriptor`**, typically no **`Signature`** attribute). Otherwise locate the owning classpath element (same ordering as **`get_class_source`**) and run **`javap -private -verbose`** (**`sourceAvailable: false`**). Optional later: richer convergence with **`get_class_structure`** beyond shared **`parseJavaTypeMetadata`**.
+**Implementation:** After resolving Gradle output (cached), read classpath-order **`.java`** (**inter-project** `src/` then **sources JAR** / on-demand fetch). When **`parseJavaTypeMetadata`** succeeds, return overloads from source (**`sourceAvailable: true`**, synthetic **`#SRC:`** **`jvmDescriptor`** for merge keys—not a real bytecode descriptor). Otherwise locate the owning classpath element (same ordering as **`get_class_source`**) and run **`javap -private -verbose`** (**`sourceAvailable: false`**).
 
-**References:** [README.md §8.2](README.md), [README.md §12.2](README.md), [src/get-method-signatures.ts](src/get-method-signatures.ts), [src/class-structure/javap-parse.ts](src/class-structure/javap-parse.ts), [src/class-structure/parse-java-type-metadata.ts](src/class-structure/parse-java-type-metadata.ts)
+**References:** [README.md §7.2](README.md), [README.md §8.2](README.md), [README.md §12.2](README.md), [src/get-method-signatures.ts](src/get-method-signatures.ts), [src/class-structure/javap-parse.ts](src/class-structure/javap-parse.ts), [src/class-structure/parse-java-type-metadata.ts](src/class-structure/parse-java-type-metadata.ts)
 
 - [x] Tool `get_method_signature`: `className`, `methodName`, `projectRoot`, optional classpath scoping (`modulePath?`, `configuration?`, `includeTest?`, `forceRefresh?`)
 - [x] Response: all overloads — parameters (types + names), return type, generic bounds, checked exceptions; **`sourceAvailable: true`** when parsed from **`.java`**, else **`javap`** metadata with **`sourceAvailable: false`**
 - [x] Shared **`parseJavaTypeMetadata`** with **`get_class_structure`** for the source-first path
 - [x] Errors: same structured pattern as `get_class_source`
-- [x] README §8.2 marked implemented for this tool
+- [x] README §7.2 / §8.2 marked implemented for this tool
+- [ ] **P1:** Dedicated MCP **`javap`**-only overload tool + declaration-centric default payloads ([README §7.2](README.md))
 
 ---
 
 ### MCP server — `get_class_structure`
 
-**Goal:** API browsing without full file body; **effective surface must include inherited methods** (README §12.2 P0).
+**Goal:** API browsing without full file body — **IDE-like** declarations plus **effective surface including inherited methods** when bytecode or source exists on supers/interfaces ([README §7.2](README.md)).
 
 **References:** [README.md §8.2](README.md), §12.2
 
 - [x] Tool `get_class_structure` with documented input shape (+ inherited API in v1)
 - [x] v1 implementation: parse `.java` from sources path (reuse lookup pipeline) and/or bytecode when sources missing
-- [x] `sourceAvailable` on response per §7.1
-- [x] P1 follow-up: optional `include` for full hierarchy, field detail, annotations (see §12.2 / ROADMAP P1)
+- [x] `sourceAvailable` on response per §7.2
+- [x] P1 optional `include`: hierarchy, fields, annotations (see §12.2 / ROADMAP P1)
+- [ ] **P1:** Align source-derived member payloads with declaration-centric shape where javap-shaped fields leak ([README §7.2](README.md))
 
 ---
 
@@ -157,14 +160,25 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ## P1 — MVP polish
 
+### Inspection tooling (IDE-first vs bytecode)
+
+**Goal:** Default MCP tools stay aligned with **README §7.2** (IDE-like browsing). Isolate **`javap`-complete** JVM overload contracts behind an explicit advanced entry point.
+
+**References:** [README.md §7.2](README.md)
+
+- [ ] MCP tool (**name TBD**, e.g. `get_method_signature_bytecode`): **`javap -private -verbose`** only; **`sourceAvailable: false`**; requires resolvable **`.class`** (fails clearly when exploded **`build/classes/**`** or JAR entry is missing — **no** sibling **`src/`** fallback by design)
+- [ ] Narrow **`get_method_signature`** / **`get_class_structure`** source-path payloads toward declaration-centric fields (reduce javap-shaped fields on **`sourceAvailable: true`** rows where practical)
+
+---
+
 ### Enrich `get_class_structure`
 
 **Goal:** Optional sections (hierarchy, fields, annotations) on one tool; shared `ClassStructure` parse (README §12.2 P1).
 
-- [ ] Input: optional `include` (e.g. `hierarchy`, `fields`, `annotations`; exact shape TBD in §8.2)
-- [ ] Hierarchy: recursive superclass + interfaces for substitutability checks
-- [ ] Fields: visibility, `final`, annotations
-- [ ] Annotations: by target (class, method, field, parameter) with attribute values
+- [x] Input: optional `include` (e.g. `hierarchy`, `fields`, `annotations`; exact shape §8.2)
+- [x] Hierarchy: recursive superclass + interfaces for substitutability checks
+- [x] Fields: visibility, `final`, annotations
+- [x] Annotations: class, method, field targets via javap `RuntimeVisibleAnnotations` summaries (parameter-level deferred)
 
 ---
 

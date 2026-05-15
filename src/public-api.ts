@@ -1,9 +1,12 @@
 export { getClassSource, type GetClassSourceOptions } from './get-class-source.js';
 export { getClassStructure, type GetClassStructureOptions } from './get-class-structure.js';
 export type {
+  ClassStructureDeclaredAnnotation,
   ClassStructureField,
+  ClassStructureIncludeSection,
   ClassStructureKind,
   ClassStructureMethod,
+  ClassStructureTypeHierarchy,
   GetClassStructureResult,
 } from './class-structure/types.js';
 export { resolveWithResolutionCache, type ResolveWithResolutionCacheOptions } from './resolve-with-cache.js';

@@ -381,6 +381,66 @@ test('mcpGetClassStructurePayloadSchema accepts success', () => {
   expect(parsed.success).toBe(true);
 });
 
+test('mcpGetClassStructurePayloadSchema accepts hierarchy and annotations enrichments', () => {
+  const parsed = mcpGetClassStructurePayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    querySucceeded: true,
+    className: 'com.example.T',
+    kind: 'class',
+    superclass: 'com.example.Base',
+    interfaces: [],
+    typeParameters: [],
+    fields: [
+      {
+        name: 'id',
+        declaringClass: 'com.example.T',
+        visibility: 'private',
+        type: 'long',
+        static: false,
+        final: false,
+        enumConstant: false,
+        javadoc: null,
+        annotations: [{ summary: 'jakarta.persistence.Id' }],
+      },
+    ],
+    methods: [
+      {
+        name: 'run',
+        jvmMethodName: 'run',
+        declaringClass: 'com.example.T',
+        visibility: 'public',
+        returnType: 'void',
+        parameters: [],
+        typeParameters: [],
+        javadoc: null,
+        abstract: false,
+        static: false,
+        throws: [],
+        genericSignature: null,
+        jvmDescriptor: '()V',
+        inherited: false,
+        annotations: [{ summary: 'java.lang.Deprecated' }],
+      },
+    ],
+    sourceAvailable: true,
+    provenance: {
+      kind: 'sourcesJar',
+      coordinates: { group: 'g', name: 'a', version: '1' },
+      jarPath: '/tmp/a-sources.jar',
+    },
+    typeHierarchy: {
+      superclassChain: [
+        { className: 'com.example.T', kind: 'class' },
+        { className: 'com.example.Base', kind: 'class' },
+      ],
+      allSuperinterfaces: ['java.lang.Runnable'],
+    },
+    classAnnotations: [{ summary: 'java.lang.SuppressWarnings("unchecked")' }],
+  });
+  expect(parsed.success).toBe(true);
+});
+
 test('mcpGetClassStructurePayloadSchema accepts SIGNATURE_EXTRACT_FAILED without methodName', () => {
   const parsed = mcpGetClassStructurePayloadSchema.safeParse({
     ok: false,

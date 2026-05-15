@@ -336,6 +336,10 @@ const classStructureParameterSchema = z.object({
   type: z.string(),
 });
 
+const classStructureDeclaredAnnotationSchema = z.object({
+  summary: z.string(),
+});
+
 const classStructureMethodSchema = z.object({
   name: z.string(),
   jvmMethodName: z.string(),
@@ -351,6 +355,7 @@ const classStructureMethodSchema = z.object({
   genericSignature: z.string().nullable(),
   jvmDescriptor: z.string(),
   inherited: z.boolean(),
+  annotations: z.array(classStructureDeclaredAnnotationSchema).optional(),
 });
 
 const classStructureFieldSchema = z.object({
@@ -362,6 +367,17 @@ const classStructureFieldSchema = z.object({
   final: z.boolean(),
   enumConstant: z.boolean(),
   javadoc: z.string().nullable(),
+  annotations: z.array(classStructureDeclaredAnnotationSchema).optional(),
+});
+
+const classStructureTypeHierarchySchema = z.object({
+  superclassChain: z.array(
+    z.object({
+      className: z.string(),
+      kind: classStructureKindSchema,
+    }),
+  ),
+  allSuperinterfaces: z.array(z.string()),
 });
 
 const getClassStructureInputSchema = z.object({
@@ -371,6 +387,7 @@ const getClassStructureInputSchema = z.object({
   configuration: z.string().optional(),
   includeTest: z.boolean().optional(),
   forceRefresh: z.boolean().optional(),
+  include: z.array(z.enum(['hierarchy', 'fields', 'annotations'])).optional(),
 });
 
 const mcpClassStructureFailureSchema = z.object({
@@ -396,6 +413,8 @@ export const mcpGetClassStructurePayloadSchema = z.union([
     methods: z.array(classStructureMethodSchema),
     sourceAvailable: z.boolean(),
     provenance: classStructureProvenanceSchema,
+    typeHierarchy: classStructureTypeHierarchySchema.optional(),
+    classAnnotations: z.array(classStructureDeclaredAnnotationSchema).optional(),
   }),
   z.object({
     ok: z.literal(true),
@@ -584,6 +603,8 @@ export async function startMcpServer(): Promise<void> {
       description:
         'Returns structured metadata for a fully-qualified class: kind, superclass, interfaces, type parameters, fields, and methods. ' +
         'Includes inherited public/protected instance methods from supertypes (javap on the resolved classpath). ' +
+        'Optional `include`: array of `hierarchy` (recursive superclass chain + all super-interfaces), `fields` (omit to return an empty fields array when projecting), `annotations` (runtime-visible annotations from javap on the primary type, class, declared fields/methods — javap-rendered summaries). ' +
+        'When `include` is omitted, behavior matches the original tool (fields populated; no typeHierarchy or class/member annotations sections). ' +
         'sourceAvailable is true when the primary type was loaded from a sources JAR (Javadoc on declared members); inherited entries are still bytecode-derived. ' +
         'Does not decompile (no CFR). Uses the same classpath selection as get_class_source. ' +
         'Inter-project submodule classes (`origin: interproject`) resolve from Gradle output dirs for javap and from `src/main/java`/`src/test/java` for sourced metadata when available. On javap failure: code SIGNATURE_EXTRACT_FAILED.',
@@ -611,6 +632,7 @@ export async function startMcpServer(): Promise<void> {
           configuration: args.configuration,
           includeTest: Boolean(args.includeTest),
           forceRefresh: Boolean(args.forceRefresh),
+          include: args.include,
         });
         return mcpToolResultFromClassStructure(result, query);
       } catch (e) {

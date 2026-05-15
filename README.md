@@ -616,9 +616,19 @@ Every response that returns **Java source text** (CLI `get` stdout, MCP `get_cla
 - **`true`** — text came from **original source** (project sources, inter-project files, or a **sources JAR**). Javadoc, parameter names (as compiled), and generics match what the author shipped.
 - **`false`** — text came from **decompiled bytecode** (CFR). Structurally reliable, but Javadoc is absent, parameter names may be missing unless the dependency was built with `-parameters`, and complex generics can be approximated.
 
-The MCP tools **`get_method_signature`** and **`get_class_structure`** return structured metadata. **`javap -private -verbose`** remains the bytecode truth path when sources are unavailable: erased parameter types, optional names from **`LocalVariableTable`**, JVM **`Signature`** attribute when present, checked exceptions from **`Exceptions`** where applicable. When original **`.java`** is read first (sources JAR or **`interproject`** disk), overload metadata is derived from source parsing instead: **`genericSignature`** is typically **`null`**, **`jvmDescriptor`** uses an internal **`#SRC:`** synthetic prefix (not a real bytecode descriptor), and checked-exception lists reflect **`throws`** clauses as written. **Primary-type** **`sourceAvailable`** on **`get_class_structure`** is **`true`** when that type’s declarations came from sources; **`get_method_signature`** sets **`sourceAvailable: true`** only on the source-derived overload path (otherwise **`false`** for **`javap`**). Inherited API may mix **`javap`** layers with source-parsed layers when supers/interfaces lack compiled output but still have **`src/`** or sources JAR entries on the resolved classpath.
+### 7.2 Method and structure inspection (IDE-first)
 
-Agents should treat `sourceAvailable: false` as “trust types and control flow; treat names and comments as best-effort.” Do not rely on decompiled output for security reviews, credential handling, or proving absence of malicious behavior — it is recovered from bytecode, may omit comments, and is produced by a subprocess on untrusted classes. Escalation to **`get_method_signature`** (overload contracts from javap), **`get_class_structure`** (broader metadata including inherited API), or re-resolution (`forceRefresh`) is a separate concern.
+**Product intent:** **`get_method_signature`** and **`get_class_structure`** are meant to replicate what you get when you **open a type in an IDE**: declarations as written (parameters, return types, **`throws`**, generics **as text** where parsing succeeds), **Javadoc** on the primary type where sources are used, and enough hierarchy / overload detail to **navigate** (then **`get_class_source`** when the body matters). They are **not** trying to be a full **`javap -verbose`** substitute on the default path.
+
+**How it works today:** Both tools **prefer** classpath-ordered **`.java`**: **`interproject`** sibling **`src/main/java`** or **`src/test/java`** when **`includeTest`**, then **sources JAR** / on-demand **`jvmsrcResolveSources`**, plus a lightweight declaration parse. **`javap -private -verbose`** is used when sources are missing, unparsable, or to walk **inheritance** when bytecode for a supertype or interface is available—**without** requiring sibling **`build/classes/**`** when source-only inter-project deps exist.
+
+**Bytecode-shaped fields:** When metadata comes from **source parsing**, **`genericSignature`** is typically **`null`** and **`jvmDescriptor`** may use an internal **`#SRC:`** prefix (merge/dedup helper—not a real JVM bytecode descriptor). When metadata comes from **`javap`**, those fields reflect the classfile (**`Signature`**, **`Exceptions`**, **`LocalVariableTable`** names where present).
+
+**Advanced inspection (planned):** A **separate** MCP tool dedicated to **bytecode-accurate** overload contracts (**`javap`** only, **`sourceAvailable: false`**) may be added so agents that truly need JVM-level descriptors do not overload the IDE-shaped defaults; see [ROADMAP.md](ROADMAP.md).
+
+**`sourceAvailable` on these tools:** **`get_class_structure`** sets **`true`** when the **primary** type’s declarations came from original source. **`get_method_signature`** sets **`true`** when overloads were produced from that source-parse path; **`false`** when the **`javap`** path supplied them. Inherited layers may mix source-derived and **`javap`**-derived rows depending on whether each supertype/interface had readable **`.java`** or only bytecode.
+
+Agents should treat `sourceAvailable: false` as “trust types and control flow; treat names and comments as best-effort.” Do not rely on decompiled output for security reviews, credential handling, or proving absence of malicious behavior — it is recovered from bytecode, may omit comments, and is produced by a subprocess on untrusted classes. For overload browsing like an IDE, prefer **`get_method_signature`** / **`get_class_structure`** on the source-first path; use **`get_class_source`** when signatures plus Javadoc are not enough; use **`forceRefresh`** when resolution is stale.
 
 ---
 
@@ -704,17 +714,21 @@ The same core logic is exposed as an MCP server, making the tool available to ID
 
 **Exposed MCP tools:**
 
+Primary intent for **`get_method_signature`** / **`get_class_structure`**: **IDE-like** browsing (§7.2)—sources first, **`javap`** as fallback and for inheritance when bytecode exists—not wholesale duplication of every **`javap -verbose`** feature in the default contract.
+
 | Tool | Status | Description |
 |---|---|---|
 | `get_class_source` | **Implemented** | Returns full Java source (original **`interproject`** / **sources JAR** or CFR-decompiled bytecode) for a **fully-qualified** class name. Tool arguments: **`className`**, **`projectRoot`**, optional **`modulePath`**, **`configuration`**, **`includeTest`**, **`forceRefresh`** (same semantics as CLI `get`). **Found:** **`isError: false`**, **`found: true`**, **`source`**, **`sourceAvailable`**, **`provenance`** (`sourcesJar` \| `decompiled` \| `interproject`). **Not on classpath (successful scan):** **`isError: false`**, **`found: false`**, **`querySucceeded: true`** — do not retry as a transient failure. **Failures:** **`isError: true`** with **`errorCategory`** (`transient` \| `validation` \| `business` \| `permission`), **`isRetryable`**, **`description`** (what/why + recovery), stable **`code`** (§7), and domain **`error`**. |
-| `get_method_signature` | **Implemented** | Returns **all overloads** of **`methodName`** on **`className`**. Source-first: parses classpath-ordered **`.java`** (**`interproject`** `src/` or **sources JAR**) when present; otherwise **`javap -private -verbose`** on the owning JAR or **`build/classes/**`** root (same ordering as **`get_class_source`**). Tool arguments: **`className`**, **`methodName`** (use **`<init>`** for constructors), **`projectRoot`**, optional **`modulePath`**, **`configuration`**, **`includeTest`**, **`forceRefresh`**. **`sourceAvailable`** is **`true`** on the source-parse path and **`false`** on **`javap`**. **`provenance`:** **`classpathJar`**, **`interprojectBytecode`**, **`sourcesJar`**, or **`interprojectSource`** (`absoluteSourcePath`, **`sourceRelativePath`**). **Not on classpath:** **`isError: false`**, **`found: false`**, **`querySucceeded: true`**. **Failures:** structured errors as §7 (**`SIGNATURE_EXTRACT_FAILED`** when neither source nor **`javap`** yields metadata). Optional env **`JVMSRC_JAVAP_TIMEOUT_MS`** (default 60000), **`JVMSRC_JAVAP_MAX_OUTPUT_BYTES`** (default 10485760). Subprocess env matches CFR spawns (§6.2). |
-| `get_class_structure` | **Implemented** | Returns **`kind`, hierarchy, fields, declared methods**, plus inherited public/protected instance API. Declared members prefer parsed **`.java`** when available; **`javap`** fills gaps and walks supers/interfaces when bytecode exists, with source fallback for layers without **`build/classes/**` but with readable **`.java`**. **`javadoc`** enrichment applies when the primary type was read from sources. **Does not** run CFR. Arguments mirror other classpath tools. **`sourceAvailable`:** **`true`** when the primary type’s declarations came from original source. **`provenance`** includes **`classpathJar`**, **`interprojectBytecode`**, **`sourcesJar`**, or **`interprojectSource`**. Errors include **`SIGNATURE_EXTRACT_FAILED`**. **`JVMSRC_JAVAP_*`** env matches **`get_method_signature`**. |
+| `get_method_signature` | **Implemented** | **IDE-shaped overload listing:** returns **all overloads** of **`methodName`** on **`className`** (constructors: **`methodName`** **`<init>`**). **Source-first** classpath **`.java`** parse when possible (§7.2); otherwise **`javap -private -verbose`** on the owning JAR or **`build/classes/**`**. Tool arguments: **`className`**, **`methodName`**, **`projectRoot`**, optional **`modulePath`**, **`configuration`**, **`includeTest`**, **`forceRefresh`**. **`sourceAvailable`:** **`true`** when overloads came from source parse; **`false`** when from **`javap`**. **`provenance`:** **`classpathJar`**, **`interprojectBytecode`**, **`sourcesJar`**, or **`interprojectSource`**. **Failures:** **`SIGNATURE_EXTRACT_FAILED`** when neither source nor **`javap`** yields usable metadata. **`JVMSRC_JAVAP_*`** env (§6.2). **Planned:** dedicated bytecode-only companion tool for strict JVM-descriptor workflows ([ROADMAP.md](ROADMAP.md)). |
+| `get_class_structure` | **Implemented** | **IDE-shaped API browse:** **`kind`, superclass, interfaces, type parameters, fields, declared methods**, plus inherited public/protected instance API (§7.2). Optional **`include`**: **`hierarchy`**, **`fields`**, **`annotations`** (see illustrative payload below). Declared members prefer parsed **`.java`**; **`javap`** fills gaps and walks supers/interfaces when bytecode exists; source fallback when **`build/classes/**`** is absent but **`src/`** or sources JAR exists. **`javadoc`** when primary type came from sources. **Does not** run CFR. **`sourceAvailable`:** **`true`** when primary declarations came from original source. **`provenance`** as for **`get_method_signature`**. **`JVMSRC_JAVAP_*`** env matches **`get_method_signature`**. |
 | `list_modules` | **Implemented** | Lists Gradle **submodules** with **`path`** and **per-configuration** dependency counts (**`artifactCount`**, **`directArtifactCount`**) without returning full **`ResolutionOutput`**. Tool arguments: **`projectRoot`**, optional **`forceRefresh`** (same as **`resolve_dependencies`** / §6.1). **Success:** **`isError: false`**, **`ok: true`**, **`schemaVersion`**, **`resolvedAt`**, **`projectRoot`**, **`buildSystem`**, **`modules[]`** (each with **`name`**, **`path`**, **`configurations[]`** with **`name`**, **`scope`**, counts), **`resolutionWarningCount`** (length of Gradle partial **`errors[]`** — call **`resolve_dependencies`** for full **`errors`** and artifact lists). **Failures:** same structured envelope as **`resolve_dependencies`** (**`code: RESOLUTION_FAILED`**). |
 | `resolve_dependencies` | **Implemented** | Returns validated **`ResolutionOutput`** (§5.5.2) for the whole project (all `modules[]`). Tool arguments: **`projectRoot`**, optional **`forceRefresh`** (same semantics as CLI `resolve` / §6.1). **Success:** **`isError: false`**, **`ok: true`**, **`resolution`** (full document). **Failures:** **`isError: true`** with **`errorCategory`**, **`isRetryable`**, **`description`**, **`code: RESOLUTION_FAILED`**, and domain **`error`**. Use before batch **`get_class_source`** calls to warm the resolution cache without per-class Gradle runs. |
 
 **MCP error categories (`get_class_source`, **`get_class_structure`**, `get_method_signature`, **`resolve_dependencies`**, **`list_modules`**):** Tool failures set **`isError: true`** and include **`errorCategory`**, **`isRetryable`**, and a **`description`** explaining what failed and why. **`transient`** — Gradle/network/timeouts, CFR timeouts, **javap** timeouts / spawn issues; retry after a delay. **`validation`** — bad `projectRoot`, FQN, **`methodName`**, `modulePath`, or `configuration`; fix inputs. **`business`** — e.g. CFR cannot decompile, sources permanently unavailable, **javap** exited non-zero without transient hints; do not retry the same request. **`permission`** — repository auth denied; escalate credentials. A class missing after a **successful** classpath scan is **`found: false`** with **`isError: false`** (not confused with “could not reach Gradle”). For **`get_method_signature`**, when the class is found but **`methodFound: false`**, the tool still returns **`isError: false`** — adjust **`methodName`** (constructors **`<init>`**) or inspect declarations via **`get_class_source`** or **`get_class_structure`**.
 
 **`get_class_structure` output shape (illustrative):**
+
+Optional tool argument **`include`**: string array of **`hierarchy`**, **`fields`**, **`annotations`** (any subset). **`hierarchy`** adds **`typeHierarchy.superclassChain`** (primary type → … → below **`java.lang.Object`**) and **`typeHierarchy.allSuperinterfaces`** (depth-first expansion of interface graphs). **`annotations`** adds **`classAnnotations`** plus per-declared-member **`annotations[].summary`** strings from **`javap -verbose`** `RuntimeVisibleAnnotations` (parameter-level annotations are not surfaced yet). Omitting **`fields`** in **`include`** yields **`fields: []`** for payload projection; omitting **`include`** entirely keeps the legacy default (**`fields`** populated, no hierarchy or annotation extras).
 
 ```typescript
 // Tool: get_class_structure — success structuredContent (representative fields)
@@ -805,7 +819,10 @@ if (r.ok) {
   // r.error.code — see §7 stable codes
 }
 
-const s = await getClassStructure('com.example.MyClass', { projectRoot: '/path/to/project' });
+const s = await getClassStructure('com.example.MyClass', {
+  projectRoot: '/path/to/project',
+  include: ['hierarchy', 'annotations'],
+});
 if (s.ok) {
   const { methods, fields, sourceAvailable } = s;
 } else {
@@ -925,17 +942,17 @@ The following represents the minimum build that validates the architecture end-t
 5. Source JAR extraction (preferred path)
 6. CFR decompilation with result caching (fallback path)
 7. CLI entry point with `--project` and `--module` flags
-8. MCP server entry point; **`get_class_source`**, **`resolve_dependencies`**, **`list_modules`**, **`get_method_signature`**, and **`get_class_structure`** are implemented (§8.2). **`origin: interproject`** classes load from depended **`src/...`** **`.java`** for **`get`** and for **source-first** structure/signature tools before falling back to **`javap`** on **`build/classes/**`** when needed. **`get_class_structure`** enriches declared members from that source when present. Optional enrichments remain per §12.
+8. MCP server entry point; **`get_class_source`**, **`resolve_dependencies`**, **`list_modules`**, **`get_method_signature`**, and **`get_class_structure`** are implemented (§8.2). **`origin: interproject`** classes load from depended **`src/...`** **`.java`** for **`get`** and for **source-first** structure/signature tools before falling back to **`javap`** on **`build/classes/**`** when needed. **`get_class_structure`** enriches declared members from that source when present; optional **`include`** slices (`hierarchy`, `fields`, `annotations`) are documented in §8.2.
 9. Structured error responses (unsupported project, class not found, version conflict)
 
 **Near-term interface goals** — priority order tracks **agent use-case frequency** (full breakdown in §12):
 
 | Priority | Item | Section |
 |---|---|---|
-| High | `get_method_signature` MCP tool (overload + checked-exception contract) — **implemented** (javap; §8.2) | §8.2, §12 |
+| High | `get_method_signature` MCP tool (IDE-like overloads + contracts; source-first, **`javap`** fallback) — **implemented** (§7.2, §8.2) | §8.2, §12 |
 | High | `get_class_structure` MCP tool (metadata; **inherited** API on the type) — **implemented** (§8.2) | §8.2, §12 |
 | High | `sourceAvailable` on all source-bearing MCP/CLI/library responses | §7.1 |
-| Medium | Enrich `get_class_structure` (optional `include`: hierarchy, fields, annotations) | §12 |
+| Medium | Enrich `get_class_structure` (optional `include`: hierarchy, fields, annotations) — **implemented** (§8.2); parameter-level annotations deferred | §12 |
 | Medium | `forceRefresh` on `resolve_dependencies` + `--force-refresh` on CLI | §6.1, §8.1 — **done** for MCP and CLI |
 | Medium | **`search_classes`** / class search index (capability discovery; index-backed) | §12 |
 | Low | `jvmsrc config` MCP snippet generator | §8.1.1 |
@@ -964,7 +981,7 @@ Analysis of how agents use JVM dependencies in practice suggests several query p
 
 | Tool / requirement | Approx. use-case share | Notes |
 |---|---|---|
-| **`get_method_signature(className, methodName)`** | ~30% | **Shipped:** overload metadata via **`javap -verbose`** on the owning external JAR (constructors: **`methodName`** **`<init>`**). Future optional convergence: a shared **`ClassStructure`** parse could back both this tool and **`get_class_structure`**. |
+| **`get_method_signature(className, methodName)`** | ~30% | **Shipped:** overload metadata **source-first** (classpath **`.java`**), then **`javap -verbose`** when sources are unavailable or unparsable (constructors: **`methodName`** **`<init>`**). **`Planned`:** optional **`javap`-only** MCP tool for bytecode-accurate descriptors ([ROADMAP.md](ROADMAP.md)). |
 | **`get_class_structure`** | ~20% | Browse API when the class is known; **includes inherited** public/protected instance methods (§8.2). |
 
 #### P1 — first release after MVP
@@ -990,9 +1007,11 @@ Analysis of how agents use JVM dependencies in practice suggests several query p
 
 #### Internal architecture note
 
-**Today:** **`get_method_signature`** and **`get_class_structure`** are implemented by spawning **`javap -private -verbose`** (and parsing its output); **`get_class_structure`** optionally reads the primary type from a **sources JAR** for Javadoc on declared members.
+**Today:** **`get_method_signature`** and **`get_class_structure`** default to **IDE-like** behavior (§7.2): classpath-ordered **`.java`** plus **`parseJavaTypeMetadata`**, with **`javap -private -verbose`** when bytecode is needed or sources are missing. Response shapes still reuse some javap-oriented fields for compatibility; **`#SRC:`** synthetic **`jvmDescriptor`** values mark source-derived overload rows.
 
-**Target (P0/P1):** most structured tools become projections over a single **`ClassStructure`** object: parse once per class (per session), cache in memory, expose different slices:
+**Direction:** narrow the **default** payloads toward declaration-centric fields; reserve full **`javap`** fidelity for a **separate** advanced tool ([ROADMAP.md](ROADMAP.md)). Longer-term, structured tools could share one cached **`ClassStructure`**-style parse per class where worthwhile:
+
+**Target (optional refactor):** projections over a single in-memory parse per class where it pays off:
 
 ```text
 parse class (once, cached)
@@ -1010,7 +1029,7 @@ parse class (once, cached)
 | Tool | Role | Approx. ops covered | Target |
 |---|---|---|---|
 | `get_class_source` | Full source | ~15% | MVP (done) |
-| `get_method_signature` | Method contract | ~30% | MVP (**done** — javap-backed) |
+| `get_method_signature` | Method contract (IDE-first) | ~30% | MVP (**done** — source-first + javap fallback) |
 | `get_class_structure` (enriched over releases) | Browse API, hierarchy, fields, annotations | ~42% | MVP + P1 |
 | `search_classes` | Discovery | ~7% | v2 |
 | `get_implementors` | Implementation templates | ~1% | Future |

@@ -80,6 +80,19 @@ export type ClassStructureParameter = {
   type: string;
 };
 
+/** Single runtime-visible annotation entry from `javap -verbose` (human-readable summary line(s)). */
+export type ClassStructureDeclaredAnnotation = {
+  summary: string;
+};
+
+export type ClassStructureIncludeSection = 'hierarchy' | 'fields' | 'annotations';
+
+/** Recursive view for substitutability checks (primary → … → Object; expanded super-interface list). */
+export type ClassStructureTypeHierarchy = {
+  superclassChain: Array<{ className: string; kind: ClassStructureKind }>;
+  allSuperinterfaces: string[];
+};
+
 export type ClassStructureMethod = {
   name: string;
   /** Bytecode name (`<init>` for constructors). */
@@ -96,6 +109,8 @@ export type ClassStructureMethod = {
   genericSignature: string | null;
   jvmDescriptor: string;
   inherited: boolean;
+  /** Present when `include` lists `annotations` and javap supplied metadata for this declared member. */
+  annotations?: ClassStructureDeclaredAnnotation[];
 };
 
 export type ClassStructureField = {
@@ -107,6 +122,8 @@ export type ClassStructureField = {
   final: boolean;
   enumConstant: boolean;
   javadoc: string | null;
+  /** Present when `include` lists `annotations` and javap supplied metadata for this declared field. */
+  annotations?: ClassStructureDeclaredAnnotation[];
 };
 
 export type ClassStructureProvenance = MethodSignatureProvenance;
@@ -122,6 +139,10 @@ export type GetClassStructureSuccess = {
   methods: ClassStructureMethod[];
   sourceAvailable: boolean;
   provenance: ClassStructureProvenance;
+  /** Present when `include` lists `hierarchy`. */
+  typeHierarchy?: ClassStructureTypeHierarchy;
+  /** Declared runtime-visible type annotations from javap when `include` lists `annotations`. */
+  classAnnotations?: ClassStructureDeclaredAnnotation[];
 };
 
 export type GetClassStructureResult = GetClassStructureSuccess | { ok: false; error: ClassSourceError };
