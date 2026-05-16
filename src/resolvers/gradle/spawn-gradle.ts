@@ -1,16 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getBundledResource } from '../../bundled-resources.js';
+import { readProcessStreamToText, spawnChild } from '../../spawn-child.js';
 import { formatGradleUserMessage } from './gradle-failure-message.js';
-
-async function streamToText(
-  stream: number | ReadableStream<Uint8Array> | undefined,
-): Promise<string> {
-  if (stream == null || typeof stream === 'number') {
-    return '';
-  }
-  return await Bun.readableStreamToText(stream);
-}
 
 /** Default wall-clock cap for each Gradle invocation. Override with `JVMSRC_GRADLE_TIMEOUT_MS`. */
 export const DEFAULT_GRADLE_TIMEOUT_MS = 600_000;
@@ -86,9 +78,9 @@ export async function runGradleTask(
 
   argv.push('--no-configuration-cache', '--init-script', initScript, '--quiet', task);
 
-  let proc: ReturnType<typeof Bun.spawn>;
+  let proc: ReturnType<typeof spawnChild>;
   try {
-    proc = Bun.spawn(argv, {
+    proc = spawnChild(argv, {
       cwd: root,
       stdout: 'pipe',
       stderr: spawnOptions?.inheritStderr ? 'inherit' : 'pipe',
@@ -123,8 +115,8 @@ export async function runGradleTask(
   }, timeoutMs);
 
   const [stdout, stderr, exitCode] = await Promise.all([
-    streamToText(proc.stdout),
-    streamToText(proc.stderr),
+    readProcessStreamToText(proc.stdout),
+    readProcessStreamToText(proc.stderr),
     proc.exited,
   ]);
   clearTimeout(timer);

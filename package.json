@@ -21,7 +21,7 @@
     "dev:mcp": "bun run src/mcp.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test",
-    "build": "bun build ./src/cli.ts ./src/mcp.ts ./src/public-api.ts --outdir ./dist --target node --format esm",
+    "build": "bun build ./src/cli.ts ./src/mcp.ts ./src/public-api.ts --outdir ./dist --target node --format esm --packages=external",
     "setup:cfr": "bun run scripts/fetch-cfr.ts",
     "ensure:gradle-smoke-wrapper": "bash scripts/ensure-gradle-smoke-wrapper.sh",
     "prepack": "bun run typecheck && bun run build && bun run scripts/validate-bundled-resources.ts"
@@ -32,7 +32,7 @@
     "typescript": "^5.9.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "^2.0.0-alpha.2",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "commander": "^14.0.3",
     "env-paths": "^4.0.0",
     "fflate": "^0.8.2",

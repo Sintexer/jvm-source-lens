@@ -1,3 +1,4 @@
+import { readProcessStreamCapped, spawnChild } from '../spawn-child.js';
 import { buildCfrSpawnEnv } from './cfr-spawn-env.js';
 import { resolveCfrJarPath } from './resolve-cfr-jar.js';
 import { resolveJavaExecutable } from './resolve-java-executable.js';
@@ -28,50 +29,6 @@ export function cfrTimeoutMs(): number {
 
 export function cfrMaxOutputBytes(): number {
   return parsePositiveIntEnv('JVMSRC_CFR_MAX_OUTPUT_BYTES', DEFAULT_CFR_MAX_OUTPUT_BYTES);
-}
-
-async function readStreamCapped(
-  stream: number | ReadableStream<Uint8Array> | undefined,
-  maxBytes: number,
-): Promise<{ text: string; exceeded: boolean }> {
-  if (stream == null || typeof stream === 'number') {
-    return { text: '', exceeded: false };
-  }
-
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      if (!value || value.byteLength === 0) {
-        continue;
-      }
-      total += value.byteLength;
-      if (total > maxBytes) {
-        return { text: '', exceeded: true };
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  if (total === 0) {
-    return { text: '', exceeded: false };
-  }
-
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return { text: new TextDecoder('utf-8', { fatal: false }).decode(merged), exceeded: false };
 }
 
 export type CfrDecompileOptions = {
@@ -116,9 +73,9 @@ export async function runCfrDecompile(opts: CfrDecompileOptions): Promise<CfrDec
 
   const argv = [javaPath, '-jar', cfrJar, opts.jarPath, opts.className, '--silent', 'true'];
 
-  let proc: ReturnType<typeof Bun.spawn>;
+  let proc: ReturnType<typeof spawnChild>;
   try {
-    proc = Bun.spawn(argv, {
+    proc = spawnChild(argv, {
       stdout: 'pipe',
       stderr: 'pipe',
       stdin: 'ignore',
@@ -143,8 +100,8 @@ export async function runCfrDecompile(opts: CfrDecompileOptions): Promise<CfrDec
     }
   }, timeoutMs);
 
-  const stdoutP = readStreamCapped(proc.stdout, maxOutputBytes);
-  const stderrP = readStreamCapped(proc.stderr, DEFAULT_CFR_MAX_STDERR_BYTES);
+  const stdoutP = readProcessStreamCapped(proc.stdout, maxOutputBytes);
+  const stderrP = readProcessStreamCapped(proc.stderr, DEFAULT_CFR_MAX_STDERR_BYTES);
   const exitCode = await proc.exited;
   clearTimeout(timer);
 

@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 
 import type {
   ArtifactCoordinates,
@@ -34,7 +35,7 @@ export async function readInterprojectJavaIfPresent(
     if (!existsSync(absoluteSourcePath)) {
       continue;
     }
-    const source = await Bun.file(absoluteSourcePath).text();
+    const source = await readFile(absoluteSourcePath, 'utf8');
 
     return {
       ok: true,

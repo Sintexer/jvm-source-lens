@@ -120,7 +120,11 @@ const classSourceErrorCodeSchema = z.enum([
   'SIGNATURE_EXTRACT_FAILED',
 ]);
 
-/** Documented MCP tool payloads (success, not-found, or categorized failure). */
+/**
+ * Documented MCP tool payloads (success, not-found, or categorized failure).
+ * Used in tests and agent docs only — not passed as MCP `outputSchema`: the SDK's
+ * output validator only accepts object schemas; `z.union` triggers a runtime `_zod` crash.
+ */
 export const mcpClassSourceToolPayloadSchema = z.union([
   z.object({
     ok: z.literal(true),
@@ -484,6 +488,67 @@ export const mcpGetClassStructurePayloadSchema = z.union([
   mcpClassStructureFailureSchema,
 ]);
 
+const JVMSRC_INSTRUCTIONS = `
+You have access to jvmsrc — JVM Source Lens. It resolves a project's exact classpath
+by invoking the build tool, then extracts source or metadata for any class on that
+classpath. The resolved version is always the one the project actually uses.
+ 
+## Mandatory Rule
+ 
+ALWAYS use jvmsrc tools for any JVM class or dependency task. NEVER:
+- Manually locate or parse JARs under ~/.gradle, ~/.m2, or build output directories
+- Run javap, unzip, or jar commands to inspect class contents
+- Scan or grep build cache directories for artifact paths
+- Infer signatures, method contracts, or type hierarchies from memory or training data
+ 
+This rule is absolute. The global dependency cache holds multiple versions of every
+library. Manual inspection silently picks the wrong one. Only jvmsrc knows which version
+this project uses. If a tool fails, surface the error — do not fall back to manual inspection.
+ 
+## Tool Selection
+ 
+Use the most specific tool for the task:
+ 
+- Unknown FQN → \`search_classes\` first (substring or glob over resolved classpath)
+- Method signature / overloads / exceptions → \`get_method_signature\`
+- Strict JVM descriptors, bridge or synthetic members → \`get_method_signature_bytecode\`
+- API surface, hierarchy, fields, annotations → \`get_class_structure\`
+- Full implementation body (only when needed) → \`get_class_source\`
+- Submodule names before a scoped call → \`list_modules\`
+- Full dependency tree or version conflict diagnosis → \`resolve_dependencies\`
+ 
+Prefer \`get_method_signature\` or \`get_class_structure\` over \`get_class_source\` —
+they answer most questions at a fraction of the context cost.
+ 
+Always pass \`projectRoot\` (absolute path). Pass \`modulePath\` (e.g. \`:core:utils\`)
+when working inside a specific submodule. Call \`list_modules\` first if unsure.
+ 
+## sourceAvailable
+ 
+Every source response includes \`sourceAvailable\`:
+- \`true\` — original source; Javadoc, parameter names, and generics are ground truth
+- \`false\` — CFR decompilation; structure reliable, Javadoc absent, names may be synthetic
+ 
+## Cache
+ 
+First call per project invokes the build tool (5–10s). Subsequent calls reuse the cache
+(<100ms). All extraction tools share the same warm cache. Use \`forceRefresh: true\` on
+\`resolve_dependencies\` only when artifacts changed without build file edits (e.g. SNAPSHOT
+republish, manual cache wipe) — not on every call.
+ 
+## Errors
+ 
+- \`transient\` (isRetryable: true) — retry once after a delay, then surface the failure
+- \`validation\` — fix the input; retrying will always fail
+- \`permission\` — environment needs fixing; do not retry
+- \`business\` — expected outcomes, not failures:
+  - \`found: false, querySucceeded: true\` → class absent from classpath; verify the FQN
+  - \`found: true, methodFound: false\` → class exists, method name wrong; use \`get_class_structure\` to browse
+  - \`sourceAvailable: false\` → no sources JAR; decompilation used automatically, not an error
+ 
+On any error: surface it. Never fall back to manual inspection.
+`;
+
 export async function startMcpServer(): Promise<void> {
   const pkgPath = fileURLToPath(new URL('../package.json', import.meta.url));
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
@@ -491,19 +556,7 @@ export async function startMcpServer(): Promise<void> {
   const server = new McpServer(
     { name: 'jvmsrc', version: pkg.version ?? '0.0.0' },
     {
-      instructions:
-        'JVM Source Lens (Gradle first): use get_class_source with a fully-qualified class name and projectRoot. ' +
-        'Use get_class_structure for structured API metadata (kind, fields, methods including inherited public/protected instance methods) without full source — sourceAvailable is true when the primary type was read from a sources JAR or inter-project `.java`; inherited members may still come from javap when bytecode is available or from parsed source when not. ' +
-        'Use get_method_signature when you know className and methodName and need IDE-like overloads: prefers parsing `.java` when present (sourceAvailable=true), otherwise javap bytecode metadata (sourceAvailable=false). ' +
-        'Use get_method_signature_bytecode when you need strict JVM descriptors and javap-only metadata — no sources/`src` fallback; requires a resolvable `.class` on the classpath. ' +
-        'Constructors are queried with methodName <init>. Inter-project classes (`origin: interproject`) resolve from sibling `src/main/java` (and `src/test/java` when includeTest) for source-first tools before requiring `build/classes/**` for javap. ' +
-        'Use list_modules for submodule names and per-configuration dependency counts without full ResolutionOutput, or resolve_dependencies for the complete document. ' +
-        'Use search_classes for discovery when the FQN is unknown: substring or simple glob (*, ?) over the class search index (v2 enriches hits with method names and Javadoc text from `.java` when available: inter-project sources on disk and external `-sources.jar` when `sourcesJarPath` is already set on the artifact). ' +
-        'Both warm or refresh the resolution cache; then get_class_source / get_method_signature / get_method_signature_bytecode / get_class_structure reuse the cache. ' +
-        'Failures return errorCategory (transient | validation | business | permission), isRetryable, and a detailed description. ' +
-        'CLASS_NOT_FOUND after a successful classpath scan is NOT an error (found=false, querySucceeded=true) — do not retry as if the tool failed. ' +
-        'When the class exists but no overloads match: found=true, methodFound=false (not an MCP error). ' +
-        'Transient errors: retry after a delay. Validation: fix inputs. Business and permission: do not retry the same request.',
+      instructions: JVMSRC_INSTRUCTIONS
     },
   );
 
@@ -516,7 +569,6 @@ export async function startMcpServer(): Promise<void> {
         'On failure: isError=true with errorCategory, isRetryable, description, and stable code (§7). ' +
         'When the class is absent from a successfully resolved classpath: isError=false, found=false (do not treat as access failure).',
       inputSchema: getClassSourceInputSchema,
-      outputSchema: mcpClassSourceToolPayloadSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
@@ -556,7 +608,6 @@ export async function startMcpServer(): Promise<void> {
         'Use forceRefresh to bypass the hash cache after dependency changes without build-file edits. ' +
         'On failure: isError=true with errorCategory, isRetryable, description, and code RESOLUTION_FAILED.',
       inputSchema: resolveDependenciesInputSchema,
-      outputSchema: mcpResolveDependenciesPayloadSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
@@ -589,7 +640,6 @@ export async function startMcpServer(): Promise<void> {
         '(artifactCount and directArtifactCount). Omits full ResolutionOutput — use resolve_dependencies for errors[] and artifact lists. ' +
         'Same projectRoot and forceRefresh semantics as resolve_dependencies. On failure: isError=true with code RESOLUTION_FAILED.',
       inputSchema: listModulesInputSchema,
-      outputSchema: mcpListModulesPayloadSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
@@ -624,7 +674,6 @@ export async function startMcpServer(): Promise<void> {
         'v3 indexes external and local-file JAR `.class` paths (ZIP central directory) plus source enrichment from sibling `-sources.jar` when Gradle listed `sourcesJarPath`, and from inter-project `src/main/java` (+ `src/test/java` when includeTest). ' +
         'On failure: isError=true with code RESOLUTION_FAILED or classpath validation codes.',
       inputSchema: searchClassesInputSchema,
-      outputSchema: mcpSearchClassesPayloadSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
@@ -672,7 +721,6 @@ export async function startMcpServer(): Promise<void> {
         'Use methodName <init> for constructors. On failure: isError=true with stable code (README §7). ' +
         'CLASS_NOT_FOUND after scan: isError=false, found=false. Class found but no overloads: found=true, methodFound=false.',
       inputSchema: getMethodSignatureInputSchema,
-      outputSchema: mcpGetMethodSignaturePayloadSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
@@ -713,7 +761,6 @@ export async function startMcpServer(): Promise<void> {
         'sourceAvailable is always false. Fails with CLASS_NOT_FOUND or SIGNATURE_EXTRACT_FAILED when no `.class` is on the selected classpath or javap cannot read it (README §7.2). ' +
         'Use get_method_signature for IDE-like source-first overloads. Same inputs as get_method_signature: className, methodName, projectRoot, optional modulePath, configuration, includeTest, forceRefresh.',
       inputSchema: getMethodSignatureInputSchema,
-      outputSchema: mcpGetMethodSignaturePayloadSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
@@ -758,7 +805,6 @@ export async function startMcpServer(): Promise<void> {
         'Does not decompile (no CFR). Uses the same classpath selection as get_class_source. ' +
         'Inter-project submodule classes (`origin: interproject`) resolve from Gradle output dirs for javap and from `src/main/java`/`src/test/java` for sourced metadata when available. On javap failure: code SIGNATURE_EXTRACT_FAILED.',
       inputSchema: getClassStructureInputSchema,
-      outputSchema: mcpGetClassStructurePayloadSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
