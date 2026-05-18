@@ -22,6 +22,11 @@ export type SpawnedChild = {
   kill: () => void;
 };
 
+/** Awaits child exit; rejects with the spawn `error` event (e.g. ENOENT) instead of crashing the process. */
+export async function awaitChildExit(child: SpawnedChild): Promise<number> {
+  return await child.exited;
+}
+
 function isBunSpawnAvailable(): boolean {
   if (process.env.JVMSRC_TEST_FORCE_NODE_SPAWN === '1') {
     return false;

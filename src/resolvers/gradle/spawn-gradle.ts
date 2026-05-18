@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { getBundledResource } from '../../bundled-resources.js';
-import { readProcessStreamToText, spawnChild } from '../../spawn-child.js';
+import { awaitChildExit, readProcessStreamToText, spawnChild } from '../../spawn-child.js';
 import { formatGradleUserMessage } from './gradle-failure-message.js';
 import { resolveGradleWrapperCommand } from './gradle-wrapper-command.js';
 
@@ -113,7 +113,7 @@ export async function runGradleTask(
     [stdout, stderr, exitCode] = await Promise.all([
       readProcessStreamToText(proc.stdout),
       readProcessStreamToText(proc.stderr),
-      proc.exited,
+      awaitChildExit(proc),
     ]);
   } catch (e) {
     clearTimeout(timer);

@@ -1,7 +1,8 @@
+import fs from 'node:fs';
 import path from 'node:path';
-import { readProcessStreamCapped, spawnChild } from '../spawn-child.js';
+import { awaitChildExit, readProcessStreamCapped, spawnChild } from '../spawn-child.js';
 import { buildCfrSpawnEnv } from '../decompiler/cfr-spawn-env.js';
-import { resolveJavaExecutable } from '../decompiler/resolve-java-executable.js';
+import { resolveJavaBinExecutable } from '../decompiler/resolve-java-bin.js';
 
 function parsePositiveIntEnv(name: string, fallback: number): number {
   const raw = process.env[name]?.trim();
@@ -42,14 +43,15 @@ export type JavapVerboseResult =
   | { ok: false; message: string; stderr?: string };
 
 export function resolveJavapExecutable(): { ok: true; javapPath: string } | { ok: false; message: string } {
-  const java = resolveJavaExecutable();
-  if (!java.ok) {
-    return java;
+  const java = resolveJavaBinExecutable('java');
+  const javap = resolveJavaBinExecutable('javap');
+  if (java.path !== 'java' && java.path !== 'java.exe') {
+    const sibling = path.join(path.dirname(java.path), path.basename(javap.path));
+    if (fs.existsSync(sibling)) {
+      return { ok: true, javapPath: sibling };
+    }
   }
-  if (java.javaPath === 'java') {
-    return { ok: true, javapPath: 'javap' };
-  }
-  return { ok: true, javapPath: path.join(path.dirname(java.javaPath), 'javap') };
+  return { ok: true, javapPath: javap.path };
 }
 
 /**
@@ -106,7 +108,18 @@ export async function spawnJavapVerbose(opts: JavapVerboseOptions): Promise<Java
 
   const stdoutP = readProcessStreamCapped(proc.stdout, maxOutputBytes);
   const stderrP = readProcessStreamCapped(proc.stderr, DEFAULT_JAVAP_MAX_STDERR_BYTES);
-  const exitCode = await proc.exited;
+
+  let exitCode: number;
+  try {
+    exitCode = await awaitChildExit(proc);
+  } catch (e) {
+    clearTimeout(timer);
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      message: `javap process failed to start: ${msg}. Set JAVA_HOME or ensure javap is on PATH.`,
+    };
+  }
   clearTimeout(timer);
 
   const [stdout, stderr] = await Promise.all([stdoutP, stderrP]);

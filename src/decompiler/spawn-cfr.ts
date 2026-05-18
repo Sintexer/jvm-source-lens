@@ -1,4 +1,4 @@
-import { readProcessStreamCapped, spawnChild } from '../spawn-child.js';
+import { awaitChildExit, readProcessStreamCapped, spawnChild } from '../spawn-child.js';
 import { buildCfrSpawnEnv } from './cfr-spawn-env.js';
 import { resolveCfrJarPath } from './resolve-cfr-jar.js';
 import { resolveJavaExecutable } from './resolve-java-executable.js';
@@ -102,7 +102,20 @@ export async function runCfrDecompile(opts: CfrDecompileOptions): Promise<CfrDec
 
   const stdoutP = readProcessStreamCapped(proc.stdout, maxOutputBytes);
   const stderrP = readProcessStreamCapped(proc.stderr, DEFAULT_CFR_MAX_STDERR_BYTES);
-  const exitCode = await proc.exited;
+
+  let exitCode: number;
+  try {
+    exitCode = await awaitChildExit(proc);
+  } catch (e) {
+    clearTimeout(timer);
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      message: `Failed to start Java for CFR: ${msg}. Set JAVA_HOME or ensure java is on PATH.`,
+      stderr: (await stderrP).text || undefined,
+      command: argv,
+    };
+  }
   clearTimeout(timer);
 
   const [stdout, stderr] = await Promise.all([stdoutP, stderrP]);
