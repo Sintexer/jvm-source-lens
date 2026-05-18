@@ -22,14 +22,18 @@
     "dev:mcp": "bun run src/mcp.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test",
-    "build": "bun build ./src/cli.ts ./src/mcp.ts ./src/public-api.ts --outdir ./dist --target node --format esm --packages=external",
-    "setup:cfr": "bun run scripts/fetch-cfr.ts",
+    "build": "esbuild ./src/cli.ts ./src/mcp.ts ./src/public-api.ts --bundle --platform=node --outdir=./dist --target=node20 --format=esm --packages=external",
+    "build:bun": "bun build ./src/cli.ts ./src/mcp.ts ./src/public-api.ts --outdir ./dist --target node --format esm --packages=external",
+    "setup:cfr": "tsx scripts/fetch-cfr.ts",
+    "validate:resources": "tsx scripts/validate-bundled-resources.ts",
     "ensure:gradle-smoke-wrapper": "bash scripts/ensure-gradle-smoke-wrapper.sh",
-    "prepack": "bun run typecheck && bun run build && bun run scripts/validate-bundled-resources.ts"
+    "prepack": "npm run typecheck && npm run build && npm run validate:resources"
   },
   "devDependencies": {
     "@types/bun": "1.3.14",
     "@types/node": "^25.7.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.20.0",
     "typescript": "^5.9.0"
   },
   "dependencies": {

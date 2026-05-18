@@ -22,14 +22,16 @@ npm install -g jvmsrc
 npx jvmsrc <command>
 ```
 
-From source (development):
+From source (Node ≥ 20, no Bun required):
 
 ```bash
-bun install
-bun run setup:cfr    # once — downloads bundled CFR
-bun run build
+npm install
+npm run setup:cfr    # once — downloads bundled CFR into resources/
+npm run build        # esbuild → dist/ (uses --target=node20, not --target=node)
 node dist/cli.js get com.example.Foo -p /path/to/project
 ```
+
+Optional: [Bun](https://bun.sh) for `bun test` and `bun run dev:cli` / `dev:mcp`. Use `npm run build:bun` only if you prefer Bun’s bundler.
 
 ## Quick start (CLI)
 
