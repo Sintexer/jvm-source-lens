@@ -44,9 +44,15 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] Android / Kotlin MPP configuration coverage
 - [x] Resolution schema: optional or remove rarely-used `sourcesJarPath`
 
+### P2 — Agent-driven polish (feedback backlog)
+
+- [ ] MCP / CLI `get_class_source` optional excerpt (`methodName` and/or `startLine` / `endLine`) — avoid dumping very large compilation units into agent context
+- [ ] MCP / CLI `find_in_class_source` — pattern match inside one resolved compilation unit; return hit line(s) or block + optional ±N context lines (**relevance: high · priority: P2**)
+- [ ] Auto-infer `modulePath` when the FQN resolves in exactly one module (keep explicit `modulePath` for conflicts; `list_modules` remains the discovery path)
+
 ### P3 — Future / post–v2
 
-- [ ] MCP `get_implementors(interfaceName)` (inverted index over resolved JARs; §12.2)
+- [ ] MCP hierarchy discovery: `get_implementors` / `get_subclasses` (inverted index over resolved JARs; §12.2)
 
 ### Done (baseline — do not uncheck)
 
@@ -311,14 +317,107 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ---
 
+## Agent feedback (2026-05)
+
+Collected from an agent that used **`get_class_source`** against a library JAR outside the scanned repo (`base-algorithm-1.13.3` — log message text not present in project sources).
+
+| Parameter | Score | Notes |
+|-----------|-------|--------|
+| Ease of use | 9/10 | Minimal required params (`className`, `projectRoot`); MCP instructions led to the right tool on first try |
+| Usefulness | 10/10 | Answered a question repo code alone could not; avoided stale training-data guesses |
+| Range of tools | 8/10 | Strong coverage (source, structure, signatures, search, resolve); missing hierarchy traversal without known FQN |
+| Correctness guarantees | 10/10 | `provenance` (coordinates, `jarPath`) confirms classpath-accurate artifact version |
+| Speed | 8/10 | First-call Gradle cost acceptable; cache makes follow-ups fast |
+
+**Mapped to roadmap:**
+
+| Feedback | Roadmap item |
+|----------|----------------|
+| Find implementations / subclasses without known hierarchy | **P3** — `get_implementors` / `get_subclasses` (below) |
+| Large `get_class_source` responses | **P2** — optional excerpt / line range on `get`; **`find_in_class_source`** when the anchor is a string/pattern, not a line number |
+| Friction when `modulePath` unknown upfront | **P2** — auto-infer unique module; keep `list_modules` for discovery |
+
+**Infrastructure fixes (same period, not in ratings):** MCP `outputSchema` with `z.union` crashed the SDK (`_zod`); Node runtime needed `child_process` spawn instead of `Bun.spawn`. Rebuild + MCP restart required after fix.
+
+---
+
+## P2 — Agent-driven polish (feedback backlog)
+
+### `get_class_source` — focused excerpt
+
+**Goal:** When a compilation unit is large, return only the method or line range the agent needs — less context noise, same provenance.
+
+**References:** [src/get-class-source.ts](src/get-class-source.ts), [src/mcp.ts](src/mcp.ts), README §8.2
+
+- [ ] Optional `methodName` and/or `startLine` / `endLine` on MCP `get_class_source` and CLI `get`
+- [ ] Document interaction with `sourceAvailable: false` (decompiled output may not preserve original line numbers)
+- [ ] Default unchanged: full file when excerpt params omitted
+
+---
+
+### `find_in_class_source` — pattern match with context (find-in-file)
+
+**Relevance: high (9/10)** — Agents often know the **class** (`search_classes` / stack trace) but need a **needle inside the file** (log message literal, `throw new`, annotation, call site) without loading tens of thousands of lines via `get_class_source`. Same provenance guarantees as `get`; much smaller payloads than full-file `get` or blind repo `grep` (which misses JAR-only types and wrong versions).
+
+**Priority: P2** — Same tier as focused excerpt; **implement after or with** shared “fetch source text once” plumbing from `get_class_source`. **Before P3** hierarchy index (`get_implementors` / `get_subclasses`), which is heavier and less frequent. **Below** excerpt if only one P2 slot: excerpt is simpler; find-in-file subsumes “I know the line” only when `contextLines: 0` and exact line match.
+
+**Not a substitute for:** `search_classes` (classpath-wide FQN discovery) or raw workspace `grep` (no version/provenance).
+
+**Goal:** Given a resolved FQN, scan its `.java` (sources JAR, inter-project `src/`, or decompiled fallback) for a query; return each hit with optional surrounding context.
+
+**Proposed tool:** `find_in_class_source` (CLI subcommand TBD, e.g. `jvmsrc find-in-class`).
+
+**Inputs (draft):**
+
+| Parameter | Required | Notes |
+|-----------|----------|--------|
+| `className` | yes | FQN of the compilation unit to search |
+| `projectRoot` | yes | Same as other tools |
+| `query` | yes | Literal substring or regex (document which; default literal) |
+| `contextLines` | no | 0–N lines above and below each hit (default e.g. 3; 0 = match line only) |
+| `maxHits` | no | Cap matches per call (default e.g. 20) |
+| `modulePath`, `configuration`, `includeTest`, `forceRefresh` | no | Same semantics as `get_class_source` |
+
+**Output (draft):** `ok`, `found`, `className`, `sourceAvailable`, `provenance`, `hits[]` where each hit has at least `line` (1-based), `column` (optional), `matchedText` or `matchedBlock`, and `contextBefore` / `contextAfter` (arrays of lines or single snippet). For multiline matches (string literal spanning lines), return a **`block`** (startLine–endLine) plus context outside the block.
+
+**Behavior notes:**
+
+- Reuse classpath resolution + source fetch path from `get_class_source` (no second Gradle pass per hit).
+- `sourceAvailable: false` (CFR): line numbers are approximate; document in response or downgrade to “snippet only” without stable `line`.
+- Regex mode: bounded cost (timeout / max bytes scanned) to avoid agent-driven catastrophic backtracking on huge files.
+
+**References:** [src/get-class-source.ts](src/get-class-source.ts), [src/mcp.ts](src/mcp.ts), README §8.2
+
+- [ ] MCP tool + CLI entry; inputs/outputs as above
+- [ ] Literal match v1; optional regex v1.1
+- [ ] Multiline / block match for string literals and contiguous match regions
+- [ ] Tests: inter-project fixture, sources JAR fixture, decompiled path (`sourceAvailable: false`)
+
+---
+
+### Auto-infer `modulePath`
+
+**Goal:** Reduce friction in multimodule repos when the FQN appears in only one submodule — agents should not have to call `list_modules` first for the common case.
+
+**References:** [src/extractor/pick-classpath.ts](src/extractor/pick-classpath.ts), [src/mcp.ts](src/mcp.ts)
+
+- [ ] When `modulePath` is omitted and the class resolves in exactly one module, use that module
+- [ ] When multiple modules match, return a structured conflict (not a silent wrong module) with candidate `modulePath` values
+- [ ] Behavior unchanged when `modulePath` is explicitly provided
+
+---
+
 ## P3 — Future / post–v2
 
-### MCP `get_implementors`
+### MCP hierarchy discovery (`get_implementors` / `get_subclasses`)
 
-**Goal:** README §12.2 P3 — list known implementations of an interface for template/codegen. Requires inverted index (interface → implementors) across resolved artifacts; high implementation cost, low frequency.
+**Goal:** README §12.2 P3 — trace override chains and template/codegen without already knowing the type hierarchy. Agent feedback: round out tools beyond `get_class_structure` when the starting type is unknown.
 
-- [ ] Design index layout and invalidation with resolution cache
+Requires an inverted index (supertype → known subtypes / implementors) across resolved artifacts; high implementation cost, moderate frequency.
+
+- [ ] Design index layout and invalidation with resolution cache (may share infrastructure with class-search index)
 - [ ] Tool `get_implementors`: `interfaceName` (FQN), `projectRoot`, optional scoping consistent with other tools
+- [ ] Tool `get_subclasses`: `className` (FQN), same scoping — list direct or transitive subclasses where index coverage allows
 - [ ] Structured errors; ranked or grouped results (TBD)
 
 ---
