@@ -22,6 +22,8 @@ import type {
 import type { ListModulesPayloadData } from './list-modules-payload.js';
 import { buildListModulesPayload } from './list-modules-payload.js';
 import type { ClassSearchHit, ClassSearchIndexMeta, SearchClassesResult } from './class-search/types.js';
+import type { ClassSourceTextSearchHit } from './class-source-text-search.js';
+import type { FindInClassSourceResult } from './find-in-class-source.js';
 
 /** MCP agent recovery categories (transient / validation / business / permission). */
 export type McpErrorCategory = 'transient' | 'validation' | 'business' | 'permission';
@@ -75,6 +77,54 @@ export type McpListModulesSuccessPayload = { ok: true } & ListModulesPayloadData
 export type McpListModulesToolPayload = McpListModulesSuccessPayload | McpClassSourceFailurePayload;
 
 export type SearchClassesQueryContext = ClassSourceQueryContext & { query: string };
+
+export type FindInClassSourceQueryContext = ClassSourceQueryContext & {
+  query: string;
+  regex?: boolean;
+};
+
+export type McpFindInClassSourceHitPayload = {
+  line: number;
+  column: number;
+  matchedText: string;
+  block?: { startLine: number; endLine: number };
+  contextBefore: string[];
+  contextAfter: string[];
+};
+
+export type McpFindInClassSourceSuccessPayload = {
+  ok: true;
+  found: true;
+  querySucceeded: true;
+  className: string;
+  query: string;
+  regex: boolean;
+  sourceAvailable: boolean;
+  provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
+  lineNumbersReliable: boolean;
+  totalMatches: number;
+  hitCount: number;
+  truncated: boolean;
+  hits: McpFindInClassSourceHitPayload[];
+};
+
+export type McpFindInClassSourceNoMatchPayload = {
+  ok: true;
+  found: false;
+  querySucceeded: true;
+  className: string;
+  query: string;
+  regex: boolean;
+  sourceAvailable: boolean;
+  provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
+  description: string;
+};
+
+export type McpFindInClassSourceToolPayload =
+  | McpFindInClassSourceSuccessPayload
+  | McpFindInClassSourceNoMatchPayload
+  | McpClassSourceFailurePayload
+  | McpClassSourceNotFoundPayload;
 
 export type McpSearchClassesHitPayload = {
   className: string;
@@ -211,6 +261,87 @@ export type McpClassStructureToolPayload =
   | McpClassSourceFailurePayload;
 
 export type MethodSignatureQueryContext = ClassSourceQueryContext & { methodName: string };
+
+function mapFindHit(h: ClassSourceTextSearchHit): McpFindInClassSourceHitPayload {
+  return {
+    line: h.line,
+    column: h.column,
+    matchedText: h.matchedText,
+    ...(h.block !== undefined ? { block: h.block } : {}),
+    contextBefore: h.contextBefore,
+    contextAfter: h.contextAfter,
+  };
+}
+
+export function mcpToolResultFromFindInClassSource(
+  result: FindInClassSourceResult,
+  query: FindInClassSourceQueryContext,
+): CallToolResult {
+  if (!result.ok) {
+    if (result.error.code === 'CLASS_NOT_FOUND') {
+      return mcpNotFoundResult(result.error, query);
+    }
+    return mcpFailureResult(result.error, query, pickDiag(result));
+  }
+
+  if (!result.found) {
+    const payload: McpFindInClassSourceNoMatchPayload = {
+      ok: true,
+      found: false,
+      querySucceeded: true,
+      className: result.className,
+      query: result.query,
+      regex: result.regex,
+      sourceAvailable: result.sourceAvailable,
+      provenance: result.provenance,
+      description: result.description,
+    };
+    const scope = formatQueryScope(query);
+    return {
+      isError: false,
+      content: [
+        {
+          type: 'text',
+          text:
+            `find_in_class_source: no matches for ${JSON.stringify(result.query)} in ${result.className}${scope}. ` +
+            `The class was resolved successfully.`,
+        },
+      ],
+      structuredContent: payload,
+    };
+  }
+
+  const hits = result.hits.map(mapFindHit);
+  const payload: McpFindInClassSourceSuccessPayload = {
+    ok: true,
+    found: true,
+    querySucceeded: true,
+    className: result.className,
+    query: result.query,
+    regex: result.regex,
+    sourceAvailable: result.sourceAvailable,
+    provenance: result.provenance,
+    lineNumbersReliable: result.lineNumbersReliable,
+    totalMatches: result.totalMatches,
+    hitCount: result.hitCount,
+    truncated: result.truncated,
+    hits,
+  };
+  const scope = formatQueryScope(query);
+  const lineHint = result.lineNumbersReliable ? '' : ' (line numbers approximate; decompiled source)';
+  const truncHint = result.truncated ? `; showing ${result.hitCount} of ${result.totalMatches}` : '';
+  return {
+    isError: false,
+    content: [
+      {
+        type: 'text',
+        text:
+          `find_in_class_source: ${result.totalMatches} match(es) for ${JSON.stringify(result.query)} in ${result.className}${scope}; returning ${result.hitCount}${truncHint}${lineHint}.`,
+      },
+    ],
+    structuredContent: payload,
+  };
+}
 
 export function mcpToolResultFromClassSource(result: ClassSourceLookupResult, query: ClassSourceQueryContext): CallToolResult {
   if (result.ok) {
@@ -699,6 +830,22 @@ function classifyClassSourceError(error: ClassSourceError, query: ClassSourceQue
         `${error.message} Requested: ${error.requestedMethodNames.join(', ')}. ` +
           `Unmatched: ${error.unmatchedMethodNames.join(', ')}. ` +
           `Use get_method_signature to list overload names, or omit excerpt params for the full file.`,
+      );
+    case 'FIND_QUERY_INVALID':
+      return envelope(
+        error,
+        'validation',
+        true,
+        'Invalid find-in-source query.',
+        `${error.message} Use a non-empty literal substring or a valid regex when regex=true.`,
+      );
+    case 'FIND_SOURCE_TOO_LARGE':
+      return envelope(
+        error,
+        'validation',
+        true,
+        'Compilation unit too large for find-in-source.',
+        `${error.message} (${error.byteLength} bytes). Narrow with get_class_source excerpt (methodNames) first.`,
       );
     case 'CLASS_NOT_FOUND':
       throw new Error('CLASS_NOT_FOUND must be handled via mcpNotFoundResult (valid empty result, not MCP error)');

@@ -47,7 +47,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 ### P2 — Agent-driven polish (feedback backlog)
 
 - [x] MCP / CLI `get_class_source` optional excerpt (`methodNames` / `methodName` and/or `startLine` / `endLine`) — avoid dumping very large compilation units into agent context
-- [ ] MCP / CLI `find_in_class_source` — pattern match inside one resolved compilation unit; return hit line(s) or block + optional ±N context lines (**relevance: high · priority: P2**)
+- [x] MCP / CLI `find_in_class_source` — pattern match inside one resolved compilation unit; return hit line(s) or block + optional ±N context lines (**relevance: high · priority: P2**)
 - [ ] Auto-infer `modulePath` when the FQN resolves in exactly one module (keep explicit `modulePath` for conflicts; `list_modules` remains the discovery path)
 
 ### P3 — Future / post–v2
@@ -388,10 +388,10 @@ Collected from an agent that used **`get_class_source`** against a library JAR o
 
 **References:** [src/get-class-source.ts](src/get-class-source.ts), [src/mcp.ts](src/mcp.ts), SPEC §8.2
 
-- [ ] MCP tool + CLI entry; inputs/outputs as above
-- [ ] Literal match v1; optional regex v1.1
-- [ ] Multiline / block match for string literals and contiguous match regions
-- [ ] Tests: inter-project fixture, sources JAR fixture, decompiled path (`sourceAvailable: false`)
+- [x] MCP tool + CLI entry (`jvmsrc find-in-class`); inputs/outputs as above
+- [x] Literal match v1; optional `regex: true` (bounded iterations)
+- [x] Multiline / block match when match spans lines
+- [x] Tests: inter-project fixture (`gradle-smoke`), unit tests for search + decompiled `lineNumbersReliable`
 
 ---
 

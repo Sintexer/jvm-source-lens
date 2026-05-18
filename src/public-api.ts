@@ -5,6 +5,8 @@ export {
   type SourceExcerptInfo,
   type SourceExcerptRequest,
 } from './source-excerpt.js';
+export { findInClassSource, type FindInClassSourceOptions, type FindInClassSourceResult } from './find-in-class-source.js';
+export { searchClassSourceText, type ClassSourceTextSearchHit } from './class-source-text-search.js';
 export { getClassStructure, type GetClassStructureOptions } from './get-class-structure.js';
 export type {
   ClassStructureDeclaredAnnotation,

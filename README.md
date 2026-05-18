@@ -86,6 +86,7 @@ Restart the MCP server after upgrading `jvmsrc`.
 | `get_method_signature` | Overloads, parameters, return types, `throws` (source-first, IDE-shaped) |
 | `get_class_structure` | Fields, methods, hierarchy, annotations — without full source |
 | `get_method_signature_bytecode` | Strict `javap` output only (no source fallback) |
+| `find_in_class_source` | Search inside one resolved class (literal or `--regex`); hits with context lines |
 | `get_class_source` | Full `.java` body, or excerpt via `methodNames` / line range (last resort for full file) |
 | `list_modules` | Submodule names before scoping with `modulePath` |
 | `resolve_dependencies` | Full dependency graph / warm cache |

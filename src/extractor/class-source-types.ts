@@ -98,7 +98,9 @@ export type ClassSourceError =
       className: string;
       requestedMethodNames: string[];
       unmatchedMethodNames: string[];
-    };
+    }
+  | { code: 'FIND_QUERY_INVALID'; message: string }
+  | { code: 'FIND_SOURCE_TOO_LARGE'; message: string; byteLength: number };
 
 export type ClassSourceLookupResult =
   | {

@@ -62,6 +62,10 @@ export function mapPublicFailureToDiagnostic(
       return { severity: FailureSeverity.USER_ERROR, errorCode: 'EXCERPT_REQUEST_INVALID' };
     case 'EXCERPT_NOT_FOUND':
       return { severity: FailureSeverity.USER_ERROR, errorCode: 'EXCERPT_NOT_FOUND' };
+    case 'FIND_QUERY_INVALID':
+      return { severity: FailureSeverity.USER_ERROR, errorCode: 'FIND_QUERY_INVALID' };
+    case 'FIND_SOURCE_TOO_LARGE':
+      return { severity: FailureSeverity.USER_ERROR, errorCode: 'FIND_SOURCE_TOO_LARGE' };
     default:
       return { severity: FailureSeverity.INTERNAL, errorCode: 'UNKNOWN_FAILURE' };
   }

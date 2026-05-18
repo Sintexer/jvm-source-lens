@@ -8,6 +8,7 @@ import { getClassSource } from './get-class-source.js';
 import { mergeSourceExcerptInputs } from './source-excerpt.js';
 import {
   mcpToolResultFromClassSource,
+  mcpToolResultFromFindInClassSource,
   mcpToolResultFromMethodSignature,
   mcpToolResultFromProjectRootError,
   mcpToolResultFromResolutionResult,
@@ -16,9 +17,11 @@ import {
   mcpToolResultFromUnexpectedError,
   mcpToolResultFromClassStructure,
   type ClassSourceQueryContext,
+  type FindInClassSourceQueryContext,
   type MethodSignatureQueryContext,
   type SearchClassesQueryContext,
 } from './mcp-tool-result.js';
+import { findInClassSource } from './find-in-class-source.js';
 import { resolveProjectRoot } from './project-path.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 import { UnsupportedProjectError } from './resolvers/index.js';
@@ -116,6 +119,15 @@ const classSourceErrorSchema = z.discriminatedUnion('code', [
     requestedMethodNames: z.array(z.string()),
     unmatchedMethodNames: z.array(z.string()),
   }),
+  z.object({
+    code: z.literal('FIND_QUERY_INVALID'),
+    message: z.string(),
+  }),
+  z.object({
+    code: z.literal('FIND_SOURCE_TOO_LARGE'),
+    message: z.string(),
+    byteLength: z.number(),
+  }),
 ]);
 
 const mcpErrorCategorySchema = z.enum(['transient', 'validation', 'business', 'permission']);
@@ -132,6 +144,8 @@ const classSourceErrorCodeSchema = z.enum([
   'SIGNATURE_EXTRACT_FAILED',
   'EXCERPT_REQUEST_INVALID',
   'EXCERPT_NOT_FOUND',
+  'FIND_QUERY_INVALID',
+  'FIND_SOURCE_TOO_LARGE',
 ]);
 
 /**
@@ -178,6 +192,75 @@ export const mcpClassSourceToolPayloadSchema = z.union([
     description: z.string(),
   }),
 ]);
+
+const findInClassSourceHitSchema = z.object({
+  line: z.number(),
+  column: z.number(),
+  matchedText: z.string(),
+  block: z.object({ startLine: z.number(), endLine: z.number() }).optional(),
+  contextBefore: z.array(z.string()),
+  contextAfter: z.array(z.string()),
+});
+
+/** Documented MCP payloads for find_in_class_source (tests / agent docs). */
+export const mcpFindInClassSourcePayloadSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+    found: z.literal(true),
+    querySucceeded: z.literal(true),
+    className: z.string(),
+    query: z.string(),
+    regex: z.boolean(),
+    sourceAvailable: z.boolean(),
+    provenance: provenanceSchema,
+    lineNumbersReliable: z.boolean(),
+    totalMatches: z.number(),
+    hitCount: z.number(),
+    truncated: z.boolean(),
+    hits: z.array(findInClassSourceHitSchema),
+  }),
+  z.object({
+    ok: z.literal(true),
+    found: z.literal(false),
+    querySucceeded: z.literal(true),
+    className: z.string(),
+    query: z.string(),
+    regex: z.boolean(),
+    sourceAvailable: z.boolean(),
+    provenance: provenanceSchema,
+    description: z.string(),
+  }),
+  z.object({
+    ok: z.literal(true),
+    found: z.literal(false),
+    className: z.string(),
+    searchedArtifactCount: z.number(),
+    querySucceeded: z.literal(true),
+    code: z.literal('CLASS_NOT_FOUND'),
+    description: z.string(),
+  }),
+  z.object({
+    ok: z.literal(false),
+    error: classSourceErrorSchema,
+    code: classSourceErrorCodeSchema,
+    errorCategory: mcpErrorCategorySchema,
+    isRetryable: z.boolean(),
+    description: z.string(),
+  }),
+]);
+
+const findInClassSourceInputSchema = z.object({
+  className: z.string().min(1),
+  projectRoot: z.string().min(1),
+  query: z.string().min(1),
+  modulePath: z.string().optional(),
+  configuration: z.string().optional(),
+  includeTest: z.boolean().optional(),
+  forceRefresh: z.boolean().optional(),
+  contextLines: z.number().int().min(0).max(50).optional(),
+  maxHits: z.number().int().min(1).max(100).optional(),
+  regex: z.boolean().optional(),
+});
 
 const getClassSourceInputSchema = z.object({
   className: z.string().min(1),
@@ -546,7 +629,8 @@ Use the most specific tool for the task:
 - Method signature / overloads / exceptions → \`get_method_signature\`
 - Strict JVM descriptors, bridge or synthetic members → \`get_method_signature_bytecode\`
 - API surface, hierarchy, fields, annotations → \`get_class_structure\`
-- Full implementation body (only when needed) → \`get_class_source\`
+- Full implementation body (only when needed) → \`get_class_source\` (use \`methodNames\` excerpt when possible)
+- Needle inside a known class (log literal, throw message) → \`find_in_class_source\`
 - Submodule names before a scoped call → \`list_modules\`
 - Full dependency tree or version conflict diagnosis → \`resolve_dependencies\`
  
@@ -577,6 +661,7 @@ republish, manual cache wipe) — not on every call.
 - \`business\` — expected outcomes, not failures:
   - \`found: false, querySucceeded: true\` → class absent from classpath; verify the FQN
   - \`found: true, methodFound: false\` → class exists, method name wrong; use \`get_class_structure\` to browse
+  - \`find_in_class_source\` with \`found: false, querySucceeded: true\` → class resolved, substring/regex absent; adjust query
   - \`sourceAvailable: false\` → no sources JAR; decompilation used automatically, not an error
  
 On any error: surface it. Never fall back to manual inspection.
@@ -636,6 +721,52 @@ export async function startMcpServer(): Promise<void> {
               : undefined,
         });
         return mcpToolResultFromClassSource(result, query);
+      } catch (e) {
+        return mcpToolResultFromUnexpectedError(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'find_in_class_source',
+    {
+      title: 'Find text in resolved Java source',
+      description:
+        'Resolves classpath source for a fully-qualified class (same as get_class_source), then searches for a literal ' +
+        'substring or regex. Returns hits with line/column, matched text, optional multiline block, and context lines. ' +
+        'When the class is missing from the classpath: isError=false, found=false (CLASS_NOT_FOUND). ' +
+        'When the class exists but nothing matches: isError=false, found=false, querySucceeded=true.',
+      inputSchema: findInClassSourceInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async (args) => {
+      const query: FindInClassSourceQueryContext = {
+        projectRoot: args.projectRoot,
+        modulePath: args.modulePath,
+        configuration: args.configuration,
+        includeTest: args.includeTest,
+        query: args.query,
+        regex: args.regex,
+      };
+
+      const root = resolveProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
+      }
+
+      try {
+        const result = await findInClassSource(args.className, {
+          projectRoot: root.path,
+          modulePath: args.modulePath,
+          configuration: args.configuration,
+          includeTest: Boolean(args.includeTest),
+          forceRefresh: Boolean(args.forceRefresh),
+          query: args.query,
+          contextLines: args.contextLines,
+          maxHits: args.maxHits,
+          regex: Boolean(args.regex),
+        });
+        return mcpToolResultFromFindInClassSource(result, query);
       } catch (e) {
         return mcpToolResultFromUnexpectedError(e);
       }

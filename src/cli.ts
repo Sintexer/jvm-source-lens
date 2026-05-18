@@ -5,7 +5,9 @@ import { Command } from 'commander';
 import { buildJvmsrcMcpConfigPayload } from './cli-config-command.js';
 import { registerDiagnosticsCli } from './diagnostics/cli-diagnostics-command.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
+import { writeCliFindInClassResult } from './cli-find-in-class-output.js';
 import { writeCliGetResult } from './cli-get-output.js';
+import { findInClassSource } from './find-in-class-source.js';
 import { createCliProgressReporter } from './cli-progress.js';
 import { getClassSource } from './get-class-source.js';
 import { mergeSourceExcerptInputs } from './source-excerpt.js';
@@ -14,7 +16,7 @@ import { resolveWithResolutionCache } from './resolve-with-cache.js';
 
 /** `jvmsrc com.example.Foo` → same as `jvmsrc get com.example.Foo` */
 function injectImplicitGetSubcommand(): void {
-  const subcommands = new Set(['get', 'mcp', 'config', 'resolve', 'diagnostics']);
+  const subcommands = new Set(['get', 'find-in-class', 'mcp', 'config', 'resolve', 'diagnostics']);
   const raw = process.argv.slice(2);
   if (raw.length === 0) {
     return;
@@ -178,6 +180,74 @@ program
       progress.finalize();
     }
   });
+
+program
+  .command('find-in-class')
+  .description(
+    'Search resolved Java source for a class (literal substring by default; optional regex)',
+  )
+  .argument('<className>', 'e.g. com.example.MyClass')
+  .argument('<query>', 'substring or regex to find')
+  .option('-p, --project <path>', 'Path to the project root', process.cwd())
+  .option('-m, --module <module>', 'Gradle module path (e.g. :core:utils)')
+  .option('-c, --configuration <name>', 'Resolved configuration name')
+  .option('--include-test', 'Use testCompileClasspath when configuration omitted', false)
+  .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle', false)
+  .option('-q, --quiet', 'Disable progress labels on stderr', false)
+  .option('-v, --verbose', 'Stream Gradle stderr during resolution', false)
+  .option('--json', 'Print one JSON object on stdout', false)
+  .option('--context-lines <n>', 'Context lines above/below each hit (default 3)', (v) => parseInt(v, 10))
+  .option('--max-hits <n>', 'Maximum hits to return (default 20, max 100)', (v) => parseInt(v, 10))
+  .option('--regex', 'Treat query as a JavaScript RegExp pattern', false)
+  .action(
+    async (
+      className: string,
+      query: string,
+      options: {
+        project: string;
+        module?: string;
+        configuration?: string;
+        includeTest?: boolean;
+        forceRefresh?: boolean;
+        quiet?: boolean;
+        verbose?: boolean;
+        json?: boolean;
+        contextLines?: number;
+        maxHits?: number;
+        regex?: boolean;
+      },
+    ) => {
+      const root = resolveProjectRoot(options.project);
+      if (!root.ok) {
+        if (options.json) {
+          console.log(
+            JSON.stringify({ error: true, code: 'INVALID_PROJECT_ROOT', message: root.message }),
+          );
+        } else {
+          console.error(root.message);
+        }
+        process.exitCode = 1;
+        return;
+      }
+      const showProgress = !options.quiet;
+      const verboseGradle = Boolean(options.verbose);
+      const cli =
+        showProgress || verboseGradle ? { progress: showProgress, verboseGradle } : undefined;
+      const result = await findInClassSource(className, {
+        projectRoot: root.path,
+        modulePath: options.module,
+        configuration: options.configuration,
+        includeTest: Boolean(options.includeTest),
+        forceRefresh: Boolean(options.forceRefresh),
+        query,
+        contextLines: options.contextLines,
+        maxHits: options.maxHits,
+        regex: Boolean(options.regex),
+        cli,
+      });
+      writeCliFindInClassResult(result, { json: Boolean(options.json) });
+    },
+  );
 
 registerDiagnosticsCli(program);
 

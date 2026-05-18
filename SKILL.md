@@ -80,11 +80,12 @@ is enough — it wastes context and slows the agent down.
 | Need to verify type hierarchy before a cast or assignment | `get_class_structure` |
 | Need to read one or a few method bodies (not the whole file) | `get_class_source` with **`methodNames`** (or **`methodName`**) |
 | Need a specific line range from a large compilation unit | `get_class_source` with **`startLine`** + **`endLine`** |
+| Know the class but need a string/pattern inside the file (log message, `throw new`, call site) | **`find_in_class_source`** |
 | Need the full implementation of a small class | `get_class_source` (no excerpt params) |
 | Need exact JVM descriptors or bridge/synthetic members | `get_method_signature_bytecode` |
 
 **Default escalation path:**
-`get_method_signature` → `get_class_structure` → `get_class_source` **(excerpt)** → `get_class_source` **(full file)**
+`get_method_signature` → `get_class_structure` → **`find_in_class_source`** (needle in file) → `get_class_source` **(excerpt)** → `get_class_source` **(full file)**
 
 Start at the left. Only move right when the previous step did not give you enough.
 Before requesting the **full** compilation unit, try an **excerpt** when you already
@@ -123,6 +124,26 @@ Both **`startLine`** and **`endLine`** are required; they are **1-based inclusiv
 **CLI equivalent:** `jvmsrc get … --method process --method validate` or `--start-line 120 --end-line 145`.
 
 When **`sourceAvailable: false`** (CFR decompilation), method excerpts still work in most cases, but **`excerpt.lineNumbersReliable`** is **`false`** — treat line-based slices as approximate.
+
+#### Find in resolved source (`find_in_class_source`)
+
+Use when you know the **FQN** but need a **needle inside the file** — not workspace `grep` (wrong version / JAR-only types).
+
+```
+find_in_class_source(
+  className: "com.example.Service",
+  projectRoot: "...",
+  query: "failed to connect",
+  contextLines: 3,
+  maxHits: 10
+)
+```
+
+- Default: **literal** substring (case-sensitive). Set **`regex: true`** for JavaScript regex (bounded cost).
+- **`found: false`, `querySucceeded: true`** — class resolved, query absent; adjust `query` or use `get_class_structure`.
+- Same **`modulePath`** / scoping as other tools. CLI: `jvmsrc find-in-class com.example.Foo "needle" -p /project`.
+
+**Not a substitute for** `search_classes` (classpath-wide FQN discovery).
 
 ---
 
@@ -224,6 +245,9 @@ get_method_signature(className, methodName, projectRoot, modulePath?)
 
 # Browse a class's full API surface
 get_class_structure(className, projectRoot, modulePath?)
+
+# Find a string inside one class (log literal, throw message, etc.)
+find_in_class_source(className, projectRoot, query, modulePath?, contextLines?, maxHits?)
 
 # Read specific method bodies (preferred over full file)
 get_class_source(className, projectRoot, modulePath?, methodNames: ["run", "stop"])

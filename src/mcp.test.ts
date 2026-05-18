@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import {
   mcpClassSourceToolPayloadSchema,
+  mcpFindInClassSourcePayloadSchema,
   mcpGetClassStructurePayloadSchema,
   mcpGetMethodSignaturePayloadSchema,
   mcpListModulesPayloadSchema,
@@ -8,11 +9,67 @@ import {
   mcpSearchClassesPayloadSchema,
 } from './mcp.js';
 import {
+  mcpToolResultFromFindInClassSource,
   mcpToolResultFromListModules,
   mcpToolResultFromMethodSignature,
   mcpToolResultFromResolutionResult,
   mcpToolResultFromSearchClasses,
 } from './mcp-tool-result.js';
+
+test('mcpFindInClassSourcePayloadSchema accepts success with hits', () => {
+  const parsed = mcpFindInClassSourcePayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    querySucceeded: true,
+    className: 'x.Y',
+    query: 'needle',
+    regex: false,
+    sourceAvailable: true,
+    provenance: {
+      kind: 'sourcesJar',
+      coordinates: { group: 'g', name: 'a', version: '1' },
+      jarPath: '/tmp/a-sources.jar',
+    },
+    lineNumbersReliable: true,
+    totalMatches: 1,
+    hitCount: 1,
+    truncated: false,
+    hits: [
+      {
+        line: 10,
+        column: 5,
+        matchedText: 'needle',
+        contextBefore: [],
+        contextAfter: [],
+      },
+    ],
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpToolResultFromFindInClassSource no-match is not MCP error', () => {
+  const r = mcpToolResultFromFindInClassSource(
+    {
+      ok: true,
+      found: false,
+      querySucceeded: true,
+      className: 'x.Y',
+      query: 'missing',
+      regex: false,
+      sourceAvailable: true,
+      provenance: {
+        kind: 'sourcesJar',
+        coordinates: { group: 'g', name: 'a', version: '1' },
+        jarPath: '/tmp/a-sources.jar',
+      },
+      description: 'no matches',
+    },
+    { projectRoot: '/tmp/app', query: 'missing' },
+  );
+  expect(r.isError).toBe(false);
+  const sc = r.structuredContent as { found: boolean };
+  expect(sc.found).toBe(false);
+});
 
 test('mcpClassSourceToolPayloadSchema accepts interproject provenance', () => {
   const parsed = mcpClassSourceToolPayloadSchema.safeParse({

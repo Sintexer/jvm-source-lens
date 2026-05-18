@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { ensureClassSearchIndex } from '../../src/class-search/ensure-class-search-index.js';
 import { matchAndRankClassSearch } from '../../src/class-search/match-class-search.js';
+import { searchClassSourceText } from '../../src/class-source-text-search.js';
 import { extractExternalClassSource } from '../../src/extractor/extract-external-class-source.js';
 import type { ResolutionOutput, ResolvedArtifact } from '../../src/resolvers/resolution-output.js';
 
@@ -99,6 +100,24 @@ describe.skipIf(!fixtureReady)('gradle-smoke fixture (synthetic resolution, no G
     expect(got.source).toContain('public class Core');
     expect(got.sourceAvailable).toBe(true);
     expect(got.provenance.kind).toBe('interproject');
+  });
+
+  test('searchClassSourceText finds literal in inter-project Core.java', async () => {
+    const got = await extractExternalClassSource(smokeResolutionOutput(), {
+      className: 'com.smoke.Core',
+      modulePath: ':app',
+    });
+    expect(got.ok).toBe(true);
+    if (!got.ok) {
+      return;
+    }
+    const search = searchClassSourceText(got.source, { query: 'smoke', contextLines: 1 });
+    expect('error' in search).toBe(false);
+    if ('error' in search) {
+      return;
+    }
+    expect(search.totalMatches).toBeGreaterThanOrEqual(1);
+    expect(search.hits[0]!.matchedText).toBe('smoke');
   });
 
   test('class search index matches method name from source enrichment', () => {
