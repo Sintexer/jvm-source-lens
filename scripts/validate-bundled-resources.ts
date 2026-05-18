@@ -26,7 +26,7 @@ function main(): void {
     if (size < MIN_CFR_BYTES) {
       console.error(
         `prepack: ${cfr} is too small (${size} bytes; need >= ${MIN_CFR_BYTES}). ` +
-          'Add the CFR JAR before publishing (see README / upstream CFR releases).',
+          'Add the CFR JAR before publishing (see SPEC / upstream CFR releases).',
       );
       failed = true;
     }

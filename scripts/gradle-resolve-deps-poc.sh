@@ -3,11 +3,11 @@
 #   PROJECT_ROOT defaults to the current working directory.
 #
 # Runs Gradle with an external init script (no files added under the project).
-# Prints one JSON document to stdout matching README 5.5.2 (schemaVersion 1.1+):
+# Prints one JSON document to stdout matching SPEC 5.5.2 (schemaVersion 1.1+):
 # eager resolution of compileClasspath, runtimeClasspath, testCompileClasspath,
 # and testRuntimeClasspath per submodule; resolved versions; partial errors array.
 #
-# Task name: jvmsrcResolve (aligns with README §5.2).
+# Task name: jvmsrcResolve (aligns with SPEC §5.2).
 #
 # Limitations:
 # - Configurations missing in a submodule are skipped (no error).

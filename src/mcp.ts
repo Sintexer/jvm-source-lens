@@ -668,7 +668,7 @@ export async function startMcpServer(): Promise<void> {
     {
       title: 'Search classes on the resolved classpath',
       description:
-        'Capability discovery when the FQN is unknown (README §12.3): resolves or loads cached Gradle output, builds or reuses a disk index for the selected module + configuration, ' +
+        'Capability discovery when the FQN is unknown (SPEC §12.3): resolves or loads cached Gradle output, builds or reuses a disk index for the selected module + configuration, ' +
         'then returns ranked FQN hits. Query is a case-insensitive substring over the index `searchText` (FQN, simple name, and when sources exist: declared method/field identifiers and Javadoc plain text), or a glob with * and ? matched against FQN or simple name only. ' +
         'Optional limit (default 50, max 200). Same projectRoot, modulePath, configuration, includeTest, and forceRefresh semantics as get_class_source. ' +
         'v3 indexes external and local-file JAR `.class` paths (ZIP central directory) plus source enrichment from sibling `-sources.jar` when Gradle listed `sourcesJarPath`, and from inter-project `src/main/java` (+ `src/test/java` when includeTest). ' +
@@ -715,10 +715,10 @@ export async function startMcpServer(): Promise<void> {
     {
       title: 'Get Java method overload signatures',
       description:
-        'IDE-first overload listing (README §7.2): resolves the classpath (cached), then prefers parsing original `.java` from sources JAR or inter-project `src/` when present — sourceAvailable=true, declaration-centric overload fields without javap-only artifacts. ' +
+        'IDE-first overload listing (SPEC §7.2): resolves the classpath (cached), then prefers parsing original `.java` from sources JAR or inter-project `src/` when present — sourceAvailable=true, declaration-centric overload fields without javap-only artifacts. ' +
         'If sources are missing or unparsable, falls back to javap -private -verbose on the owning binary classpath element — sourceAvailable=false (JVM descriptors, Signature attribute, flags, LocalVariableTable names when present). ' +
         'For strict bytecode-only inspection without any source fallback, use get_method_signature_bytecode. ' +
-        'Use methodName <init> for constructors. On failure: isError=true with stable code (README §7). ' +
+        'Use methodName <init> for constructors. On failure: isError=true with stable code (SPEC §7). ' +
         'CLASS_NOT_FOUND after scan: isError=false, found=false. Class found but no overloads: found=true, methodFound=false.',
       inputSchema: getMethodSignatureInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
@@ -758,7 +758,7 @@ export async function startMcpServer(): Promise<void> {
       title: 'Get Java method overload signatures (javap bytecode only)',
       description:
         'javap -private -verbose only: resolves the classpath (cached), finds the owning binary element (external JAR or inter-project build output), runs javap — no sources JAR or `src/` fallback. ' +
-        'sourceAvailable is always false. Fails with CLASS_NOT_FOUND or SIGNATURE_EXTRACT_FAILED when no `.class` is on the selected classpath or javap cannot read it (README §7.2). ' +
+        'sourceAvailable is always false. Fails with CLASS_NOT_FOUND or SIGNATURE_EXTRACT_FAILED when no `.class` is on the selected classpath or javap cannot read it (SPEC §7.2). ' +
         'Use get_method_signature for IDE-like source-first overloads. Same inputs as get_method_signature: className, methodName, projectRoot, optional modulePath, configuration, includeTest, forceRefresh.',
       inputSchema: getMethodSignatureInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },

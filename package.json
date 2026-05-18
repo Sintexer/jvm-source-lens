@@ -1,6 +1,7 @@
 {
   "name": "jvmsrc",
   "version": "0.1.0",
+  "description": "Resolve JVM classpath via Gradle and extract Java source, signatures, and structure for agents (CLI + MCP)",
   "main": "./dist/public-api.js",
   "exports": {
     ".": "./dist/public-api.js"

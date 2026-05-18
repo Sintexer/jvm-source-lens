@@ -5,7 +5,7 @@ import path from 'node:path';
 export type LogRootResult = { ok: true; path: string } | { ok: false; message: string };
 
 /**
- * Machine-local log root (README §6.3). Override: **`JVMSRC_LOG_DIR`** — absolute path only.
+ * Machine-local log root (SPEC §6.3). Override: **`JVMSRC_LOG_DIR`** — absolute path only.
  */
 export function resolveGlobalLogRoot(): LogRootResult {
   const raw = process.env.JVMSRC_LOG_DIR?.trim();

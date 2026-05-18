@@ -1,4 +1,4 @@
-/** Max bytes retained per subprocess stream in a diagnostic record (README §6.3). */
+/** Max bytes retained per subprocess stream in a diagnostic record (SPEC §6.3). */
 export const DIAGNOSTIC_STREAM_TAIL_BYTES = 4096;
 
 export function tailText(text: string, maxBytes: number = DIAGNOSTIC_STREAM_TAIL_BYTES): string {

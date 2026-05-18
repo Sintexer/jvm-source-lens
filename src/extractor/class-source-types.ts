@@ -70,7 +70,7 @@ export type ClassSourceError =
       entryRelPath: string;
       coordinates: ArtifactCoordinates;
       stderr?: string;
-      /** CFR argv when a JVM process was started (README §6.3 diagnostics). */
+      /** CFR argv when a JVM process was started (SPEC §6.3 diagnostics). */
       command?: string[];
     }
   | { code: 'ZIP_READ_ERROR'; message: string; jarPath: string; entryRelPath?: string }

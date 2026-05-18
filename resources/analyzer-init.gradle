@@ -13,7 +13,7 @@ import org.gradle.language.base.artifact.SourcesArtifact
 gradle.projectsLoaded { g ->
     g.rootProject.tasks.register("jvmsrcResolve") {
         group = "jvmsrc"
-        description = "Emit full resolution JSON (README §5.5.2 schema)."
+        description = "Emit full resolution JSON (SPEC §5.5.2 schema)."
         doLast {
             def root = project
             def errors = []

@@ -13,7 +13,7 @@ import { resolveWithResolutionCache } from './resolve-with-cache.js';
 
 /**
  * Like {@link getMethodSignatures} but **only** `javap -private -verbose` on a classpath that contains
- * the `.class` — no sources JAR / `src/` fallback (see README §7.2, ROADMAP inspection split).
+ * the `.class` — no sources JAR / `src/` fallback (see SPEC §7.2, ROADMAP inspection split).
  */
 export async function getMethodSignaturesBytecode(
   className: string,

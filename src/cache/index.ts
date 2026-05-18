@@ -26,7 +26,7 @@ const SKIP_DIR_NAMES = new Set([
   '.svn',
 ]);
 
-/** Relative paths of Gradle build inputs (README §6.1), sorted, POSIX-style separators. */
+/** Relative paths of Gradle build inputs (SPEC §6.1), sorted, POSIX-style separators. */
 export function listBuildInputRelativePaths(projectRoot: string): string[] {
   const rootAbs = canonicalProjectRoot(projectRoot);
   const files: string[] = [];

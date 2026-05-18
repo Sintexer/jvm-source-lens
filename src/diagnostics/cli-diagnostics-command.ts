@@ -67,7 +67,7 @@ function parseOlderThanMs(spec: string): number | null {
 
 export function registerDiagnosticsCli(program: Command): void {
   const diag = new Command('diagnostics').description(
-    'List, show, or clear structured failure logs (see README / JVMSRC_LOG_DIR)',
+    'List, show, or clear structured failure logs (see SPEC / JVMSRC_LOG_DIR)',
   );
 
   diag

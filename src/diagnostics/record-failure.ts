@@ -25,7 +25,7 @@ export type RecordFailureParams = {
 };
 
 export type RecordFailureResult = {
-  /** Present when a `diagnostics/<id>.json` snapshot was written (README §6.3). */
+  /** Present when a `diagnostics/<id>.json` snapshot was written (SPEC §6.3). */
   diagnosticId?: string;
   hint?: string;
 };

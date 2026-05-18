@@ -40,7 +40,7 @@ function rotateIfNeeded(logRoot: string): void {
   }
 }
 
-/** Append one NDJSON line; rotates `current.log` when it exceeds 5 MiB (README §6.3). */
+/** Append one NDJSON line; rotates `current.log` when it exceeds 5 MiB (SPEC §6.3). */
 export function appendNdjsonLine(logRoot: string, line: string): void {
   try {
     fs.mkdirSync(logRoot, { recursive: true });
