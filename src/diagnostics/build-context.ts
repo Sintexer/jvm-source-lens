@@ -16,12 +16,17 @@ function readGradleWrapperVersion(projectRoot: string): string | null {
   }
 }
 
+/** Wall-clock cap for `java -version` during diagnostic context capture. */
+export const JAVA_VERSION_SPAWN_TIMEOUT_MS = 2_000;
+
 export function tryJavaVersion(javaExecutable?: string): string | null {
   const java = javaExecutable ?? 'java';
   try {
     const r = spawnSync(java, ['-version'], {
       encoding: 'utf8',
       maxBuffer: 64 * 1024,
+      timeout: JAVA_VERSION_SPAWN_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
     });
     const out = `${r.stderr ?? ''}\n${r.stdout ?? ''}`.trim();
     const line = out.split('\n')[0]?.trim();
@@ -35,15 +40,18 @@ export type BuildDiagnosticContextOptions = {
   projectRoot: string;
   buildSystem: string | null;
   javaExecutable?: string;
+  /** When false, skip `java -version` (validation-only failures do not need JVM metadata). */
+  includeJavaVersion?: boolean;
 };
 
 export function buildDiagnosticContextSync(opts: BuildDiagnosticContextOptions): DiagnosticRecord['context'] {
   const cache = resolveGlobalCacheRoot();
+  const includeJava = opts.includeJavaVersion !== false;
   return {
     platform: process.platform,
     arch: process.arch,
     nodeVersion: process.version,
-    javaVersion: tryJavaVersion(opts.javaExecutable),
+    javaVersion: includeJava ? tryJavaVersion(opts.javaExecutable) : null,
     gradleVersion: readGradleWrapperVersion(opts.projectRoot),
     projectRoot: path.resolve(opts.projectRoot),
     buildSystem: opts.buildSystem,

@@ -54,6 +54,8 @@ export function recordFailureDiagnostic(params: RecordFailureParams): RecordFail
   const mapped = mapPublicFailureToDiagnostic(params.publicCode, params.message);
   const severity = params.forceSeverity ?? mapped.severity;
   const errorCode = params.forceErrorCode ?? mapped.errorCode;
+  const includeJavaVersion =
+    DIAGNOSTIC_FILE_SEVERITIES.has(severity) || severity === FailureSeverity.ENV_ERROR;
   const id = randomUUID();
   const stack =
     severity === FailureSeverity.INTERNAL && params.stack
@@ -76,6 +78,7 @@ export function recordFailureDiagnostic(params: RecordFailureParams): RecordFail
     context: buildDiagnosticContextSync({
       projectRoot: params.projectRoot,
       buildSystem: params.buildSystem === undefined ? 'gradle' : params.buildSystem,
+      includeJavaVersion,
     }),
     subprocess: subprocessForRecord(params.subprocess),
   };

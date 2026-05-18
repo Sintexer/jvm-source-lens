@@ -1,4 +1,7 @@
-import { expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { ClassSourceError } from './extractor/class-source-types.js';
 import {
   mcpToolResultFromClassSource,
@@ -7,6 +10,24 @@ import {
 } from './mcp-tool-result.js';
 
 const query = { projectRoot: '/tmp/my-app', modulePath: ':app', configuration: 'compileClasspath' };
+
+let diagLogDir: string;
+let prevLogDir: string | undefined;
+
+beforeEach(() => {
+  diagLogDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-mcp-tr-'));
+  prevLogDir = process.env.JVMSRC_LOG_DIR;
+  process.env.JVMSRC_LOG_DIR = diagLogDir;
+});
+
+afterEach(() => {
+  if (prevLogDir === undefined) {
+    delete process.env.JVMSRC_LOG_DIR;
+  } else {
+    process.env.JVMSRC_LOG_DIR = prevLogDir;
+  }
+  fs.rmSync(diagLogDir, { recursive: true, force: true });
+});
 
 test('CLASS_NOT_FOUND is not an MCP error (valid empty result)', () => {
   const r = mcpToolResultFromClassSource(

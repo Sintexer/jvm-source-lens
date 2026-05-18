@@ -45,6 +45,18 @@ test('recordFailureDiagnostic writes resolver_fail snapshot', () => {
   expect(files.some((f) => f.endsWith('.json'))).toBe(true);
 });
 
+test('INVALID_PROJECT_ROOT skips java -version probe', () => {
+  const t0 = performance.now();
+  recordFailureDiagnostic({
+    operation: 'mcp_tool',
+    publicCode: 'INVALID_PROJECT_ROOT',
+    message: 'Project path does not exist: /nope',
+    projectRoot: '/nope',
+    buildSystem: null,
+  });
+  expect(performance.now() - t0).toBeLessThan(500);
+});
+
 test('relative JVMSRC_LOG_DIR skips write without throwing', () => {
   process.env.JVMSRC_LOG_DIR = 'relative/logs';
   expect(
