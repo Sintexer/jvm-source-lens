@@ -5,6 +5,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import * as z from 'zod';
 import { getClassSource } from './get-class-source.js';
+import { mergeSourceExcerptInputs } from './source-excerpt.js';
 import {
   mcpToolResultFromClassSource,
   mcpToolResultFromMethodSignature,
@@ -104,6 +105,17 @@ const classSourceErrorSchema = z.discriminatedUnion('code', [
     jarPath: z.string(),
     stderr: z.string().optional(),
   }),
+  z.object({
+    code: z.literal('EXCERPT_REQUEST_INVALID'),
+    message: z.string(),
+  }),
+  z.object({
+    code: z.literal('EXCERPT_NOT_FOUND'),
+    message: z.string(),
+    className: z.string(),
+    requestedMethodNames: z.array(z.string()),
+    unmatchedMethodNames: z.array(z.string()),
+  }),
 ]);
 
 const mcpErrorCategorySchema = z.enum(['transient', 'validation', 'business', 'permission']);
@@ -118,6 +130,8 @@ const classSourceErrorCodeSchema = z.enum([
   'RESOLUTION_FAILED',
   'SOURCES_RESOLVE_FAILED',
   'SIGNATURE_EXTRACT_FAILED',
+  'EXCERPT_REQUEST_INVALID',
+  'EXCERPT_NOT_FOUND',
 ]);
 
 /**
@@ -133,6 +147,18 @@ export const mcpClassSourceToolPayloadSchema = z.union([
     sourceAvailable: z.boolean(),
     className: z.string(),
     provenance: provenanceSchema,
+    excerpt: z
+      .object({
+        excerpted: z.literal(true),
+        requestedMethodNames: z.array(z.string()),
+        matchedMethodNames: z.array(z.string()),
+        unmatchedMethodNames: z.array(z.string()),
+        startLine: z.number().optional(),
+        endLine: z.number().optional(),
+        lineNumbersReliable: z.boolean(),
+        sourceLineCount: z.number(),
+      })
+      .optional(),
   }),
   z.object({
     ok: z.literal(true),
@@ -160,6 +186,13 @@ const getClassSourceInputSchema = z.object({
   configuration: z.string().optional(),
   includeTest: z.boolean().optional(),
   forceRefresh: z.boolean().optional(),
+  /** Return only these methods/constructors (`<init>` for constructors). Multiple overloads are all included. */
+  methodNames: z.array(z.string().min(1)).optional(),
+  /** Convenience when a single method is needed; merged with `methodNames`. */
+  methodName: z.string().min(1).optional(),
+  /** 1-based inclusive line range in the full compilation unit (combine with `methodNames`). */
+  startLine: z.number().int().positive().optional(),
+  endLine: z.number().int().positive().optional(),
 });
 
 const buildSystemInfoSchema = z.object({
@@ -566,6 +599,7 @@ export async function startMcpServer(): Promise<void> {
       title: 'Get Java source for a class',
       description:
         'Resolves the project classpath (cached), then returns Java source for a fully-qualified class name. ' +
+        'Optional excerpt: methodNames (array; use <init> for constructors), and/or startLine/endLine (1-based) to avoid full-file payloads. ' +
         'On failure: isError=true with errorCategory, isRetryable, description, and stable code (§7). ' +
         'When the class is absent from a successfully resolved classpath: isError=false, found=false (do not treat as access failure).',
       inputSchema: getClassSourceInputSchema,
@@ -585,12 +619,21 @@ export async function startMcpServer(): Promise<void> {
       }
 
       try {
+        const methodNames = mergeSourceExcerptInputs(args.methodNames, args.methodName);
         const result = await getClassSource(args.className, {
           projectRoot: root.path,
           modulePath: args.modulePath,
           configuration: args.configuration,
           includeTest: Boolean(args.includeTest),
           forceRefresh: Boolean(args.forceRefresh),
+          excerpt:
+            methodNames !== undefined || args.startLine !== undefined || args.endLine !== undefined
+              ? {
+                  methodNames,
+                  startLine: args.startLine,
+                  endLine: args.endLine,
+                }
+              : undefined,
         });
         return mcpToolResultFromClassSource(result, query);
       } catch (e) {

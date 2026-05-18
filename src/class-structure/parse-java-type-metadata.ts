@@ -413,6 +413,18 @@ export type ParsedJavaTypeMetadata = {
   methods: JavapMethodWithName[];
 };
 
+/** Absolute `[start, end)` offsets in the compilation unit for one method/constructor. */
+export type MethodSourceSpan = {
+  jvmMethodName: string;
+  start: number;
+  end: number;
+};
+
+export type ParseJavaTypeMetadataOptions = {
+  /** When set, records method/constructor source spans while parsing. */
+  methodSpans?: MethodSourceSpan[];
+};
+
 function parseExtendsImplements(headerSlice: string, kind: ClassStructureKind, ctx: ImportCtx): ParsedJavaTypeHeader {
   let superClass: string | null = null;
   const directInterfaces: string[] = [];
@@ -564,11 +576,48 @@ function looksLikeMethodSignatureBeforeBrace(prelude: string): boolean {
   return /\([^)]*\)\s*(?:throws\s+[\w\s.,]*)?\s*$/.test(t);
 }
 
+function extendSpanWithLeadingJavadoc(source: string, memberStart: number): number {
+  let i = memberStart;
+  while (i > 0 && /\s/.test(source[i - 1]!)) {
+    i--;
+  }
+  if (i < 2 || source[i - 1] !== '/' || source[i - 2] !== '*') {
+    return memberStart;
+  }
+  let j = i - 2;
+  while (j > 0) {
+    const k = source.lastIndexOf('/**', j);
+    if (k < 0) {
+      break;
+    }
+    let lineStart = k;
+    while (lineStart > 0 && source[lineStart - 1] !== '\n') {
+      lineStart--;
+    }
+    let onlyWs = true;
+    for (let t = lineStart; t < k; t++) {
+      if (!/\s/.test(source[t]!)) {
+        onlyWs = false;
+        break;
+      }
+    }
+    if (!onlyWs) {
+      break;
+    }
+    return lineStart;
+  }
+  return memberStart;
+}
+
 /**
  * Best-effort parse of a single compilation-unit `.java` for `classFqn`'s **top-level** type
  * matching {@link declaringSimpleName}.
  */
-export function parseJavaTypeMetadata(source: string, classFqn: string): ParsedJavaTypeMetadata | null {
+export function parseJavaTypeMetadata(
+  source: string,
+  classFqn: string,
+  options?: ParseJavaTypeMetadataOptions,
+): ParsedJavaTypeMetadata | null {
   const simple = declaringSimpleName(classFqn);
   const ctx = buildImportCtx(source);
   const hit = findTopLevelTypeKeywordMatch(source, simple);
@@ -590,8 +639,10 @@ export function parseJavaTypeMetadata(source: string, classFqn: string): ParsedJ
   }
 
   const body = source.slice(openBrace + 1, closeBrace);
+  const bodyBase = openBrace + 1;
   const fields: JavapFieldInfo[] = [];
   const methods: JavapMethodWithName[] = [];
+  const methodSpans = options?.methodSpans;
 
   if (hit.kind === 'enum') {
     const head = body.split(';')[0] ?? body;
@@ -653,7 +704,15 @@ export function parseJavaTypeMetadata(source: string, classFqn: string): ParsedJ
     const semiMember = indexOfSemicolonAtDepthZero(body, i);
     const braceMember = indexOfOpeningBraceAtDepthZero(body, i);
 
-    const parseMethodDecl = (declRaw: string): void => {
+    const recordMethodSpan = (jvmMethodName: string, relStart: number, relEnd: number): void => {
+      if (!methodSpans) {
+        return;
+      }
+      const absStart = extendSpanWithLeadingJavadoc(source, bodyBase + relStart);
+      methodSpans.push({ jvmMethodName, start: absStart, end: bodyBase + relEnd });
+    };
+
+    const parseMethodDecl = (declRaw: string, relStart: number, relEnd: number): void => {
       const decl = declRaw.trim();
       const inner = stripMethodGenericsPrefix(stripLeadingModifiers(decl));
       const openParen = inner.indexOf('(');
@@ -701,6 +760,7 @@ export function parseJavaTypeMetadata(source: string, classFqn: string): ParsedJ
         thrownExceptions,
         flagsLine: null,
       });
+      recordMethodSpan(jvmMethodName, relStart, relEnd);
     };
 
     if (
@@ -709,7 +769,8 @@ export function parseJavaTypeMetadata(source: string, classFqn: string): ParsedJ
     ) {
       const prelude = body.slice(stmtStart, braceMember);
       if (looksLikeMethodSignatureBeforeBrace(prelude)) {
-        parseMethodDecl(prelude);
+        const relEnd = consumeBalancedBraces(body, braceMember);
+        parseMethodDecl(prelude, stmtStart, relEnd);
       }
       i = consumeBalancedBraces(body, braceMember);
       continue;
@@ -718,7 +779,7 @@ export function parseJavaTypeMetadata(source: string, classFqn: string): ParsedJ
     if (semiMember >= 0) {
       const decl = body.slice(stmtStart, semiMember).trim();
       if (/\([^)]*\)/.test(decl)) {
-        parseMethodDecl(decl);
+        parseMethodDecl(decl, stmtStart, semiMember + 1);
       } else if (/\w+\s*$/.test(stripLeadingModifiers(decl))) {
         const stripped = stripAnnotationsPrefix(stripLeadingModifiers(decl)).replace(/;$/, '').trim();
         const tokens = stripped.split(/\s+/).filter(Boolean);
@@ -741,4 +802,14 @@ export function parseJavaTypeMetadata(source: string, classFqn: string): ParsedJ
   }
 
   return { header, fields, methods };
+}
+
+/** Collects method/constructor source spans for `classFqn` in a `.java` compilation unit. */
+export function collectMethodSourceSpans(source: string, classFqn: string): MethodSourceSpan[] | null {
+  const spans: MethodSourceSpan[] = [];
+  const meta = parseJavaTypeMetadata(source, classFqn, { methodSpans: spans });
+  if (!meta) {
+    return null;
+  }
+  return spans;
 }

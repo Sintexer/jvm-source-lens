@@ -8,6 +8,7 @@ import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import { writeCliGetResult } from './cli-get-output.js';
 import { createCliProgressReporter } from './cli-progress.js';
 import { getClassSource } from './get-class-source.js';
+import { mergeSourceExcerptInputs } from './source-excerpt.js';
 import { resolveProjectRoot } from './project-path.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 
@@ -54,6 +55,17 @@ program
   .option('-q, --quiet', 'On success, write only Java source to stdout (no metadata JSON on stderr)', false)
   .option('-v, --verbose', 'Stream Gradle stderr during resolution and sources JAR fetch', false)
   .option('--json', 'Print one JSON object on stdout for success or failure (agent-friendly)', false)
+  .option(
+    '--method <name>',
+    'Include only this method/constructor in output (<init> for constructors); repeat for multiple',
+    (value: string, previous: string[] | undefined) => {
+      const list = previous ?? [];
+      list.push(value);
+      return list;
+    },
+  )
+  .option('--start-line <n>', '1-based start line for excerpt (requires --end-line)', (v) => parseInt(v, 10))
+  .option('--end-line <n>', '1-based end line for excerpt (requires --start-line)', (v) => parseInt(v, 10))
   .action(
     async (
       className: string,
@@ -66,6 +78,9 @@ program
         quiet?: boolean;
         verbose?: boolean;
         json?: boolean;
+        method?: string[];
+        startLine?: number;
+        endLine?: number;
       },
     ) => {
       const json = Boolean(options.json);
@@ -100,6 +115,7 @@ program
       }
       const cli =
         showProgress || verboseGradle ? { progress: showProgress, verboseGradle } : undefined;
+      const methodNames = mergeSourceExcerptInputs(options.method);
       const result = await getClassSource(className, {
         projectRoot: root.path,
         modulePath: options.module,
@@ -107,6 +123,14 @@ program
         includeTest: Boolean(options.includeTest),
         forceRefresh: Boolean(options.forceRefresh),
         cli,
+        excerpt:
+          methodNames !== undefined || options.startLine !== undefined || options.endLine !== undefined
+            ? {
+                methodNames,
+                startLine: options.startLine,
+                endLine: options.endLine,
+              }
+            : undefined,
       });
       writeCliGetResult(result, { quiet: Boolean(options.quiet), json });
     },

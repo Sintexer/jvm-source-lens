@@ -6,6 +6,7 @@ import type {
   InterprojectProvenance,
   SourcesJarProvenance,
 } from './extractor/class-source-types.js';
+import type { SourceExcerptInfo } from './source-excerpt.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import { FailureSeverity } from './diagnostics/failure-severity.js';
 import type { ResolutionResult } from './resolvers/base.js';
@@ -32,6 +33,7 @@ export type McpClassSourceSuccessPayload = {
   sourceAvailable: boolean;
   className: string;
   provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
+  excerpt?: SourceExcerptInfo;
 };
 
 /** Classpath was resolved and scanned; the class is not on it (not an access failure). */
@@ -219,11 +221,20 @@ export function mcpToolResultFromClassSource(result: ClassSourceLookupResult, qu
       sourceAvailable: result.sourceAvailable,
       className: result.className,
       provenance: result.provenance,
+      ...(result.excerpt !== undefined ? { excerpt: result.excerpt } : {}),
     };
+    const excerptHint =
+      result.excerpt !== undefined
+        ? ` excerpt: ${result.excerpt.matchedMethodNames.length} method(s)` +
+          (result.excerpt.unmatchedMethodNames.length > 0
+            ? `, ${result.excerpt.unmatchedMethodNames.length} unmatched`
+            : '') +
+          (result.excerpt.lineNumbersReliable ? '' : '; line numbers approximate (decompiled)')
+        : '';
     return mcpSuccessResult(
       result.sourceAvailable
-        ? `Retrieved source for ${result.className} (original sources).`
-        : `Retrieved source for ${result.className} (decompiled; sourceAvailable=false).`,
+        ? `Retrieved source for ${result.className} (original sources).${excerptHint}`
+        : `Retrieved source for ${result.className} (decompiled; sourceAvailable=false).${excerptHint}`,
       payload,
     );
   }
@@ -671,6 +682,24 @@ function classifyClassSourceError(error: ClassSourceError, query: ClassSourceQue
       return classifyDecompileFailed(error);
     case 'SIGNATURE_EXTRACT_FAILED':
       return classifySignatureExtractFailed(error);
+    case 'EXCERPT_REQUEST_INVALID':
+      return envelope(
+        error,
+        'validation',
+        true,
+        'Invalid excerpt parameters.',
+        `${error.message} Fix methodNames (use <init> for constructors), or provide both startLine and endLine (1-based, inclusive).`,
+      );
+    case 'EXCERPT_NOT_FOUND':
+      return envelope(
+        error,
+        'validation',
+        true,
+        `No excerpt matched in ${JSON.stringify(error.className)}.`,
+        `${error.message} Requested: ${error.requestedMethodNames.join(', ')}. ` +
+          `Unmatched: ${error.unmatchedMethodNames.join(', ')}. ` +
+          `Use get_method_signature to list overload names, or omit excerpt params for the full file.`,
+      );
     case 'CLASS_NOT_FOUND':
       throw new Error('CLASS_NOT_FOUND must be handled via mcpNotFoundResult (valid empty result, not MCP error)');
   }

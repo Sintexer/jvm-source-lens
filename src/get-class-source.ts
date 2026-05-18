@@ -5,6 +5,11 @@ import { extractExternalClassSource } from './extractor/extract-external-class-s
 import type { GradleProcessCapture, ResolveOptions } from './resolvers/base.js';
 import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
+import {
+  applySourceExcerpt,
+  mergeSourceExcerptInputs,
+  type SourceExcerptRequest,
+} from './source-excerpt.js';
 
 export type GetClassSourceCliOptions = {
   /** stderr phase labels (TTY: in-place updating line). */
@@ -19,6 +24,8 @@ export type GetClassSourceOptions = {
   configuration?: string;
   includeTest?: boolean;
   forceRefresh?: boolean;
+  /** When set, return only matching method bodies and/or a line range. */
+  excerpt?: SourceExcerptRequest;
   /** CLI-only: progress labels and Gradle verbose stderr. */
   cli?: GetClassSourceCliOptions;
 };
@@ -42,6 +49,45 @@ function commonInput(opts: GetClassSourceOptions, className: string): Record<str
     configuration: opts.configuration,
     includeTest: opts.includeTest,
     forceRefresh: opts.forceRefresh,
+    ...(opts.excerpt?.methodNames !== undefined ? { methodNames: opts.excerpt.methodNames } : {}),
+    ...(opts.excerpt?.startLine !== undefined ? { startLine: opts.excerpt.startLine } : {}),
+    ...(opts.excerpt?.endLine !== undefined ? { endLine: opts.excerpt.endLine } : {}),
+  };
+}
+
+function applyExcerptToSuccess(
+  extracted: Extract<ClassSourceLookupResult, { ok: true }>,
+  excerptRequest: SourceExcerptRequest | undefined,
+): ClassSourceLookupResult {
+  const merged = excerptRequest
+    ? {
+        methodNames: mergeSourceExcerptInputs(excerptRequest.methodNames),
+        startLine: excerptRequest.startLine,
+        endLine: excerptRequest.endLine,
+      }
+    : null;
+  const normalized =
+    merged &&
+    (merged.methodNames !== undefined || merged.startLine !== undefined || merged.endLine !== undefined)
+      ? merged
+      : null;
+
+  const applied = applySourceExcerpt(
+    extracted.source,
+    extracted.className,
+    extracted.sourceAvailable,
+    normalized,
+  );
+  if (!applied.ok) {
+    return { ok: false, error: applied.error };
+  }
+  if (applied.excerpt === undefined) {
+    return extracted;
+  }
+  return {
+    ...extracted,
+    source: applied.source,
+    excerpt: applied.excerpt,
   };
 }
 
@@ -186,7 +232,19 @@ export async function getClassSource(
       return { ...extracted, ...diag };
     }
 
-    return extracted;
+    const withExcerpt = applyExcerptToSuccess(extracted, opts.excerpt);
+    if (!withExcerpt.ok) {
+      const diag = recordFailureDiagnostic({
+        operation: 'get_class_source',
+        publicCode: withExcerpt.error.code,
+        message: withExcerpt.error.message,
+        projectRoot: opts.projectRoot,
+        buildSystem: 'gradle',
+        input: commonInput(opts, className),
+      });
+      return { ...withExcerpt, ...diag };
+    }
+    return withExcerpt;
   } finally {
     reporter.finalize();
   }

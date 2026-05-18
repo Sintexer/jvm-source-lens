@@ -53,7 +53,7 @@ jvmsrc resolve -p /path/to/project --force-refresh
 # List submodules: use MCP tool `list_modules`, or `jvmsrc resolve` for full graph JSON
 ```
 
-Common flags: `-p` / `--project`, `--module` (e.g. `:core:api`), `--configuration`, `--include-test`, `--force-refresh`, `--verbose`.
+Common flags: `-p` / `--project`, `--module` (e.g. `:core:api`), `--configuration`, `--include-test`, `--force-refresh`, `--verbose`. Excerpt: `--method` (repeatable; `<init>` for constructors), `--start-line` / `--end-line`.
 
 ## MCP setup
 
@@ -86,7 +86,7 @@ Restart the MCP server after upgrading `jvmsrc`.
 | `get_method_signature` | Overloads, parameters, return types, `throws` (source-first, IDE-shaped) |
 | `get_class_structure` | Fields, methods, hierarchy, annotations — without full source |
 | `get_method_signature_bytecode` | Strict `javap` output only (no source fallback) |
-| `get_class_source` | Full `.java` body (last resort — largest payload) |
+| `get_class_source` | Full `.java` body, or excerpt via `methodNames` / line range (last resort for full file) |
 | `list_modules` | Submodule names before scoping with `modulePath` |
 | `resolve_dependencies` | Full dependency graph / warm cache |
 

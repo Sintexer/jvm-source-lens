@@ -14,7 +14,10 @@ describe('MCP SDK output validation', () => {
     const outputObj = normalizeObjectSchema(mcpClassSourceToolPayloadSchema);
     expect(outputObj).toBeUndefined();
     await expect(
-      safeParseAsync(outputObj, { ok: true, found: true, source: '', sourceAvailable: true, className: 'x.Y' }),
+      safeParseAsync(
+        outputObj as Parameters<typeof safeParseAsync>[0],
+        { ok: true, found: true, source: '', sourceAvailable: true, className: 'x.Y' },
+      ),
     ).rejects.toThrow(/_zod/);
   });
 });

@@ -1,5 +1,6 @@
 import type { ResolvedArtifact } from '../resolvers/resolution-output.js';
 import type { DecompileExternalClassFn } from '../decompiler/decompile-external-class.js';
+import type { SourceExcerptInfo } from '../source-excerpt.js';
 
 export type ArtifactCoordinates = {
   group: string;
@@ -89,6 +90,14 @@ export type ClassSourceError =
       methodName?: string;
       jarPath: string;
       stderr?: string;
+    }
+  | { code: 'EXCERPT_REQUEST_INVALID'; message: string }
+  | {
+      code: 'EXCERPT_NOT_FOUND';
+      message: string;
+      className: string;
+      requestedMethodNames: string[];
+      unmatchedMethodNames: string[];
     };
 
 export type ClassSourceLookupResult =
@@ -98,6 +107,7 @@ export type ClassSourceLookupResult =
       sourceAvailable: boolean;
       className: string;
       provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
+      excerpt?: SourceExcerptInfo;
     }
   | { ok: false; error: ClassSourceError; diagnosticId?: string; hint?: string };
 

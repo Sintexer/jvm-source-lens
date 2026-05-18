@@ -58,6 +58,10 @@ export function mapPublicFailureToDiagnostic(
       return { severity: FailureSeverity.DECOMPILE_FAIL, errorCode: 'CFR_FAILED' };
     case 'SIGNATURE_EXTRACT_FAILED':
       return { severity: FailureSeverity.PARSER_FAIL, errorCode: 'JAVAP_FAILED' };
+    case 'EXCERPT_REQUEST_INVALID':
+      return { severity: FailureSeverity.USER_ERROR, errorCode: 'EXCERPT_REQUEST_INVALID' };
+    case 'EXCERPT_NOT_FOUND':
+      return { severity: FailureSeverity.USER_ERROR, errorCode: 'EXCERPT_NOT_FOUND' };
     default:
       return { severity: FailureSeverity.INTERNAL, errorCode: 'UNKNOWN_FAILURE' };
   }

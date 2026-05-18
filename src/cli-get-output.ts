@@ -26,6 +26,7 @@ export function writeCliGetResult(result: CliGetResult, options?: CliGetOutputOp
           sourceAvailable: result.sourceAvailable,
           className: result.className,
           provenance: result.provenance,
+          ...(result.excerpt !== undefined ? { excerpt: result.excerpt } : {}),
         }),
       );
       return;
@@ -43,6 +44,7 @@ export function writeCliGetResult(result: CliGetResult, options?: CliGetOutputOp
           sourceAvailable: result.sourceAvailable,
           className: result.className,
           provenance: result.provenance,
+          ...(result.excerpt !== undefined ? { excerpt: result.excerpt } : {}),
         }),
       );
     }

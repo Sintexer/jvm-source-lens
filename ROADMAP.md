@@ -46,7 +46,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ### P2 — Agent-driven polish (feedback backlog)
 
-- [ ] MCP / CLI `get_class_source` optional excerpt (`methodName` and/or `startLine` / `endLine`) — avoid dumping very large compilation units into agent context
+- [x] MCP / CLI `get_class_source` optional excerpt (`methodNames` / `methodName` and/or `startLine` / `endLine`) — avoid dumping very large compilation units into agent context
 - [ ] MCP / CLI `find_in_class_source` — pattern match inside one resolved compilation unit; return hit line(s) or block + optional ±N context lines (**relevance: high · priority: P2**)
 - [ ] Auto-infer `modulePath` when the FQN resolves in exactly one module (keep explicit `modulePath` for conflicts; `list_modules` remains the discovery path)
 
@@ -349,9 +349,9 @@ Collected from an agent that used **`get_class_source`** against a library JAR o
 
 **References:** [src/get-class-source.ts](src/get-class-source.ts), [src/mcp.ts](src/mcp.ts), SPEC §8.2
 
-- [ ] Optional `methodName` and/or `startLine` / `endLine` on MCP `get_class_source` and CLI `get`
-- [ ] Document interaction with `sourceAvailable: false` (decompiled output may not preserve original line numbers)
-- [ ] Default unchanged: full file when excerpt params omitted
+- [x] Optional `methodNames` / `methodName` and/or `startLine` / `endLine` on MCP `get_class_source` and CLI `get`
+- [x] Document interaction with `sourceAvailable: false` (decompiled output may not preserve original line numbers)
+- [x] Default unchanged: full file when excerpt params omitted
 
 ---
 

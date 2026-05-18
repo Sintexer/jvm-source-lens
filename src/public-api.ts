@@ -1,4 +1,10 @@
 export { getClassSource, type GetClassSourceCliOptions, type GetClassSourceOptions } from './get-class-source.js';
+export {
+  applySourceExcerpt,
+  mergeSourceExcerptInputs,
+  type SourceExcerptInfo,
+  type SourceExcerptRequest,
+} from './source-excerpt.js';
 export { getClassStructure, type GetClassStructureOptions } from './get-class-structure.js';
 export type {
   ClassStructureDeclaredAnnotation,
