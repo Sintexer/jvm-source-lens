@@ -1,8 +1,10 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { getBundledResource } from '../../bundled-resources.js';
 import { readProcessStreamToText, spawnChild } from '../../spawn-child.js';
 import { formatGradleUserMessage } from './gradle-failure-message.js';
+import { resolveGradleWrapperCommand } from './gradle-wrapper-command.js';
+
+export { resolveGradleWrapperCommand } from './gradle-wrapper-command.js';
 
 /** Default wall-clock cap for each Gradle invocation. Override with `JVMSRC_GRADLE_TIMEOUT_MS`. */
 export const DEFAULT_GRADLE_TIMEOUT_MS = 600_000;
@@ -52,25 +54,15 @@ export async function runGradleTask(
 ): Promise<GradleSpawnResult> {
   const root = path.resolve(projectRoot);
   const initScript = getBundledResource('analyzer-init.gradle');
-  const useWrapper = fs.existsSync(path.join(root, 'gradlew'));
+  const wrapper = resolveGradleWrapperCommand(root);
+  const useWrapper = wrapper.useWrapper;
 
   const props: Record<string, string> = {
     jvmsrcWrapper: useWrapper ? 'true' : 'false',
     ...projectProperties,
   };
 
-  const argv: string[] = [];
-  if (useWrapper) {
-    const gw = path.join(root, 'gradlew');
-    try {
-      fs.accessSync(gw, fs.constants.X_OK);
-      argv.push(gw);
-    } catch {
-      argv.push('bash', gw);
-    }
-  } else {
-    argv.push('gradle');
-  }
+  const argv: string[] = [...wrapper.command];
 
   for (const [key, value] of Object.entries(props)) {
     argv.push(`-P${key}=${value}`);
@@ -114,11 +106,31 @@ export async function runGradleTask(
     }
   }, timeoutMs);
 
-  const [stdout, stderr, exitCode] = await Promise.all([
-    readProcessStreamToText(proc.stdout),
-    readProcessStreamToText(proc.stderr),
-    proc.exited,
-  ]);
+  let stdout: string;
+  let stderr: string;
+  let exitCode: number;
+  try {
+    [stdout, stderr, exitCode] = await Promise.all([
+      readProcessStreamToText(proc.stdout),
+      readProcessStreamToText(proc.stderr),
+      proc.exited,
+    ]);
+  } catch (e) {
+    clearTimeout(timer);
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      message: formatGradleUserMessage({
+        task,
+        kind: 'spawn',
+        message: `Failed to start Gradle: ${msg}`,
+        command: argv,
+        usedWrapper: useWrapper,
+      }),
+      command: argv,
+      exitCode: null,
+    };
+  }
   clearTimeout(timer);
 
   if (timedOut) {

@@ -1,4 +1,4 @@
-import { spawn as nodeSpawn } from 'node:child_process';
+import crossSpawn from 'cross-spawn';
 import { Readable } from 'node:stream';
 import { text as readStreamText } from 'node:stream/consumers';
 
@@ -44,8 +44,8 @@ function nodeReadableToWeb(readable: Readable): ReadableStream<Uint8Array> {
 }
 
 /**
- * Spawns a subprocess using Bun when available, otherwise `node:child_process`.
- * Piped stdout/stderr are always exposed as Web `ReadableStream`s.
+ * Spawns a subprocess using Bun when available, otherwise `cross-spawn` (Windows `.bat`,
+ * PATHEXT, shebangs). Piped stdout/stderr are always exposed as Web `ReadableStream`s.
  */
 export function spawnChild(argv: string[], options: SpawnChildOptions = {}): SpawnedChild {
   const stdoutMode = options.stdout ?? 'pipe';
@@ -70,7 +70,7 @@ export function spawnChild(argv: string[], options: SpawnChildOptions = {}): Spa
     };
   }
 
-  const proc = nodeSpawn(argv[0]!, argv.slice(1), {
+  const proc = crossSpawn(argv[0]!, argv.slice(1), {
     cwd: options.cwd,
     env: options.env,
     stdio: [stdinMode, stdoutMode, stderrMode],
@@ -89,9 +89,19 @@ export function spawnChild(argv: string[], options: SpawnChildOptions = {}): Spa
   return {
     stdout: mapPiped(proc.stdout, stdoutMode),
     stderr: mapPiped(proc.stderr, stderrMode),
-    exited: new Promise((resolve) => {
-      proc.once('close', (code) => {
-        resolve(code ?? 1);
+    exited: new Promise((resolve, reject) => {
+      let settled = false;
+      const settle = (fn: () => void): void => {
+        if (!settled) {
+          settled = true;
+          fn();
+        }
+      };
+      proc.once('error', (err: Error) => {
+        settle(() => reject(err));
+      });
+      proc.once('close', (code: number | null) => {
+        settle(() => resolve(code ?? 1));
       });
     }),
     kill: () => {
