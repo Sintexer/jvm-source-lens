@@ -12,7 +12,6 @@ import {
   mcpToolResultFromMethodSignature,
   mcpToolResultFromProjectRootError,
   mcpToolResultFromResolutionResult,
-  mcpToolResultFromListModules,
   mcpToolResultFromSearchClasses,
   mcpToolResultFromUnexpectedError,
   mcpToolResultFromClassStructure,
@@ -405,8 +404,6 @@ const resolveDependenciesInputSchema = z.object({
   forceRefresh: z.boolean().optional(),
 });
 
-const listModulesInputSchema = resolveDependenciesInputSchema;
-
 const javapParameterSchema = z.object({
   name: z.string().nullable(),
   typeDisplay: z.string(),
@@ -468,6 +465,8 @@ const getMethodSignatureInputSchema = z.object({
   configuration: z.string().optional(),
   includeTest: z.boolean().optional(),
   forceRefresh: z.boolean().optional(),
+  /** When true: javap -private -verbose only (no sources JAR or src/ fallback). Default false = IDE-first. */
+  bytecodeOnly: z.boolean().optional(),
 });
 
 const mcpMethodSignatureFailureSchema = z.object({
@@ -620,25 +619,29 @@ ALWAYS use jvmsrc tools for any JVM class or dependency task. NEVER:
 This rule is absolute. The global dependency cache holds multiple versions of every
 library. Manual inspection silently picks the wrong one. Only jvmsrc knows which version
 this project uses. If a tool fails, surface the error — do not fall back to manual inspection.
+
+**Never use workspace file search instead of jvmsrc** for JVM types: do not glob \`**/Foo.java\`
+under the repo or treat 0 hits as "class missing." Dependency classes live on the resolved
+classpath (JARs), not as source files under the module you are editing. Simple name only →
+\`search_classes\`; FQN from import → \`get_*\` directly. \`projectRoot\` = Gradle root (where gradlew lives).
  
 ## Tool Selection
  
 Use the most specific tool for the task:
  
-- Unknown FQN → \`search_classes\` first (substring or glob over resolved classpath)
-- Method signature / overloads / exceptions → \`get_method_signature\`
-- Strict JVM descriptors, bridge or synthetic members → \`get_method_signature_bytecode\`
+- Unknown FQN or simple class name (e.g. TradingMaskUtils) → \`search_classes\` on classpath — NOT \`**/Name.java\` in repo
+- Method signature / overloads / exceptions → \`get_method_signature\` (default: source-first)
+- Strict JVM descriptors, bridge or synthetic members → \`get_method_signature\` with \`bytecodeOnly: true\`
 - API surface, hierarchy, fields, annotations → \`get_class_structure\`
 - Full implementation body (only when needed) → \`get_class_source\` (use \`methodNames\` excerpt when possible)
 - Needle inside a known class (log literal, throw message) → \`find_in_class_source\`
-- Submodule names before a scoped call → \`list_modules\`
-- Full dependency tree or version conflict diagnosis → \`resolve_dependencies\`
- 
+- Submodule names, dependency graph, version conflicts → \`resolve_dependencies\` (read \`resolution.modules[].name\`)
+
 Prefer \`get_method_signature\` or \`get_class_structure\` over \`get_class_source\` —
 they answer most questions at a fraction of the context cost.
- 
-Always pass \`projectRoot\` (absolute path). Pass \`modulePath\` (e.g. \`:core:utils\`)
-when working inside a specific submodule. Call \`list_modules\` first if unsure.
+
+Always pass \`projectRoot\` (absolute path). Pass \`modulePath\` (Gradle logical name, e.g. \`:core:api\`)
+when scoping one submodule — from settings.gradle or resolve_dependencies once per session. Omit for single-module projects.
  
 ## sourceAvailable
  
@@ -806,38 +809,6 @@ export async function startMcpServer(): Promise<void> {
   );
 
   server.registerTool(
-    'list_modules',
-    {
-      title: 'List Gradle submodules',
-      description:
-        'Runs or loads cached Gradle dependency resolution and returns each submodule path plus dependency counts per classpath configuration ' +
-        '(artifactCount and directArtifactCount). Omits full ResolutionOutput — use resolve_dependencies for errors[] and artifact lists. ' +
-        'Same projectRoot and forceRefresh semantics as resolve_dependencies. On failure: isError=true with code RESOLUTION_FAILED.',
-      inputSchema: listModulesInputSchema,
-      annotations: { readOnlyHint: true, openWorldHint: true },
-    },
-    async (args) => {
-      const root = resolveProjectRoot(args.projectRoot);
-      if (!root.ok) {
-        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
-      }
-
-      try {
-        const result = await resolveWithResolutionCache(root.path, {
-          forceRefresh: Boolean(args.forceRefresh),
-          diagnosticOperation: 'list_modules',
-        });
-        return mcpToolResultFromListModules(result, args.projectRoot);
-      } catch (e) {
-        if (e instanceof UnsupportedProjectError) {
-          return mcpToolResultFromProjectRootError(e.message, args.projectRoot);
-        }
-        return mcpToolResultFromUnexpectedError(e);
-      }
-    },
-  );
-
-  server.registerTool(
     'search_classes',
     {
       title: 'Search classes on the resolved classpath',
@@ -889,11 +860,9 @@ export async function startMcpServer(): Promise<void> {
     {
       title: 'Get Java method overload signatures',
       description:
-        'IDE-first overload listing (SPEC §7.2): resolves the classpath (cached), then prefers parsing original `.java` from sources JAR or inter-project `src/` when present — sourceAvailable=true, declaration-centric overload fields without javap-only artifacts. ' +
-        'If sources are missing or unparsable, falls back to javap -private -verbose on the owning binary classpath element — sourceAvailable=false (JVM descriptors, Signature attribute, flags, LocalVariableTable names when present). ' +
-        'For strict bytecode-only inspection without any source fallback, use get_method_signature_bytecode. ' +
-        'Use methodName <init> for constructors. On failure: isError=true with stable code (SPEC §7). ' +
-        'CLASS_NOT_FOUND after scan: isError=false, found=false. Class found but no overloads: found=true, methodFound=false.',
+        'Overload listing (SPEC §7.2). Default (bytecodeOnly omitted or false): IDE-first — parse `.java` from sources JAR or inter-project src when present (sourceAvailable=true); else javap -private -verbose fallback (sourceAvailable=false). ' +
+        'bytecodeOnly=true: javap only on the binary classpath element — no sources/src fallback; sourceAvailable always false (full JVM descriptors, flags, synthetic members). ' +
+        'Use methodName <init> for constructors. CLASS_NOT_FOUND: isError=false, found=false. No matching overloads: methodFound=false.',
       inputSchema: getMethodSignatureInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -912,53 +881,16 @@ export async function startMcpServer(): Promise<void> {
       }
 
       try {
-        const result = await getMethodSignatures(args.className, args.methodName, {
+        const opts = {
           projectRoot: root.path,
           modulePath: args.modulePath,
           configuration: args.configuration,
           includeTest: Boolean(args.includeTest),
           forceRefresh: Boolean(args.forceRefresh),
-        });
-        return mcpToolResultFromMethodSignature(result, query);
-      } catch (e) {
-        return mcpToolResultFromUnexpectedError(e);
-      }
-    },
-  );
-
-  server.registerTool(
-    'get_method_signature_bytecode',
-    {
-      title: 'Get Java method overload signatures (javap bytecode only)',
-      description:
-        'javap -private -verbose only: resolves the classpath (cached), finds the owning binary element (external JAR or inter-project build output), runs javap — no sources JAR or `src/` fallback. ' +
-        'sourceAvailable is always false. Fails with CLASS_NOT_FOUND or SIGNATURE_EXTRACT_FAILED when no `.class` is on the selected classpath or javap cannot read it (SPEC §7.2). ' +
-        'Use get_method_signature for IDE-like source-first overloads. Same inputs as get_method_signature: className, methodName, projectRoot, optional modulePath, configuration, includeTest, forceRefresh.',
-      inputSchema: getMethodSignatureInputSchema,
-      annotations: { readOnlyHint: true, openWorldHint: true },
-    },
-    async (args) => {
-      const query: MethodSignatureQueryContext = {
-        projectRoot: args.projectRoot,
-        modulePath: args.modulePath,
-        configuration: args.configuration,
-        includeTest: args.includeTest,
-        methodName: args.methodName,
-      };
-
-      const root = resolveProjectRoot(args.projectRoot);
-      if (!root.ok) {
-        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
-      }
-
-      try {
-        const result = await getMethodSignaturesBytecode(args.className, args.methodName, {
-          projectRoot: root.path,
-          modulePath: args.modulePath,
-          configuration: args.configuration,
-          includeTest: Boolean(args.includeTest),
-          forceRefresh: Boolean(args.forceRefresh),
-        });
+        };
+        const result = Boolean(args.bytecodeOnly)
+          ? await getMethodSignaturesBytecode(args.className, args.methodName, opts)
+          : await getMethodSignatures(args.className, args.methodName, opts);
         return mcpToolResultFromMethodSignature(result, query);
       } catch (e) {
         return mcpToolResultFromUnexpectedError(e);

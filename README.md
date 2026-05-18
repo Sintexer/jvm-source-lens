@@ -50,7 +50,7 @@ jvmsrc get com.example.MyClass -p /path/to/project --json
 jvmsrc resolve -p /path/to/project
 jvmsrc resolve -p /path/to/project --force-refresh
 
-# List submodules: use MCP tool `list_modules`, or `jvmsrc resolve` for full graph JSON
+# List submodules: `jvmsrc resolve` prints full ResolutionOutput (modules[].name)
 ```
 
 Common flags: `-p` / `--project`, `--module` (e.g. `:core:api`), `--configuration`, `--include-test`, `--force-refresh`, `--verbose`. Excerpt: `--method` (repeatable; `<init>` for constructors), `--start-line` / `--end-line`.
@@ -83,13 +83,11 @@ Restart the MCP server after upgrading `jvmsrc`.
 | Tool | Use when |
 |------|----------|
 | `search_classes` | You don't know the FQN — substring or `*`/`?` glob on the resolved classpath |
-| `get_method_signature` | Overloads, parameters, return types, `throws` (source-first, IDE-shaped) |
+| `get_method_signature` | Overloads, parameters, return types, `throws` (source-first; `bytecodeOnly: true` for strict javap) |
 | `get_class_structure` | Fields, methods, hierarchy, annotations — without full source |
-| `get_method_signature_bytecode` | Strict `javap` output only (no source fallback) |
-| `find_in_class_source` | Search inside one resolved class (literal or `--regex`); hits with context lines |
+| `find_in_class_source` | Search inside one resolved class (literal or regex) |
 | `get_class_source` | Full `.java` body, or excerpt via `methodNames` / line range (last resort for full file) |
-| `list_modules` | Submodule names before scoping with `modulePath` |
-| `resolve_dependencies` | Full dependency graph / warm cache |
+| `resolve_dependencies` | Full dependency graph, submodule names (`modules[]`), warm cache |
 
 Prefer **`get_method_signature`** or **`get_class_structure`** over **`get_class_source`** when signatures are enough.
 

@@ -38,14 +38,13 @@ inspection as a fallback.
 
 Before any class lookup, ensure you know:
 - The absolute `projectRoot` path
-- Whether the project is multimodule (run `list_modules` if unsure)
-- Which module you are working in (use `modulePath` for all subsequent calls)
+- Which Gradle `modulePath` to use when scoping (e.g. `:app`) — omit for single-module projects
 
-```
-list_modules(projectRoot: "/abs/path/to/project")
-```
+For multimodule projects, discover module names **once per session** from the repo
+(`settings.gradle` / `include(...)` lines) or from `resolve_dependencies` →
+`resolution.modules[].name`. Do not guess directory names; Gradle logical names may differ.
 
-Cache this context. Do not re-run `list_modules` on every call.
+Cache this context. Do not re-resolve on every call unless dependencies changed.
 
 ---
 
@@ -55,13 +54,24 @@ If you have a simple name, a partial name, or a capability description but not t
 fully-qualified class name:
 
 ```
+search_classes(query: "TradingMaskUtils", projectRoot: "/path/to/gradle-project-root")
 search_classes(query: "PageRequest", projectRoot: "...", modulePath: ":core")
 search_classes(query: "*Repository", projectRoot: "...")
 search_classes(query: "cache", projectRoot: "...")      // capability discovery
 ```
 
-Pick the best candidate from the results. If multiple candidates are plausible, use
-`get_class_structure` on each to compare before choosing.
+If `search_classes` returns candidates, use the FQN from the hit — then
+`get_method_signature` / `get_class_structure` / `get_class_source`.
+
+If you already have the FQN from an `import` line in project code, **skip**
+`search_classes` and globbing — call `get_*` with that FQN directly.
+
+Pick the best candidate from `search_classes` results. If multiple candidates are
+plausible, use `get_class_structure` on each to compare before choosing.
+
+**If workspace file search returned 0 files for `Something.java`:** that is expected
+for classpath-only types — run `search_classes` or `get` with the import FQN before
+concluding the type is unavailable.
 
 ---
 
@@ -82,7 +92,7 @@ is enough — it wastes context and slows the agent down.
 | Need a specific line range from a large compilation unit | `get_class_source` with **`startLine`** + **`endLine`** |
 | Know the class but need a string/pattern inside the file (log message, `throw new`, call site) | **`find_in_class_source`** |
 | Need the full implementation of a small class | `get_class_source` (no excerpt params) |
-| Need exact JVM descriptors or bridge/synthetic members | `get_method_signature_bytecode` |
+| Need exact JVM descriptors or bridge/synthetic members | `get_method_signature` with `bytecodeOnly: true` |
 
 **Default escalation path:**
 `get_method_signature` → `get_class_structure` → **`find_in_class_source`** (needle in file) → `get_class_source` **(excerpt)** → `get_class_source` **(full file)**
@@ -224,8 +234,8 @@ Never substitute manual inspection as a recovery path.
 - Always pass `modulePath` when you know which module you are working in.
   Without it, the tool searches all modules and will surface a conflict if the same
   class resolves to different versions across modules.
-- Get the correct `modulePath` from `list_modules` — do not guess Gradle subproject
-  paths from directory names; they may differ.
+- Get `modulePath` from `settings.gradle` or `resolve_dependencies` — Gradle names like
+  `:core:api` may differ from folder names.
 - Inter-project classes (your own code in a sibling module) resolve from
   `src/main/java` automatically — you get original source even before a build runs.
 
@@ -234,8 +244,8 @@ Never substitute manual inspection as a recovery path.
 ## Quick Reference
 
 ```
-# Discover the project layout
-list_modules(projectRoot)
+# Discover submodules (once) or warm cache
+resolve_dependencies(projectRoot)
 
 # Find a class when FQN is unknown
 search_classes(query, projectRoot, modulePath?)
@@ -263,6 +273,6 @@ resolve_dependencies(projectRoot, forceRefresh?)
 ```
 
 **Constructors:** `get_method_signature` with `methodName: "<init>"`; excerpts use `methodNames: ["<init>"]`
-**Strict JVM descriptors:** `get_method_signature_bytecode`
+**Strict JVM descriptors:** `get_method_signature` with `bytecodeOnly: true`
 **Stale cache:** `resolve_dependencies` with `forceRefresh: true`
 **Large dependency sources:** excerpt first (`methodNames`), full file only if needed

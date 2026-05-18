@@ -783,7 +783,7 @@ function classifyClassSourceError(error: ClassSourceError, query: ClassSourceQue
         true,
         `Unknown Gradle module ${JSON.stringify(error.modulePath)}.`,
         `No resolved submodule matches modulePath ${JSON.stringify(error.modulePath)}. ` +
-          `Run list_modules or inspect resolve_dependencies output for valid names like ":app" or "root". ` +
+          `Inspect resolve_dependencies output (resolution.modules[].name) or settings.gradle for valid names like ":app". ` +
           `Omit modulePath to use the root project union.`,
       );
     case 'CONFIGURATION_NOT_FOUND':

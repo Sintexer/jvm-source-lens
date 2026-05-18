@@ -48,7 +48,8 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 - [x] MCP / CLI `get_class_source` optional excerpt (`methodNames` / `methodName` and/or `startLine` / `endLine`) — avoid dumping very large compilation units into agent context
 - [x] MCP / CLI `find_in_class_source` — pattern match inside one resolved compilation unit; return hit line(s) or block + optional ±N context lines (**relevance: high · priority: P2**)
-- [ ] Auto-infer `modulePath` when the FQN resolves in exactly one module (keep explicit `modulePath` for conflicts; `list_modules` remains the discovery path)
+- [ ] MCP / CLI `search_in_artifact` — grep-like search across all classes in one resolved dependency JAR (sources + CFR fallback); hits grouped by `className` + provenance (**vital gap · priority: P2**)
+- [ ] Auto-infer `modulePath` when the FQN resolves in exactly one module (keep explicit `modulePath` for conflicts; discovery via `resolve_dependencies` / `settings.gradle`)
 
 ### P3 — Future / post–v2
 
@@ -335,6 +336,7 @@ Collected from an agent that used **`get_class_source`** against a library JAR o
 |----------|----------------|
 | Find implementations / subclasses without known hierarchy | **P3** — `get_implementors` / `get_subclasses` (below) |
 | Large `get_class_source` responses | **P2** — optional excerpt / line range on `get`; **`find_in_class_source`** when the anchor is a string/pattern, not a line number |
+| Know the library (coordinates/JAR) but not the class; need a string inside the dependency | **P2** — **`search_in_artifact`** (grep inside one resolved artifact) |
 | Friction when `modulePath` unknown upfront | **P2** — auto-infer unique module; keep `list_modules` for discovery |
 
 **Infrastructure fixes (same period, not in ratings):** MCP `outputSchema` with `z.union` crashed the SDK (`_zod`); Node runtime needed `child_process` spawn instead of `Bun.spawn`. Rebuild + MCP restart required after fix.
@@ -392,6 +394,58 @@ Collected from an agent that used **`get_class_source`** against a library JAR o
 - [x] Literal match v1; optional `regex: true` (bounded iterations)
 - [x] Multiline / block match when match spans lines
 - [x] Tests: inter-project fixture (`gradle-smoke`), unit tests for search + decompiled `lineNumbersReliable`
+
+---
+
+### `search_in_artifact` — grep inside one resolved dependency JAR
+
+**Relevance: vital product gap** — Agents often know **which library** the project uses (`resolve_dependencies`, stack trace coordinates, `provenance` from a prior hit) but **not the FQN** that contains a log literal, exception message, or API string. **`search_classes`** only matches indexed metadata (names, Javadoc, identifiers) — not arbitrary text in method bodies. **`find_in_class_source`** requires a known `className`. Workspace **`grep`** and blind **`~/.gradle`** scans miss JAR-only types or the wrong version. This tool closes: **resolution-backed grep inside one artifact**.
+
+**Priority: P2** — Implement **after** `find_in_class_source` (reuse `searchClassSourceText` + source fetch). **Before** full classpath-wide body search (heavier; defer unless needed). **Alongside or after** auto-infer `modulePath` (independent).
+
+**Not a substitute for:** `search_classes` (discovery without artifact scope), `find_in_class_source` (single known FQN), or raw `jar tf` / cache grep (no per-project version guarantee).
+
+**Goal:** Given a resolved dependency on the selected classpath, enumerate classes owned by that artifact, load each compilation unit (sources JAR entry, inter-project `src/` when applicable, or CFR on demand), run the same literal/regex search as `find_in_class_source`, and return hits grouped by class with full provenance.
+
+**Proposed tool:** `search_in_artifact` (CLI e.g. `jvmsrc search-artifact` or `jvmsrc grep-artifact`).
+
+**Artifact selection (one required; disambiguate when multiple classpath edges match):**
+
+| Parameter | Required | Notes |
+|-----------|----------|--------|
+| `coordinates` | one of | `{ group, name, version? }` — match `ResolvedArtifact` on the chosen configuration |
+| `jarPath` | one of | Absolute path to the binary JAR on the resolved classpath (unique when present) |
+
+Optional: `modulePath`, `configuration`, `includeTest`, `forceRefresh` — same as other tools.
+
+**Search (same as `find_in_class_source`):**
+
+| Parameter | Required | Notes |
+|-----------|----------|--------|
+| `projectRoot` | yes | |
+| `query` | yes | Literal substring default; optional `regex: true` |
+| `contextLines` | no | Per-hit context (default 3) |
+| `maxHits` | no | Cap **total** hits across all classes (default e.g. 50) |
+| `maxClasses` | no | Cap classes scanned (default e.g. 500); stop early when `maxHits` reached |
+
+**Output (draft):** `ok`, `found`, `query`, `artifact` (coordinates + `jarPath`), `classesScanned`, `totalMatches`, `hitCount`, `truncated`, `hits[]` where each row includes `className`, `sourceAvailable`, per-class `hits[]` (same shape as `find_in_class_source`), and `provenance` for that class. **No matches:** `found: false`, `querySucceeded: true` (artifact resolved and scanned). **Artifact not on classpath:** structured error (e.g. `ARTIFACT_NOT_FOUND`). **Ambiguous coordinates** (multiple versions/jars on classpath): structured conflict listing candidates — never silent pick.
+
+**Behavior notes:**
+
+- FQN list: reuse **`jar-fqn-cache.json`** / ZIP central directory listing from class-search infrastructure where possible; only external + `local-file` JAR artifacts (not inter-project `src/` trees unless artifact is that submodule’s outputs — TBD in SPEC).
+- Source fetch: reuse extractor + on-demand `jvmsrcResolveSources` + CFR path per class; share decompile cache.
+- Cost controls: byte budget per artifact, per-class source cap, progress optional on CLI; document expected latency for large JARs (e.g. Guava, AWS SDK).
+- Do **not** scan `~/.gradle` without a prior `ResolutionOutput` for this `projectRoot`.
+
+**References:** [src/class-source-text-search.ts](src/class-source-text-search.ts), [src/find-in-class-source.ts](src/find-in-class-source.ts), [src/class-search/jar-class-fqns.ts](src/class-search/jar-class-fqns.ts), [src/get-class-source.ts](src/get-class-source.ts), [src/extractor/extract-external-class-source.ts](src/extractor/extract-external-class-source.ts), SPEC §8.2 (new tool row when implemented)
+
+- [ ] MCP tool + CLI; artifact selector + search params as above
+- [ ] FQN enumeration from resolved `ResolutionOutput` + jar FQN cache
+- [ ] Per-class source load + `searchClassSourceText`; aggregate hits with provenance
+- [ ] Ambiguity and not-found errors; caps (`maxHits`, `maxClasses`, byte budget)
+- [ ] Tests: fixture JAR with known string in one class; decompiled path; ambiguous coordinates
+
+**Future (out of scope for this item):** classpath-wide body search across **all** resolved artifacts — same pipeline, higher cost; only if `search_in_artifact` proves insufficient.
 
 ---
 
