@@ -19,10 +19,11 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
     steps:
+      # Manifest mode only: do not set release-type here (it overrides release-please-config.json
+      # and skips extra-files such as server.json). release-type lives under packages["."].
       - uses: googleapis/release-please-action@v5
         id: release
         with:
-          release-type: node
           target-branch: master
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
