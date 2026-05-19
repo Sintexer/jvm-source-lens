@@ -4,6 +4,20 @@ All notable changes to **jvmsrc** are documented in this file.
 
 This file is updated by **[Release Please](https://github.com/googleapis/release-please)** when a release PR merges to `master`. Contributors use **Conventional Commits** on PRs to `develop` — see [RELEASING.md](RELEASING.md).
 
+## [1.1.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.0.0...v1.1.0) (2026-05-19)
+
+
+### Features
+
+* add skill installation ([359f7b0](https://github.com/Sintexer/jvm-source-lens/commit/359f7b0460b03ce884dca540e2d50d309339b482))
+* add skill installation ([65642c6](https://github.com/Sintexer/jvm-source-lens/commit/65642c6995906e8841a1aa9b2fa38e312aa135e5))
+* switch to default master branch, no develop ([203b475](https://github.com/Sintexer/jvm-source-lens/commit/203b4754dfa6d27fab4f357737fac468991115a8))
+
+
+### Bug Fixes
+
+* fix release-please ([dc049dc](https://github.com/Sintexer/jvm-source-lens/commit/dc049dcc2524a67f3ad6b67d03aead67e717f1cc))
+
 ## 1.0.0 (2026-05-19)
 
 
