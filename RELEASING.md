@@ -25,12 +25,26 @@ develop ──●──●──●──●──●──►  (PRs from featur
              └──► Release PR ──merge──► master ──tag v0.2.0──► npm
 ```
 
-1. Merge work into **`develop`** (CI must pass).
-2. **Release Please** opens/updates a PR titled e.g. `chore: release 0.2.0` **into `master`** (bumps `package.json`, updates `CHANGELOG.md`).
-3. Review and **merge** that Release PR.
-4. Release Please creates tag **`v0.2.0`** on `master`; the same workflow runs **`npm publish`** when `release_created` is true ([release-please.yml](.github/workflows/release-please.yml)).
+1. Merge **everything you want in the release** into **`develop`** first (feature PRs → `develop`, not straight to `master`).
+2. **Release Please** runs on each push to **`develop`** and opens/updates a PR e.g. `chore: release 0.2.0` **into `master`** (version + `CHANGELOG` from commits **already on `develop`**).
+3. **Review that Release PR** — if a feature is still on a feature branch, **do not merge** the release PR yet; merge the feature to `develop` first, then wait for the Release PR to update (or re-run the workflow).
+4. **Merge** the Release PR into **`master`** → tag + **`npm publish`** ([release-please.yml](.github/workflows/release-please.yml)).
 
 No manual version bump or `git tag` commands.
+
+### Why a Release PR can appear “before” your feature
+
+Release Please does **not** wait for open feature PRs. It only sees **commits on `develop`**. Typical timeline:
+
+```
+feature/xyz ──(open PR)──► develop          Release PR opened from earlier develop commits
+                \
+                 └── merge later ──► develop  → Release PR updates on next push / workflow run
+```
+
+So if `develop` already had releasable commits (`feat:`, `fix:`, etc.) from other work, a Release PR to `master` is **expected** even while `feature/xyz` is still in review. That is not a bug — **merge the feature to `develop` before merging the Release PR to `master`**.
+
+If you **already merged** a Release PR to `master` without the feature: the feature is on `develop` only — ship another release after it lands on `develop` (a new Release PR will follow).
 
 ## Branching
 
@@ -79,10 +93,18 @@ While **`0.x`**, Release Please is configured with `bump-minor-pre-major` so `fe
 
 ### Maintainer release steps
 
-1. Ensure changes are on **`develop`** with conventional commit messages.
-2. Wait for (or re-run) **Release Please** — open PR **into `master`**.
-3. Review `CHANGELOG.md` + `package.json` version in that PR.
-4. **Merge** the Release PR → tag + npm publish run automatically.
+1. Merge all intended work into **`develop`** (conventional commit titles on squash merge).
+2. Confirm the **Release PR → `master`** lists the right changes (re-run **Actions → release-please → Run workflow** on `develop` if needed).
+3. **Merge** the Release PR only when complete — not when features are still only on side branches.
+4. npm publish runs automatically on that merge.
+
+### If the Release PR is wrong or too early
+
+| Situation | What to do |
+|-----------|------------|
+| Feature not on `develop` yet | **Close** or leave the Release PR unmerged; merge feature to `develop`; Release PR updates on next `develop` push |
+| Release PR merged too early | Merge feature to `develop`; wait for the **next** Release PR; publish another version |
+| Stale Release PR after many merges | Re-run **release-please** workflow on `develop` or push an empty commit to `develop` |
 
 ### Secrets
 

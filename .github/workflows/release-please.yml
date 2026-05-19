@@ -1,15 +1,22 @@
 name: release-please
 
+# develop push → open/update Release PR into master (contents = what is on develop *now*)
+# master push  → only after merging that Release PR: tag + npm publish (release_created)
 on:
   push:
     branches:
       - develop
       - master
+  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
   id-token: write
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   release-please:
@@ -23,6 +30,7 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
+      # Publish only when the Release PR was just merged to master (not on every develop push).
       - uses: actions/checkout@v6
         if: ${{ steps.release.outputs.release_created }}
 
