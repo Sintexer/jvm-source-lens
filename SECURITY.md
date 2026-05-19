@@ -5,7 +5,9 @@
 | Version | Supported |
 |---------|-----------|
 | Latest release on npm | Yes |
-| Older minors | Best-effort fixes only |
+| Previous major / minor | Best-effort security fixes on `master`, released as patches |
+
+Release process: [RELEASING.md](RELEASING.md).
 
 Report issues against the latest published version when possible.
 

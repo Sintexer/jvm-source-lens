@@ -33,6 +33,10 @@
   "engines": {
     "node": ">=20"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "bin": {
     "jvmsrc": "./dist/cli.js"
   },
@@ -52,6 +56,7 @@
     "setup:cfr": "tsx scripts/fetch-cfr.ts",
     "validate:resources": "tsx scripts/validate-bundled-resources.ts",
     "verify:publish": "tsx scripts/verify-publish-manifest.ts",
+    "verify:release-tag": "tsx scripts/verify-release-tag.ts",
     "audit:ci": "bun audit",
     "ensure:gradle-smoke-wrapper": "bash scripts/ensure-gradle-smoke-wrapper.sh",
     "prepack": "bun run typecheck && bun run build && bun run validate:resources"

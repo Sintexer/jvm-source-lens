@@ -172,6 +172,8 @@ More (CFR/javap capture limits, error codes): [SPEC.md](SPEC.md).
 | [SPEC.md](SPEC.md) | Schemas, contracts, CLI/MCP details |
 | [SKILL.md](SKILL.md) | Agent skill |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Build, test, PR notes |
+| [RELEASING.md](RELEASING.md) | Branching, semver, npm releases |
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
 | [ROADMAP.md](ROADMAP.md) | Status and planned work |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 
