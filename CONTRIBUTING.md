@@ -53,6 +53,24 @@ bun run ensure:gradle-smoke-wrapper
 
 Requires `gradle` on `PATH` once (wrapper JAR not committed). Most tests use synthetic resolution and do not need this.
 
+## Branches
+
+- Open PRs against **`develop`** (not `master`).
+- **`master`** receives automated **Release Please** PRs only — see [RELEASING.md](RELEASING.md).
+
+## Commit messages (semver)
+
+We use **Conventional Commits** for automatic versioning. Prefer these PR titles (squash merge):
+
+| Prefix | Meaning |
+|--------|---------|
+| `feat:` | New feature → **minor** bump |
+| `fix:` | Bug fix → **patch** bump |
+| `feat!:` or `BREAKING CHANGE:` | Breaking API → **major** bump |
+| `docs:`, `chore:`, `ci:`, `test:`, `refactor:` | No release bump (usually) |
+
+Examples: `feat: add JVMSRC_ALLOWED_ROOTS`, `fix: cap MCP source output size`.
+
 ## Before you open a PR
 
 1. `bun test`, `bun run typecheck`, `bun run prepack`
@@ -63,9 +81,14 @@ CI: `bun install --frozen-lockfile`, `bun audit`, `bun test`, `bun run prepack`,
 
 Locally after dependency updates: `bun run audit:ci`.
 
+## Releases
+
+Versioning, branching, and npm publish: **[RELEASING.md](RELEASING.md)**. Update [CHANGELOG.md](CHANGELOG.md) with user-facing changes.
+
 ## Docs map
 
 | File | Use |
 |------|-----|
 | [SPEC.md](SPEC.md) | Authoritative behavior and contracts |
 | [README.md](README.md) | Install and usage for end users |
+| [RELEASING.md](RELEASING.md) | Branching and release process |
