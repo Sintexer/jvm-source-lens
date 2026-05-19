@@ -4,6 +4,13 @@ All notable changes to **jvmsrc** are documented in this file.
 
 This file is updated by **[Release Please](https://github.com/googleapis/release-please)** when a release PR merges to `master`. Contributors use **Conventional Commits** on PRs to `develop` — see [RELEASING.md](RELEASING.md).
 
+## [1.2.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.1.0...v1.2.0) (2026-05-19)
+
+
+### Features
+
+* support node &gt;=20 ([2e3bb17](https://github.com/Sintexer/jvm-source-lens/commit/2e3bb17a278964a902364b70196c7ae5af3e6764))
+
 ## [1.1.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.0.0...v1.1.0) (2026-05-19)
 
 
