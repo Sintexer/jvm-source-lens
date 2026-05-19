@@ -5,6 +5,7 @@ import { extractExternalClassSource } from './extractor/extract-external-class-s
 import type { GradleProcessCapture, ResolveOptions } from './resolvers/base.js';
 import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
+import { capSourceText } from './output-limits.js';
 import {
   applySourceExcerpt,
   mergeSourceExcerptInputs,
@@ -82,12 +83,27 @@ function applyExcerptToSuccess(
     return { ok: false, error: applied.error };
   }
   if (applied.excerpt === undefined) {
-    return extracted;
+    return capClassSourceSuccess(extracted);
   }
-  return {
+  return capClassSourceSuccess({
     ...extracted,
     source: applied.source,
     excerpt: applied.excerpt,
+  });
+}
+
+function capClassSourceSuccess(
+  result: Extract<ClassSourceLookupResult, { ok: true }>,
+): Extract<ClassSourceLookupResult, { ok: true }> {
+  const capped = capSourceText(result.source);
+  if (!capped.truncated) {
+    return result;
+  }
+  return {
+    ...result,
+    source: capped.text,
+    outputTruncated: true,
+    sourceLength: capped.originalLength,
   };
 }
 

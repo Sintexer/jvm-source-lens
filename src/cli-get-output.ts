@@ -27,6 +27,9 @@ export function writeCliGetResult(result: CliGetResult, options?: CliGetOutputOp
           className: result.className,
           provenance: result.provenance,
           ...(result.excerpt !== undefined ? { excerpt: result.excerpt } : {}),
+          ...(result.outputTruncated
+            ? { outputTruncated: true, sourceLength: result.sourceLength }
+            : {}),
         }),
       );
       return;
@@ -45,6 +48,9 @@ export function writeCliGetResult(result: CliGetResult, options?: CliGetOutputOp
           className: result.className,
           provenance: result.provenance,
           ...(result.excerpt !== undefined ? { excerpt: result.excerpt } : {}),
+          ...(result.outputTruncated
+            ? { outputTruncated: true, sourceLength: result.sourceLength }
+            : {}),
         }),
       );
     }

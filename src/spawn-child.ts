@@ -51,8 +51,15 @@ function nodeReadableToWeb(readable: Readable): ReadableStream<Uint8Array> {
 /**
  * Spawns a subprocess using Bun when available, otherwise `cross-spawn` (Windows `.bat`,
  * PATHEXT, shebangs). Piped stdout/stderr are always exposed as Web `ReadableStream`s.
+ *
+ * **No shell interpolation:** callers must pass a discrete `argv` array. This module never
+ * sets `shell: true` and does not invoke `/bin/sh -c` with concatenated user input. User-
+ * controlled values (class names, paths) belong in argv elements or files, not in a shell string.
  */
 export function spawnChild(argv: string[], options: SpawnChildOptions = {}): SpawnedChild {
+  if (argv.length === 0 || argv.some((a) => typeof a !== 'string' || a.length === 0)) {
+    throw new Error('spawnChild: argv must be a non-empty array of non-empty strings');
+  }
   const stdoutMode = options.stdout ?? 'pipe';
   const stderrMode = options.stderr ?? 'pipe';
   const stdinMode = options.stdin ?? 'ignore';

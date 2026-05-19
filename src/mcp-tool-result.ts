@@ -36,6 +36,8 @@ export type McpClassSourceSuccessPayload = {
   className: string;
   provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
   excerpt?: SourceExcerptInfo;
+  outputTruncated?: boolean;
+  sourceLength?: number;
 };
 
 /** Classpath was resolved and scanned; the class is not on it (not an access failure). */
@@ -353,6 +355,7 @@ export function mcpToolResultFromClassSource(result: ClassSourceLookupResult, qu
       className: result.className,
       provenance: result.provenance,
       ...(result.excerpt !== undefined ? { excerpt: result.excerpt } : {}),
+      ...(result.outputTruncated ? { outputTruncated: true, sourceLength: result.sourceLength } : {}),
     };
     const excerptHint =
       result.excerpt !== undefined
@@ -362,10 +365,13 @@ export function mcpToolResultFromClassSource(result: ClassSourceLookupResult, qu
             : '') +
           (result.excerpt.lineNumbersReliable ? '' : '; line numbers approximate (decompiled)')
         : '';
+    const truncHint = result.outputTruncated
+      ? `; source truncated (${result.sourceLength} chars before cap)`
+      : '';
     return mcpSuccessResult(
       result.sourceAvailable
-        ? `Retrieved source for ${result.className} (original sources).${excerptHint}`
-        : `Retrieved source for ${result.className} (decompiled; sourceAvailable=false).${excerptHint}`,
+        ? `Retrieved source for ${result.className} (original sources).${excerptHint}${truncHint}`
+        : `Retrieved source for ${result.className} (decompiled; sourceAvailable=false).${excerptHint}${truncHint}`,
       payload,
     );
   }

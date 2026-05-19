@@ -2,9 +2,32 @@
   "name": "jvmsrc",
   "version": "0.1.0",
   "description": "Resolve JVM classpath via Gradle and extract Java source, signatures, and structure for agents (CLI + MCP)",
+  "license": "MIT",
+  "author": "Ilya Buglakov",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sintexer/jvm-dependency-resolver.git"
+  },
+  "homepage": "https://github.com/Sintexer/jvm-dependency-resolver#readme",
+  "bugs": {
+    "url": "https://github.com/Sintexer/jvm-dependency-resolver/issues"
+  },
+  "keywords": [
+    "gradle",
+    "java",
+    "classpath",
+    "mcp",
+    "model-context-protocol",
+    "decompiler",
+    "cfr",
+    "cursor",
+    "agent",
+    "jvmsrc"
+  ],
   "main": "./dist/public-api.js",
   "exports": {
-    ".": "./dist/public-api.js"
+    ".": "./dist/public-api.js",
+    "./mcp": "./dist/mcp.js"
   },
   "type": "module",
   "engines": {
@@ -15,7 +38,10 @@
   },
   "files": [
     "dist",
-    "resources"
+    "resources",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md"
   ],
   "scripts": {
     "dev:cli": "bun run src/cli.ts",

@@ -110,6 +110,10 @@ export type ClassSourceLookupResult =
       className: string;
       provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
       excerpt?: SourceExcerptInfo;
+      /** True when `source` was truncated to `JVMSRC_MAX_SOURCE_OUTPUT_CHARS`. */
+      outputTruncated?: boolean;
+      /** Original UTF-16 length before truncation. */
+      sourceLength?: number;
     }
   | { ok: false; error: ClassSourceError; diagnosticId?: string; hint?: string };
 

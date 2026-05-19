@@ -640,6 +640,9 @@ Use the most specific tool for the task:
 Prefer \`get_method_signature\` or \`get_class_structure\` over \`get_class_source\` —
 they answer most questions at a fraction of the context cost.
 
+Full-file \`get_class_source\` may set \`outputTruncated: true\` when the body exceeds the configured
+character cap — use \`methodNames\` or line-range excerpts instead of raising limits.
+
 Always pass \`projectRoot\` (absolute path). Pass \`modulePath\` (Gradle logical name, e.g. \`:core:api\`)
 when scoping one submodule — from settings.gradle or resolve_dependencies once per session. Omit for single-module projects.
  
