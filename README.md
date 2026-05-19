@@ -1,6 +1,10 @@
 # JVM Source Lens (`jvmsrc`)
 
-[![CI](https://github.com/Sintexer/jvm-dependency-resolver/actions/workflows/ci.yml/badge.svg)](https://github.com/Sintexer/jvm-dependency-resolver/actions/workflows/ci.yml)
+
+[![CI](https://github.com/Sintexer/jvm-dependency-resolver/actions/workflows/ci.yml/badge.svg)](https://github.com/Sintexer/jvm-source-lens/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/jvmsrc)](https://www.npmjs.com/package/jvmsrc)
+[![License: MIT](https://img.shields.io/github/license/Sintexer/jvm-dependency-resolver)](https://github.com/Sintexer/jvm-source-lens/blob/master/LICENSE)
+[![Node](https://img.shields.io/node/v/jvmsrc)](https://www.npmjs.com/package/jvmsrc)
 
 Resolve a JVM project's **actual classpath** through Gradle, then read Java source, signatures, and structure for any class on that classpath — with the **version your project uses**, not whatever happens to sit in `~/.gradle/caches`.
 
