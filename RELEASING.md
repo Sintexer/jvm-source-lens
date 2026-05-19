@@ -12,7 +12,9 @@
 
 **Ship:** merge features to `master` → review Release PR → merge Release PR. Don’t merge the Release PR before your feature is on `master`.
 
-**MCP registry:** [server.json](server.json) top-level `version` and `packages[0].version` are bumped with `package.json` via Release Please `extra-files` in [release-please-config.json](release-please-config.json). CI runs `bun run validate:server-json`.
+**MCP registry:** [server.json](server.json) top-level `version` and `packages[0].version` are bumped with `package.json` via Release Please `extra-files` in [release-please-config.json](release-please-config.json). The workflow must **not** set `release-type` on the action (manifest mode only). CI runs `bun run validate:server-json`.
+
+**Tags / changelog:** Manifest mode defaults to `jvmsrc-v1.x.x` tags unless `include-component-in-tag: false` in [release-please-config.json](release-please-config.json). Use **`v1.x.x`** only so Release Please finds prior tags and keeps incremental changelog diffs. If a bad `jvmsrc-v*` tag or release PR exists, delete the tag and close that PR, merge the config fix, then re-run the workflow.
 
 **npm CI:** [Trusted publishing](https://docs.npmjs.com/trusted-publishers) on package **jvmsrc** — repo `Sintexer/jvm-source-lens`, workflow `release-please.yml`, no `NPM_TOKEN` on publish. `package.json` `repository.url` must be `https://github.com/Sintexer/jvm-source-lens.git`.
 
