@@ -51,7 +51,7 @@ All caches and diagnostics stay on disk under configurable roots (see README **L
 
 ## Dependency updates
 
-Runtime dependencies are pinned in `package-lock.json`. Maintainers run `npm audit` before releases. Users should keep `jvmsrc` updated.
+Runtime dependencies are pinned in `package-lock.json`. CI runs `npm ci` and **`npm audit --audit-level=high`** on every push/PR; [Dependabot](.github/dependabot.yml) opens weekly update PRs for npm and GitHub Actions. Users should keep `jvmsrc` updated.
 
 ## Safe configuration
 

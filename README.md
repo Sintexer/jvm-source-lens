@@ -1,12 +1,28 @@
 # JVM Source Lens (`jvmsrc`)
 
+[![CI](https://github.com/Sintexer/jvm-dependency-resolver/actions/workflows/ci.yml/badge.svg)](https://github.com/Sintexer/jvm-dependency-resolver/actions/workflows/ci.yml)
+
 Resolve a JVM project's **actual classpath** through Gradle, then read Java source, signatures, and structure for any class on that classpath — with the **version your project uses**, not whatever happens to sit in `~/.gradle/caches`.
 
-Built for **CLI** use and **MCP** agents (Cursor, Claude Desktop, Windsurf, etc.).
+Built for **CLI** use and **MCP** agents (Cursor, Claude Code, Windsurf, etc.).
 
-## Why not grep `~/.gradle`?
+**Contents:** [Why](#why-this-exists) · [How it works](#how-it-works) · [Requirements](#requirements) · [Limitations](#known-limitations) · [Install](#install) · [Quick start](#quick-start) · [MCP](#mcp) · [Security](#security-and-privacy) · [Troubleshooting](#troubleshooting) · [Building from source](#building-from-source)
 
-Global caches hold many versions of every library. Picking a JAR by name or path is guesswork. **jvmsrc asks the build tool**, then reads artifacts from that answer. If resolution fails, you get an error — not a silent wrong version.
+## Why this exists
+
+Coding agents on JVM codebases often hit a library type that is not in the workspace. A common failure mode: see an import, try to open the class in the repo, fail, then **panic** — sibling repos, `**/*.java` globs, `~/.gradle/caches` / `~/.m2` walks, or long shell chains (`find`, `jar tf`, `javap`), often on the **wrong JAR** because global caches hold many versions. In the worst case the agent guesses an API from the wrong artifact or from memory.
+
+Even when something works, the cost is high: noisy output, many tool rounds, wasted tokens, and subprocesses on paths you did not mean to expose.
+
+**jvmsrc** offers one path: **ask Gradle** for the resolved classpath for *this* project, then return source, signatures, or structure with provenance — or a clear error. Global cache directories are not a substitute: they store every version ever downloaded; only the build tool knows which one your module uses. Picking a JAR by name is guesswork; wrong output is worse than an error.
+
+## How it works
+
+1. **Resolve** — `gradlew` / `gradle` runs with a bundled Groovy init script; result is cached until build inputs change.
+2. **Locate class** — inter-project `src/` first, then dependency JARs on the chosen classpath.
+3. **Read** — sources JAR when available; otherwise CFR decompile into a **global** cache (nothing written under your project tree).
+
+First resolution on a project is often 5–30s; later calls reuse the cache.
 
 ## Compared to similar tools
 
@@ -20,151 +36,66 @@ Global caches hold many versions of every library. Picking a JAR by name or path
 
 ## Requirements
 
-- **Node.js ≥ 20** (runtime)
-- A **Gradle** project (`gradlew` or `gradle` on `PATH`)
-- **Java** on `PATH` (for decompilation and `javap`)
+**On your machine:** Node.js **≥ 20**, Java on `PATH` (CFR + `javap`). Bun is only for [developing jvmsrc](CONTRIBUTING.md).
+
+**Project types:** JVM codebases (Java, Kotlin, Scala, Groovy, …). jvmsrc calls the **build tool**, not your editor.
+
+| Build system | Status |
+|--------------|--------|
+| **Gradle** | Supported — multimodule included |
+| Maven, Bazel, … | Planned ([SPEC.md](SPEC.md)) |
+
+Point `-p` / `projectRoot` at the Gradle root (`settings.gradle(.kts)` or root `build.gradle(.kts)`). Uses `./gradlew` when present, else `gradle` on `PATH`. Maven-only trees get an explicit unsupported error.
+
+## Known limitations
+
+Early software; the supported path is narrow:
+
+| Area | Today |
+|------|--------|
+| Build tool | **Gradle only** |
+| Integration | **Groovy init script** (`--init-script`) — not a Gradle Portal plugin |
+| Classpaths | Standard JVM + Kotlin MPP `jvm*` configurations when Gradle exposes them |
+| Output | **Java-shaped** `.java` text (sources JAR, inter-project `src`, or CFR) |
+
+Your repo may use `build.gradle` or `build.gradle.kts`; the **jvmsrc** side is still a **Groovy** init script. Composite builds, Android-only layouts, and exotic configurations are not fully validated. See [ROADMAP.md](ROADMAP.md).
 
 ## Install
 
-### Published package (npm)
-
 ```bash
 npm install -g jvmsrc
-# or per-invocation
+# or
 npx jvmsrc <command>
 ```
 
-Requires **Node.js ≥ 20** only. The published tarball ships prebuilt `dist/` and bundled `resources/`.
+Published package includes prebuilt `dist/` and bundled CFR — **Node ≥ 20** only.
 
-### From source — npm only (Node ≥ 20)
-
-Use this when you want a standard Node toolchain and do **not** need Bun. You build to `dist/` and run the compiled CLI.
+## Quick start
 
 ```bash
-git clone https://github.com/Sintexer/jvm-dependency-resolver.git
-cd jvm-dependency-resolver
+# Paste-ready MCP config (adjust project path)
+jvmsrc config --project /path/to/gradle-project
 
-npm ci                    # or: npm install
-npm run setup:cfr         # once — downloads CFR into resources/cfr.jar
-npm run build             # esbuild → dist/ (--target=node20)
-npm run validate:resources
-
-# Run without installing globally
-node dist/cli.js get com.example.Foo -p /path/to/gradle-project
-node dist/cli.js mcp
-
-# Optional: install `jvmsrc` on your PATH from this checkout
-npm link
-jvmsrc get com.example.Foo -p /path/to/gradle-project
-jvmsrc config --project /path/to/gradle-project   # MCP snippet → dist/cli.js mcp
-```
-
-| Task | npm-only command |
-|------|------------------|
-| Typecheck | `npm run typecheck` |
-| Production-like build | `npm run build` |
-| Verify bundle layout (pre-publish) | `npm run prepack` |
-| Tests | Requires [Bun](https://bun.sh) — `bun test` (see Bun flow below) |
-
-`npm run setup:cfr` uses `tsx` from devDependencies; no Bun required for build or runtime.
-
-### From source — Bun (contributors)
-
-Use this for day-to-day development: run TypeScript directly, fast tests, no rebuild between edits.
-
-```bash
-git clone https://github.com/Sintexer/jvm-dependency-resolver.git
-cd jvm-dependency-resolver
-
-bun install
-bun run setup:cfr         # same script as npm; needs resources/cfr.jar once
-
-# Iterate on source (no dist/ rebuild)
-bun run dev:cli -- get com.example.Foo -p /path/to/project
-bun run dev:mcp
-
-# Or invoke the CLI entry directly
-bun run src/cli.ts get com.example.Foo -p /path/to/project
-bun run src/cli.ts config --project /path/to/gradle-project   # MCP snippet → bun run src/mcp.ts
-
-bun test                  # full suite
-bun test src/foo.test.ts
-bun run typecheck
-```
-
-When you need a production bundle (e.g. `npm pack`, comparing with published behavior):
-
-```bash
-npm run build             # esbuild (default for prepack)
-# or
-bun run build:bun         # optional: Bun bundler instead of esbuild
-node dist/cli.js --version
-```
-
-| Task | Bun-oriented command |
-|------|----------------------|
-| Dev CLI | `bun run dev:cli -- …` |
-| Dev MCP | `bun run dev:mcp` |
-| Tests | `bun test` |
-| Gradle smoke wrapper (local Gradle runs) | `bun run ensure:gradle-smoke-wrapper` |
-
-**MCP from a dev checkout:** `jvmsrc config` detects when it was run via `bun …/src/cli.ts` and emits `bun run …/src/mcp.ts` in the JSON snippet; after `npm link` + `npm run build` it emits `jvmsrc mcp` instead.
-
-## Example (fixture project)
-
-The repo includes a small multimodule Gradle smoke tree under `test/fixtures/gradle-smoke`. After a build (`npm run build`) or via Bun dev (`bun run dev:cli --`):
-
-```bash
-# From source without `npm link`, prefix with `node dist/cli.js` or `bun run dev:cli --`
-
-# Warm resolution cache (prints ResolutionOutput JSON)
-jvmsrc resolve -p test/fixtures/gradle-smoke
-
-# Full source for an inter-project class (stdout = .java)
-jvmsrc get com.smoke.Core -p test/fixtures/gradle-smoke --module :core
-
-# Method excerpt only — avoids huge files in agent context
-jvmsrc get com.smoke.Core -p test/fixtures/gradle-smoke --module :core \
-  --method hello -q
-```
-
-Use MCP `get_method_signature` when you need overload listings without pulling the full file.
-
-First run on a real project invokes Gradle once (often 5–30s); later calls reuse the resolution cache.
-
-## Quick start (CLI)
-
-```bash
-# Full source for a class (stdout = .java, stderr = metadata JSON)
+# Class source (stdout = .java, stderr = metadata JSON)
 jvmsrc get com.example.MyClass -p /path/to/gradle-project
 
-# Shorthand
+# Shorthand, quiet pipe, or JSON
 jvmsrc com.example.MyClass -p /path/to/gradle-project
-
-# Pipe-friendly: source only
 jvmsrc get com.example.MyClass -p /path/to/project -q > MyClass.java
-
-# Structured JSON on stdout (agents / scripts)
 jvmsrc get com.example.MyClass -p /path/to/project --json
 
-# Warm or refresh the resolution cache
+# Warm / refresh resolution cache
 jvmsrc resolve -p /path/to/project
 jvmsrc resolve -p /path/to/project --force-refresh
-
-# List submodules: `jvmsrc resolve` prints full ResolutionOutput (modules[].name)
 ```
 
-Common flags: `-p` / `--project`, `--module` (e.g. `:core:api`), `--configuration`, `--include-test`, `--force-refresh`, `--verbose`. Excerpt: `--method` (repeatable; `<init>` for constructors), `--start-line` / `--end-line`.
+Useful flags: `-p` / `--project`, `--module` (`:core:api`), `--configuration`, `--include-test`, `--force-refresh`, `--verbose`, `--method`, `--start-line` / `--end-line`.
 
-## MCP setup
+Repo fixture: `test/fixtures/gradle-smoke` — e.g. `jvmsrc get com.smoke.Core -p test/fixtures/gradle-smoke --module :core`.
 
-Generate a paste-ready config snippet:
+## MCP
 
-```bash
-jvmsrc config --project /path/to/gradle-project
-```
-
-Typical entry (after global install):
+After install, a typical server entry:
 
 ```json
 {
@@ -177,116 +108,83 @@ Typical entry (after global install):
 }
 ```
 
-Restart the MCP server after upgrading `jvmsrc`.
+Restart the MCP host after upgrading `jvmsrc`.
 
-### Agent skill
+> **Agents:** copy or reference **[SKILL.md](SKILL.md)** in your agent rules.
 
-For Cursor / Claude-style agents, use the bundled skill: **[SKILL.md](SKILL.md)** (copy into your agent skills folder or reference from project rules).
-
-## MCP tools
+### Tools
 
 | Tool | Use when |
 |------|----------|
-| `search_classes` | You don't know the FQN — substring or `*`/`?` glob on the resolved classpath |
-| `get_method_signature` | Overloads, parameters, return types, `throws` (source-first; `bytecodeOnly: true` for strict javap) |
-| `get_class_structure` | Fields, methods, hierarchy, annotations — without full source |
-| `find_in_class_source` | Search inside one resolved class (literal or regex) |
-| `get_class_source` | Full `.java` body, or excerpt via `methodNames` / line range (last resort for full file) |
-| `resolve_dependencies` | Full dependency graph, submodule names (`modules[]`), warm cache |
+| `search_classes` | Unknown FQN — substring or `*`/`?` glob on classpath |
+| `get_method_signature` | Overloads / parameters / `throws` (`bytecodeOnly: true` for strict javap) |
+| `get_class_structure` | Fields, methods, hierarchy — without full source |
+| `find_in_class_source` | Search inside one class |
+| `get_class_source` | Full body or excerpt (`methodNames`, line range) — last resort |
+| `resolve_dependencies` | Dependency graph, `modules[]`, warm cache |
 
-Prefer **`get_method_signature`** or **`get_class_structure`** over **`get_class_source`** when signatures are enough.
-
-Every source response includes **`sourceAvailable`**: `true` = original sources; `false` = CFR decompilation (structure reliable, names/Javadoc may be synthetic).
-
-## How it works (short)
-
-1. **Resolve** — `./gradlew` (or `gradle`) runs with a bundled init script; output is cached until build files change.
-2. **Locate class** — inter-project `src/` first, then dependency JARs on the chosen classpath.
-3. **Read source** — sources JAR when available; otherwise CFR decompile into a global cache (never written under your project tree).
-
-## Local data (cache and diagnostics)
-
-**Nothing is uploaded.** All data stays on your machine. The tool **never writes** under the Gradle project root for resolution (only reads it and runs Gradle with an external init script).
-
-### Resolution and decompile cache
-
-Override root: **`JVMSRC_CACHE_ROOT`** (must be absolute). Default uses [`env-paths`](https://www.npmjs.com/package/env-paths) for app id `jvmsrc`:
-
-| OS | Default cache root |
-|----|-------------------|
-| macOS | `~/Library/Caches/jvmsrc` |
-| Linux | `~/.cache/jvmsrc` |
-| Windows | `%LOCALAPPDATA%\jvmsrc\Cache` |
-
-Under that root:
-
-| Path | Contents |
-|------|----------|
-| `projects/<8-char-id>/` | Per-project bucket (id = first 8 hex of SHA-256 of absolute project path) |
-| `projects/<id>/resolution.json` | Last valid `ResolutionOutput` from Gradle |
-| `projects/<id>/resolution.hash` | Digest of tracked build inputs (`build.gradle*`, `settings.gradle*`, version catalog, lockfiles) |
-| `projects/<id>/bucket-meta.json` | Canonical project path + metadata |
-| `projects/<id>/class-search-index.json` | Classpath FQN / search index for `search_classes` |
-| `projects/<id>/jar-fqn-cache.json` | Reuse map for JAR FQN listings (mtime-sized) |
-| `decompiled/<group>/<artifact>/<version>/<Class>.java` | Shared CFR output (keyed by Maven coordinates) |
-
-Gradle’s own caches (`~/.gradle`) are used by Gradle as usual; jvmsrc does not replace them.
-
-### Failure diagnostics
-
-Override: **`JVMSRC_LOG_DIR`** (absolute). Default:
-
-| OS | Default log root |
-|----|-----------------|
-| macOS | `~/Library/Logs/jvmsrc` |
-| Linux | `$XDG_STATE_HOME/jvmsrc` or `~/.local/state/jvmsrc` |
-| Windows | `%LOCALAPPDATA%\jvmsrc\Logs` |
-
-Under `<log-root>/diagnostics/`: rolling JSON snapshots for failures (`jvmsrc diagnostics list|show`). Inputs are sanitized (no full environment dump).
+Prefer **`get_method_signature`** or **`get_class_structure`** over **`get_class_source`**. Every source response has **`sourceAvailable`**: `true` = real sources; `false` = CFR (structure OK, names/Javadoc may be synthetic).
 
 ## Security and privacy
 
-- **No telemetry** — no network calls to report usage or source content.
-- **Subprocesses** — Gradle, `java` (CFR), and `javap` only; argv-based spawn (**no shell** interpolation of user input). See [SECURITY.md](SECURITY.md).
-- **Untrusted bytecode** — decompiling dependency JARs runs third-party bytecode locally; treat `sourceAvailable: false` as non-authoritative for security decisions.
-- **`JVMSRC_ALLOWED_ROOTS`** — optional comma-separated absolute directories; reject `projectRoot` outside them (useful for locked-down MCP hosts).
-- **Output cap** — full class source is truncated at **512 KiB** by default (`JVMSRC_MAX_SOURCE_OUTPUT_CHARS`); use method/line excerpts or structure tools for large types. Responses may include `outputTruncated: true` and `sourceLength`.
+- **No telemetry**
+- **Local only** — caches and diagnostics on disk; never writes under the project root for resolution
+- **Subprocesses:** Gradle, `java`, `javap` via argv (no shell interpolation) — [SECURITY.md](SECURITY.md)
+- **`JVMSRC_ALLOWED_ROOTS`** — optional allowlist for `projectRoot`
+- **Output cap** — 512 KiB default (`JVMSRC_MAX_SOURCE_OUTPUT_CHARS`); use excerpts or structure tools for large types
 
-Full policy: [SECURITY.md](SECURITY.md).
+## Local data
+
+Override with absolute paths: **`JVMSRC_CACHE_ROOT`** (resolution + decompile), **`JVMSRC_LOG_DIR`** (failure diagnostics).
+
+Defaults (via [`env-paths`](https://www.npmjs.com/package/env-paths)): cache under `~/Library/Caches/jvmsrc` (macOS), `~/.cache/jvmsrc` (Linux), `%LOCALAPPDATA%\jvmsrc\Cache` (Windows); logs under `~/Library/Logs/jvmsrc`, `~/.local/state/jvmsrc`, or `%LOCALAPPDATA%\jvmsrc\Logs`.
+
+Per-project buckets under `projects/<id>/` (`resolution.json`, search index, …) and shared `decompiled/<coordinates>/`. Gradle's `~/.gradle` is unchanged. Full layout: [SPEC.md](SPEC.md) section 6.
+
+```bash
+jvmsrc diagnostics list
+jvmsrc diagnostics show <diagnosticId>
+```
 
 ## Environment variables
 
 | Variable | Purpose |
 |----------|---------|
-| `JVMSRC_CACHE_ROOT` | Override resolution/decompile cache (absolute path) |
-| `JVMSRC_LOG_DIR` | Override failure diagnostic logs (absolute path) |
-| `JVMSRC_ALLOWED_ROOTS` | Comma-separated allowed project roots (absolute) |
-| `JVMSRC_MAX_SOURCE_OUTPUT_CHARS` | Max characters returned for one `get` / `get_class_source` body (default 524288) |
-| `JVMSRC_CFR_PATH` / `JVM_ORACLE_CFR_PATH` | Custom CFR JAR |
-| `JVMSRC_GRADLE_TIMEOUT_MS` | Gradle wall-clock timeout |
-| `JVMSRC_CFR_MAX_OUTPUT_BYTES` / `JVMSRC_JAVAP_MAX_OUTPUT_BYTES` | Subprocess capture limits |
+| `JVMSRC_CACHE_ROOT` | Cache root (absolute) |
+| `JVMSRC_LOG_DIR` | Diagnostic logs (absolute) |
+| `JVMSRC_ALLOWED_ROOTS` | Allowed `projectRoot` prefixes |
+| `JVMSRC_MAX_SOURCE_OUTPUT_CHARS` | Max source body size (default 524288) |
+| `JVMSRC_GRADLE_TIMEOUT_MS` | Gradle timeout |
+| `JVMSRC_CFR_PATH` | Custom CFR JAR |
 
-See [SPEC.md](SPEC.md) for full behavior, error codes, and schemas.
+More (CFR/javap capture limits, error codes): [SPEC.md](SPEC.md).
 
 ## Troubleshooting
 
-```bash
-# Recent structured failure logs
-jvmsrc diagnostics list
-jvmsrc diagnostics show <diagnosticId>
-```
-
-On MCP errors after an upgrade: `bun run build` (or reinstall) and **restart** the MCP server.
+- Resolution failures: `jvmsrc diagnostics list` / `show <id>`
+- After upgrade: reinstall or rebuild, then **restart** the MCP server
+- Stale classpath: `jvmsrc resolve --force-refresh`
 
 ## Documentation
 
 | Document | Contents |
 |----------|----------|
-| [SPEC.md](SPEC.md) | Technical specification (schemas, contracts, CLI/MCP details) |
-| [ROADMAP.md](ROADMAP.md) | Implementation status and planned work |
-| [SKILL.md](SKILL.md) | Agent skill — when and how to use jvmsrc tools |
-| [SECURITY.md](SECURITY.md) | Vulnerability reporting and trust boundary |
-| [CLAUDE.md](CLAUDE.md) | Contributor / agent notes for this repository |
+| [SPEC.md](SPEC.md) | Schemas, contracts, CLI/MCP details |
+| [SKILL.md](SKILL.md) | Agent skill |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Build, test, PR notes |
+| [ROADMAP.md](ROADMAP.md) | Status and planned work |
+| [SECURITY.md](SECURITY.md) | Vulnerability reporting |
+
+## Building from source
+
+```bash
+git clone https://github.com/Sintexer/jvm-dependency-resolver.git
+cd jvm-dependency-resolver
+npm run setup:cfr && npm ci && npm run build
+node dist/cli.js --version
+```
+
+Contributor workflows (Bun dev loop, `prepack`, tests): **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ## License
 

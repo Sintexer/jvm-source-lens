@@ -52,6 +52,8 @@
     "build:bun": "bun build ./src/cli.ts ./src/mcp.ts ./src/public-api.ts --outdir ./dist --target node --format esm --packages=external",
     "setup:cfr": "tsx scripts/fetch-cfr.ts",
     "validate:resources": "tsx scripts/validate-bundled-resources.ts",
+    "verify:publish": "tsx scripts/verify-publish-manifest.ts",
+    "audit:ci": "npm audit --audit-level=high",
     "ensure:gradle-smoke-wrapper": "bash scripts/ensure-gradle-smoke-wrapper.sh",
     "prepack": "npm run typecheck && npm run build && npm run validate:resources"
   },
