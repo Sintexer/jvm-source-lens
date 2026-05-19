@@ -28,7 +28,7 @@ develop ──●──●──●──●──●──►  (PRs from featur
 1. Merge work into **`develop`** (CI must pass).
 2. **Release Please** opens/updates a PR titled e.g. `chore: release 0.2.0` **into `master`** (bumps `package.json`, updates `CHANGELOG.md`).
 3. Review and **merge** that Release PR.
-4. Release Please creates tag **`v0.2.0`** on `master` and the **publish** job runs ([release-please.yml](.github/workflows/release-please.yml)).
+4. Release Please creates tag **`v0.2.0`** on `master`; the same workflow runs **`npm publish`** when `release_created` is true ([release-please.yml](.github/workflows/release-please.yml)).
 
 No manual version bump or `git tag` commands.
 
@@ -96,7 +96,7 @@ While **`0.x`**, Release Please is configured with `bump-minor-pre-major` so `fe
 | Event | Workflow |
 |-------|----------|
 | PR / push to `develop` or `master` | [ci.yml](.github/workflows/ci.yml) |
-| Push to `develop` or `master` | [release-please.yml](.github/workflows/release-please.yml) (opens/updates Release PR; publishes when release merges) |
+| Push to `develop` or `master` | [release-please.yml](.github/workflows/release-please.yml) (Release Please + `npm publish` on release) |
 
 ## Local checks
 

@@ -29,6 +29,10 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
 
@@ -46,3 +50,6 @@ jobs:
 
       - name: Verify publish manifest on disk
         run: bun run verify:publish
+
+      - name: Smoke test CLI on Node 24
+        run: node dist/cli.js --version
