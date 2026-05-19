@@ -31,11 +31,10 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "node": ">=20"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "bin": {
     "jvmsrc": "./dist/cli.js"
@@ -53,7 +52,7 @@
     "dev:mcp": "bun run src/mcp.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test",
-    "build": "esbuild ./src/cli.ts ./src/mcp.ts ./src/public-api.ts --bundle --platform=node --outdir=./dist --target=node24 --format=esm --packages=external",
+    "build": "esbuild ./src/cli.ts ./src/mcp.ts ./src/public-api.ts --bundle --platform=node --outdir=./dist --target=node20 --format=esm --packages=external",
     "setup:cfr": "tsx scripts/fetch-cfr.ts",
     "validate:resources": "tsx scripts/validate-bundled-resources.ts",
     "verify:publish": "tsx scripts/verify-publish-manifest.ts",

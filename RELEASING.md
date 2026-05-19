@@ -81,7 +81,7 @@ While **`0.x`**, `bump-minor-pre-major` makes `feat:` bump **minor** (0.1.0 → 
 
 | Event | Workflow |
 |-------|----------|
-| PR / push to `master` (and `develop` if still used) | [ci.yml](.github/workflows/ci.yml) |
+| PR to `master` or push to `master` | [ci.yml](.github/workflows/ci.yml) |
 | Push to `master` | [release-please.yml](.github/workflows/release-please.yml) |
 
 ## Local checks
@@ -101,6 +101,22 @@ npm view jvmsrc version
 ```
 
 Users: `npm install -g jvmsrc@latest` or `npx jvmsrc@X.Y.Z`.
+
+### Manual publish from your machine
+
+```bash
+bun run setup:cfr && bun run prepack
+npm pack --dry-run
+npm publish --access public
+```
+
+Repo **`.npmrc`** sets `provenance=false` for local publishes. CI uses `npm publish --provenance` in GitHub Actions only.
+
+If you still see `provider: null`, check global config: `npm config get provenance` (should be `false`) and `grep provenance ~/.npmrc`. Then:
+
+```bash
+NPM_CONFIG_PROVENANCE=false npm publish --access public
+```
 
 ## Troubleshooting Release Please
 

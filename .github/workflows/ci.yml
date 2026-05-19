@@ -1,10 +1,12 @@
 name: CI
 
+# push: only master (after merge). pull_request: PRs targeting master.
+# Avoid listing feature branches under push — each PR push would run CI twice (push + pull_request).
 on:
   push:
-    branches: [master, develop]
+    branches: [master]
   pull_request:
-    branches: [master, develop]
+    branches: [master]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -29,10 +31,6 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: actions/setup-node@v5
-        with:
-          node-version: "24"
-
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
 
@@ -51,5 +49,16 @@ jobs:
       - name: Verify publish manifest on disk
         run: bun run verify:publish
 
-      - name: Smoke test CLI on Node 24
-        run: node dist/cli.js --version
+      - name: Smoke test CLI on Node 20 (minimum supported runtime)
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+
+      - run: node dist/cli.js --version
+
+      - name: Smoke test CLI on Node 24 (CI / latest)
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - run: node dist/cli.js --version
