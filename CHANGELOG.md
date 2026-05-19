@@ -4,6 +4,13 @@ All notable changes to **jvmsrc** are documented in this file.
 
 This file is updated by **[Release Please](https://github.com/googleapis/release-please)** when a release PR merges to `master`. Contributors use **Conventional Commits** on PRs to `master` — see [RELEASING.md](RELEASING.md).
 
+## [1.4.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.3.5...v1.4.0) (2026-05-19)
+
+
+### Features
+
+* add mcp server.json ([a29b0bd](https://github.com/Sintexer/jvm-source-lens/commit/a29b0bdc6310c361dc94c9a868ed62f34b1f2c25))
+
 ## [1.3.5](https://github.com/Sintexer/jvm-source-lens/compare/v1.3.4...v1.3.5) (2026-05-19)
 
 
