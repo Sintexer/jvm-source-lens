@@ -1,12 +1,11 @@
 name: release-please
 
-# develop push → open/update Release PR on develop (conventional commits on develop)
+# master push → open/update Release PR on master (conventional commits on master)
 # Merging that Release PR → tag + npm publish (release_created)
-# Do not merge develop → master outside Release Please; see RELEASING.md
 on:
   push:
     branches:
-      - develop
+      - master
   workflow_dispatch:
 
 permissions:
@@ -26,7 +25,7 @@ jobs:
         id: release
         with:
           release-type: node
-          target-branch: develop
+          target-branch: master
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
