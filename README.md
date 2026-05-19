@@ -36,7 +36,7 @@ First resolution on a project is often 5–30s; later calls reuse the cache.
 
 ## Requirements
 
-**On your machine:** Node.js **≥ 20** to run the published CLI; Java on `PATH` (CFR + `javap`). [Developing jvmsrc](CONTRIBUTING.md) uses **Bun** only (`bun.lock`).
+**On your machine:** Node.js **≥ 24** to run the published CLI; Java on `PATH` (CFR + `javap`). [Developing jvmsrc](CONTRIBUTING.md) uses **Bun** only (`bun.lock`).
 
 **Project types:** JVM codebases (Java, Kotlin, Scala, Groovy, …). jvmsrc calls the **build tool**, not your editor.
 
@@ -68,7 +68,7 @@ npm install -g jvmsrc
 npx jvmsrc <command>
 ```
 
-Published package includes prebuilt `dist/` and bundled CFR — **Node ≥ 20** only.
+Published package includes prebuilt `dist/` and bundled CFR — **Node ≥ 24** only.
 
 ## Quick start
 
