@@ -35,6 +35,7 @@ function main(): void {
   const requiredBundled = [
     'resources/cfr.jar',
     'resources/analyzer-init.gradle',
+    'SKILL.md',
     'dist/cli.js',
     'dist/mcp.js',
     'dist/public-api.js',
