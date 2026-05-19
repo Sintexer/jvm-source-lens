@@ -1,6 +1,6 @@
 {
   "name": "jvmsrc",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Resolve JVM classpath via Gradle and extract Java source, signatures, and structure for agents (CLI + MCP)",
   "license": "MIT",
   "author": "Ilya Buglakov",
