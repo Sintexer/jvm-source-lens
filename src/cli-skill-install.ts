@@ -116,7 +116,18 @@ export function resolveSkillInstallDestinations(opts: SkillInstallOptions): Skil
   }
 
   if (opts.destDir !== undefined && opts.destDir.trim().length > 0) {
-    const dest = path.join(path.resolve(opts.destDir.trim()), SKILL_DIR_NAME, SKILL_FILENAME);
+    const resolvedDir = path.resolve(opts.destDir.trim());
+    const home = os.homedir();
+    const underHome = resolvedDir === home || resolvedDir.startsWith(home + path.sep);
+    if (!underHome && !opts.overwrite) {
+      return {
+        ok: false,
+        message:
+          `--dir resolves outside your home directory (${resolvedDir}). ` +
+          `Use --force to allow writing to this location.`,
+      };
+    }
+    const dest = path.join(resolvedDir, SKILL_DIR_NAME, SKILL_FILENAME);
     return {
       ok: true,
       source: bundled.source,
