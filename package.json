@@ -43,6 +43,7 @@
   "files": [
     "dist",
     "resources",
+    "SKILL.md",
     "README.md",
     "LICENSE",
     "SECURITY.md"

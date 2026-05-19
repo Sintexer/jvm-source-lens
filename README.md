@@ -73,19 +73,25 @@ Published package includes prebuilt `dist/` and bundled CFR — **Node ≥ 24** 
 ## Quick start
 
 ```bash
-# Paste-ready MCP config (adjust project path)
+# 1. Install the agent skill for your AI tool
+jvmsrc init --agent cursor          # Cursor (user skills)
+jvmsrc init --agent claude          # Claude Code
+jvmsrc init --agent cursor --scope project -p /path/to/gradle-project   # repo-shared
+
+# 2. Paste-ready MCP config, then restart your AI tool
 jvmsrc config --project /path/to/gradle-project
 
-# Class source (stdout = .java, stderr = metadata JSON)
+# 3. Fetch class source
 jvmsrc get com.example.MyClass -p /path/to/gradle-project
+```
 
-# Shorthand, quiet pipe, or JSON
-jvmsrc com.example.MyClass -p /path/to/gradle-project
+Skill paths: `~/.cursor/skills/jvmsrc/SKILL.md`, `~/.claude/skills/jvmsrc/SKILL.md`, or `.cursor/skills/jvmsrc/SKILL.md` in a repo.
+
+More CLI examples:
+
+```bash
+jvmsrc com.example.MyClass -p /path/to/gradle-project          # shorthand for get
 jvmsrc get com.example.MyClass -p /path/to/project -q > MyClass.java
-jvmsrc get com.example.MyClass -p /path/to/project --json
-
-# Warm / refresh resolution cache
-jvmsrc resolve -p /path/to/project
 jvmsrc resolve -p /path/to/project --force-refresh
 ```
 

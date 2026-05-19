@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { buildJvmsrcMcpConfigPayload } from './cli-config-command.js';
+import { registerInitCli } from './cli-init-command.js';
 import { registerDiagnosticsCli } from './diagnostics/cli-diagnostics-command.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import { writeCliFindInClassResult } from './cli-find-in-class-output.js';
@@ -16,7 +17,15 @@ import { resolveWithResolutionCache } from './resolve-with-cache.js';
 
 /** `jvmsrc com.example.Foo` → same as `jvmsrc get com.example.Foo` */
 function injectImplicitGetSubcommand(): void {
-  const subcommands = new Set(['get', 'find-in-class', 'mcp', 'config', 'resolve', 'diagnostics']);
+  const subcommands = new Set([
+    'get',
+    'find-in-class',
+    'mcp',
+    'config',
+    'init',
+    'resolve',
+    'diagnostics',
+  ]);
   const raw = process.argv.slice(2);
   if (raw.length === 0) {
     return;
@@ -250,6 +259,7 @@ program
   );
 
 registerDiagnosticsCli(program);
+registerInitCli(program);
 
 program
   .command('config')

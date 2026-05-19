@@ -1,15 +1,21 @@
 name: release-please
 
+# master push → open/update Release PR on master (conventional commits on master)
+# Merging that Release PR → tag + npm publish (release_created)
 on:
   push:
     branches:
-      - develop
       - master
+  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
   id-token: write
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   release-please:

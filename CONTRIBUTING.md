@@ -55,8 +55,8 @@ Requires `gradle` on `PATH` once (wrapper JAR not committed). Most tests use syn
 
 ## Branches
 
-- Open PRs against **`develop`** (not `master`).
-- **`master`** receives automated **Release Please** PRs only — see [RELEASING.md](RELEASING.md).
+- Open PRs against **`master`** (default integration and release branch).
+- **Release Please** opens version-bump PRs into **`master`** — see [RELEASING.md](RELEASING.md).
 
 ## Commit messages (semver)
 

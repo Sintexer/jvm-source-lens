@@ -2,70 +2,48 @@
 
 How we branch, version, and publish **jvmsrc** to [npm](https://www.npmjs.com/package/jvmsrc).
 
-## Why `develop` and `master`?
+## Branch model
 
-| Branch | Role |
-|--------|------|
-| **`develop`** | Day-to-day integration — feature/fix PRs land here |
-| **`master`** | Production line — only receives **Release PRs** from Release Please + hotfix merges |
+**`master`** is the only release branch. [Release Please](https://github.com/googleapis/release-please) scans **conventional commits on `master`**, opens a Release PR into **`master`**, and tags on merge.
 
-We use this instead of **trunk-only on `master`** because:
+```
+feature/* ──PR (feat:/fix: squash title)──► master
+                                            │
+                                            └── Release PR ──merge──► master ──tag──► npm
+```
 
-- **`master` stays stable** — what users install from npm always matches a deliberate release merge.
-- **`develop` absorbs WIP** — half-finished features do not block a releasable `master`.
-- **Automatic semver** — Release Please reads [Conventional Commits](https://www.conventionalcommits.org/) on `develop` and proposes the right **major / minor / patch** bump.
-
-**Trunk-based** (everything on `master`, tag often) is simpler for solo tools in early `0.x`, but couples “ready to ship” with “merged to default branch.” For a published library with MCP contracts, **develop + automated release PRs** scales better.
+Do **not** ship by merging a side branch into `master` with a title like `Merge pull request #N from …` — Release Please cannot parse that for semver. Merge work via PRs to **`master`** with [Conventional Commits](https://www.conventionalcommits.org/) squash titles.
 
 ### Flow
 
-```
-develop ──●──●──●──●──●──►  (PRs from feature/*, fix/*)
-            \
-             └──► Release PR ──merge──► master ──tag v0.2.0──► npm
-```
-
-1. Merge work into **`develop`** (CI must pass).
-2. **Release Please** opens/updates a PR titled e.g. `chore: release 0.2.0` **into `master`** (bumps `package.json`, updates `CHANGELOG.md`).
-3. Review and **merge** that Release PR.
-4. Release Please creates tag **`v0.2.0`** on `master`; the same workflow runs **`npm publish`** when `release_created` is true ([release-please.yml](.github/workflows/release-please.yml)).
+1. Merge features/fixes into **`master`** (PR titles like `feat: add init skill`, `fix: …`).
+2. **Release Please** runs on each push to **`master`** and opens/updates a PR e.g. `chore: release 1.1.0` **into `master`**.
+3. Review the Release PR — merge it when the changelog matches what you want to ship.
+4. Merging the Release PR creates the tag and runs **`npm publish`** ([release-please.yml](.github/workflows/release-please.yml)).
 
 No manual version bump or `git tag` commands.
+
+### Why a Release PR can appear before your feature
+
+Release Please only sees **commits already on `master`**. If other `feat:` / `fix:` commits landed first, a Release PR is expected while your feature PR is still open. Merge the feature to **`master`** before merging the Release PR.
 
 ## Branching
 
 | Branch | Branched from | Merges to | Purpose |
 |--------|---------------|-----------|---------|
-| **`develop`** | `develop` | `develop` via PR | Integration (default for PRs) |
-| **`master`** | — | — | Releases only (via Release Please PR) |
-| **`feature/<name>`** | `develop` | `develop` | New behavior |
-| **`fix/<name>`** | `develop` | `develop` | Bug fixes |
-| **`hotfix/<name>`** | `master` | `master` + backport to `develop` | Urgent production fix |
+| **`master`** | `master` | `master` via PR | Default integration + releases |
+| **`feature/<name>`** | `master` | `master` | New behavior |
+| **`fix/<name>`** | `master` | `master` | Bug fixes |
 
-**Hotfix:** branch from `master`, fix, merge to `master` (Release Please will patch-release), then merge `master` → `develop` so branches do not diverge.
-
-### First-time repo setup
-
-If `develop` does not exist yet:
-
-```bash
-git checkout master
-git pull
-git checkout -b develop
-git push -u origin develop
-```
-
-Set **default branch** to **`develop`** in GitHub (Settings → General) so new PRs target integration.
-
-Protect **`master`**: require PR, require CI, no direct pushes.
+Set **default branch** to **`master`** in GitHub (Settings → General). Protect **`master`**: require PR, require CI.
 
 ## Automatic semantic versioning
 
-Versions come from **[Release Please](https://github.com/googleapis/release-please)** ([config](release-please-config.json), [manifest](.release-please-manifest.json)).
+Versions come from **Release Please** ([config](release-please-config.json), [manifest](.release-please-manifest.json)).
 
-### Commit messages (required for correct bumps)
+### Commit messages (required)
 
-Use [Conventional Commits](https://www.conventionalcommits.org/) on PR titles or squash-merge messages:
+Use conventional titles on PR squash merge:
 
 | Commit | SemVer bump | Example |
 |--------|-------------|---------|
@@ -73,30 +51,38 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) on PR titles or
 | `feat:` | **minor** | `feat: add search_classes limit` |
 | `feat!:` or `BREAKING CHANGE:` in body | **major** | `feat!: rename MCP error code` |
 
-Non-user-facing work: `chore:`, `ci:`, `docs:`, `test:`, `refactor:` — typically no version bump unless they include a breaking footer.
+`chore:`, `ci:`, `docs:`, `test:`, `refactor:` — usually no version bump unless breaking.
 
-While **`0.x`**, Release Please is configured with `bump-minor-pre-major` so `feat:` still bumps **minor** (0.1.0 → 0.2.0), not 1.0.0.
+While **`0.x`**, `bump-minor-pre-major` makes `feat:` bump **minor** (0.1.0 → 0.2.0).
 
 ### Maintainer release steps
 
-1. Ensure changes are on **`develop`** with conventional commit messages.
-2. Wait for (or re-run) **Release Please** — open PR **into `master`**.
-3. Review `CHANGELOG.md` + `package.json` version in that PR.
-4. **Merge** the Release PR → tag + npm publish run automatically.
+1. Merge intended work into **`master`** (conventional squash-merge titles).
+2. Confirm the **Release PR → `master`** lists the right changes (re-run **Actions → release-please** on `master` if needed).
+3. **Merge** the Release PR — npm publish runs automatically.
+
+### If the Release PR is wrong or too early
+
+| Situation | What to do |
+|-----------|------------|
+| Feature not on `master` yet | Leave Release PR unmerged; merge feature to `master`; PR updates on next push |
+| Release PR merged too early | Merge feature to `master`; wait for the next Release PR |
+| Stale Release PR | Close it if the base is wrong; re-run **release-please** on `master` |
+| Old PR targeted wrong branch | Close stale Release PR (e.g. into `develop`); re-run on `master` |
 
 ### Secrets
 
 | Secret | Purpose |
 |--------|---------|
 | **`NPM_TOKEN`** | npm publish (Automation token) |
-| `GITHUB_TOKEN` | Provided by Actions (Release Please PRs + releases) |
+| `GITHUB_TOKEN` | Release Please PRs + GitHub releases |
 
 ## What CI runs when
 
 | Event | Workflow |
 |-------|----------|
-| PR / push to `develop` or `master` | [ci.yml](.github/workflows/ci.yml) |
-| Push to `develop` or `master` | [release-please.yml](.github/workflows/release-please.yml) (Release Please + `npm publish` on release) |
+| PR / push to `master` (and `develop` if still used) | [ci.yml](.github/workflows/ci.yml) |
+| Push to `master` | [release-please.yml](.github/workflows/release-please.yml) |
 
 ## Local checks
 
@@ -115,3 +101,17 @@ npm view jvmsrc version
 ```
 
 Users: `npm install -g jvmsrc@latest` or `npx jvmsrc@X.Y.Z`.
+
+## Troubleshooting Release Please
+
+### `commit could not be parsed: Merge pull request #…` and `No commits for path: ., skipping`
+
+**Cause:** The newest commit on **`master`** is a merge commit, not a conventional title.
+
+**Fix:** Merge features via PRs to **`master`** with `feat:` / `fix:` squash titles. Do not bulk-merge another branch into `master` to release. Close any stale Release PR and re-run the workflow after conventional commits are on `master`.
+
+### No Release PR after merging a feature
+
+**Cause:** Commits on `master` since the last tag are not conventional (`Merge …`, `Update files`, etc.), or a stale Release PR is still open with the wrong base.
+
+**Fix:** Verify squash-merge titles on merged PRs. Close outdated Release PRs. Re-run **release-please** on **`master`**.
