@@ -1,6 +1,7 @@
 {
   "name": "jvmsrc",
   "version": "1.3.5",
+  "mcpName": "io.github.Sintexer/jvmsrc",
   "description": "Resolve JVM classpath via Gradle and extract Java source, signatures, and structure for agents (CLI + MCP)",
   "license": "MIT",
   "author": "Ilya Buglakov",
