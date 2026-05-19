@@ -12,7 +12,11 @@
 
 **Ship:** merge features to `master` → review Release PR → merge Release PR. Don’t merge the Release PR before your feature is on `master`.
 
+**MCP registry:** [server.json](server.json) top-level `version` and `packages[0].version` are bumped with `package.json` via Release Please `extra-files` in [release-please-config.json](release-please-config.json). CI runs `bun run validate:server-json`.
+
 **npm CI:** [Trusted publishing](https://docs.npmjs.com/trusted-publishers) on package **jvmsrc** — repo `Sintexer/jvm-source-lens`, workflow `release-please.yml`, no `NPM_TOKEN` on publish. `package.json` `repository.url` must be `https://github.com/Sintexer/jvm-source-lens.git`.
+
+**MCP Registry CI:** After npm publish, `publish-npm` runs [`mcp-publisher`](https://github.com/modelcontextprotocol/registry) (`login github-oidc` → `publish`) using [server.json](server.json). Requires `id-token: write` (already set). `package.json` `mcpName` must match `server.json` `name` (`io.github.Sintexer/jvmsrc`). No extra secrets for OIDC. If publish fails with package validation, confirm the new npm version is live and `mcpName` is on that tarball.
 
 **Pre-release check:** `bun run setup:cfr && bun run prepack && npm pack --dry-run`
 

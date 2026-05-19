@@ -3,7 +3,7 @@
   "name": "io.github.Sintexer/jvmsrc",
   "title": "JVM Source Lens",
   "description": "Gradle-accurate JVM classpath; fetch Java source, signatures, and class structure for agents.",
-  "version": "1.3.4",
+  "version": "1.4.0",
   "websiteUrl": "https://github.com/Sintexer/jvm-source-lens#readme",
   "repository": {
     "url": "https://github.com/Sintexer/jvm-source-lens",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "jvmsrc",
-      "version": "1.3.4",
+      "version": "1.4.0",
       "runtimeHint": "npx",
       "runtimeArguments": [
         {

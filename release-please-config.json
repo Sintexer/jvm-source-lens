@@ -6,7 +6,15 @@
       "changelog-path": "CHANGELOG.md",
       "release-type": "node",
       "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true
+      "bump-patch-for-minor-pre-major": true,
+      "extra-files": [
+        "server.json",
+        {
+          "type": "json",
+          "path": "server.json",
+          "jsonpath": "$.packages[0].version"
+        }
+      ]
     }
   },
   "pull-request-title-pattern": "chore: release ${version}",

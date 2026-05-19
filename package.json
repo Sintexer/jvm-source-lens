@@ -56,11 +56,12 @@
     "build": "esbuild ./src/cli.ts ./src/mcp.ts ./src/public-api.ts --bundle --platform=node --outdir=./dist --target=node20 --format=esm --packages=external",
     "setup:cfr": "tsx scripts/fetch-cfr.ts",
     "validate:resources": "tsx scripts/validate-bundled-resources.ts",
+    "validate:server-json": "tsx scripts/validate-server-json-version.ts",
     "verify:publish": "tsx scripts/verify-publish-manifest.ts",
     "verify:release-tag": "tsx scripts/verify-release-tag.ts",
     "audit:ci": "bun audit",
     "ensure:gradle-smoke-wrapper": "bash scripts/ensure-gradle-smoke-wrapper.sh",
-    "prepack": "bun run typecheck && bun run build && bun run validate:resources"
+    "prepack": "bun run typecheck && bun run build && bun run validate:resources && bun run validate:server-json"
   },
   "devDependencies": {
     "@types/bun": "1.3.14",

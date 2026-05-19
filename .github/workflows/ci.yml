@@ -43,6 +43,9 @@ jobs:
       - name: Test
         run: bun test
 
+      - name: Validate MCP server.json version
+        run: bun run validate:server-json
+
       - name: Prepack (typecheck, build, validate resources)
         run: bun run prepack
 
