@@ -36,6 +36,9 @@ Temporary Items
 *.icloud
 
 ### Node ###
+# npm lockfile — repo uses Bun only (bun.lock)
+package-lock.json
+
 # Logs
 logs
 *.log

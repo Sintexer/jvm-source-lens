@@ -1,18 +1,10 @@
 version: 2
 updates:
-  - package-ecosystem: npm
+  - package-ecosystem: bun
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    groups:
-      development-dependencies:
-        dependency-type: development
-        patterns:
-          - '@types/*'
-          - 'esbuild'
-          - 'tsx'
-          - 'typescript'
 
   - package-ecosystem: github-actions
     directory: /

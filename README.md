@@ -36,7 +36,7 @@ First resolution on a project is often 5–30s; later calls reuse the cache.
 
 ## Requirements
 
-**On your machine:** Node.js **≥ 20**, Java on `PATH` (CFR + `javap`). Bun is only for [developing jvmsrc](CONTRIBUTING.md).
+**On your machine:** Node.js **≥ 20** to run the published CLI; Java on `PATH` (CFR + `javap`). [Developing jvmsrc](CONTRIBUTING.md) uses **Bun** only (`bun.lock`).
 
 **Project types:** JVM codebases (Java, Kotlin, Scala, Groovy, …). jvmsrc calls the **build tool**, not your editor.
 
@@ -180,11 +180,11 @@ More (CFR/javap capture limits, error codes): [SPEC.md](SPEC.md).
 ```bash
 git clone https://github.com/Sintexer/jvm-dependency-resolver.git
 cd jvm-dependency-resolver
-npm run setup:cfr && npm ci && npm run build
+bun install && bun run setup:cfr && bun run build
 node dist/cli.js --version
 ```
 
-Contributor workflows (Bun dev loop, `prepack`, tests): **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+Full contributor workflow: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ## License
 
