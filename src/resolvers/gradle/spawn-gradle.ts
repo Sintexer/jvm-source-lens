@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { getBundledResource } from '../../bundled-resources.js';
+import { buildCfrSpawnEnv } from '../../decompiler/cfr-spawn-env.js';
 import { awaitChildExit, readProcessStreamToText, spawnChild } from '../../spawn-child.js';
 import { formatGradleUserMessage } from './gradle-failure-message.js';
 import { resolveGradleWrapperCommand } from './gradle-wrapper-command.js';
@@ -77,7 +78,7 @@ export async function runGradleTask(
       stdout: 'pipe',
       stderr: spawnOptions?.inheritStderr ? 'inherit' : 'pipe',
       stdin: 'ignore',
-      env: process.env,
+      env: buildCfrSpawnEnv(),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

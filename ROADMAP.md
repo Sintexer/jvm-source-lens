@@ -53,7 +53,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ### Security hardening (post-audit 2026-05)
 
-- [ ] Strip JVM-injection env vars from Gradle subprocess (mirrors CFR/javap hardening)
+- [x] Strip JVM-injection env vars from Gradle subprocess (mirrors CFR/javap hardening)
 - [x] FQN validation before `javap` in bytecode-only path (flag-injection guard)
 - [x] Clamp `limit` at MCP Zod boundary for `search_classes`
 - [x] Log warning when `JVMSRC_CFR_PATH` / `JVM_ORACLE_CFR_PATH` override is used
@@ -486,7 +486,7 @@ Findings from structured security review (2026-05-19). Items ordered by effort �
 
 ### Medium effort
 
-- [ ] **Strip JVM-injection env vars from Gradle subprocess** — reuse or extend `buildCfrSpawnEnv()` to strip `JAVA_TOOL_OPTIONS`, `_JAVA_OPTIONS`, `JDK_JAVA_OPTIONS`, `LD_PRELOAD`, `DYLD_INSERT_LIBRARIES` before spawning Gradle; currently only CFR/javap apply this hardening. (`src/resolvers/gradle/spawn-gradle.ts:80`)
+- [x] **Strip JVM-injection env vars from Gradle subprocess** — reuse or extend `buildCfrSpawnEnv()` to strip `JAVA_TOOL_OPTIONS`, `_JAVA_OPTIONS`, `JDK_JAVA_OPTIONS`, `LD_PRELOAD`, `DYLD_INSERT_LIBRARIES` before spawning Gradle; currently only CFR/javap apply this hardening. (`src/resolvers/gradle/spawn-gradle.ts:80`)
 - [ ] **JAR size guard before `fflate` reads** — add a `statSync` size check (configurable via `JVMSRC_MAX_JAR_BYTES`, default 500 MB) before `readFileSync(jarAbsPath)` in `readZipEntryUtf8` / `zipEntryExists`; rejects unreasonably large or malicious JARs before they are loaded into memory. (`src/extractor/zip-entry.ts:31`)
 - [ ] **Skip symlinked directories in build-input cache walk** — call `lstatSync` before recursing in `walk()` and skip entries where `isSymbolicLink()` is true; prevents following symlinks that point outside the project root during cache hash computation. (`src/cache/index.ts:48`)
 
