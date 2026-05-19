@@ -4,6 +4,14 @@ All notable changes to **jvmsrc** are documented in this file.
 
 This file is updated by **[Release Please](https://github.com/googleapis/release-please)** when a release PR merges to `master`. Contributors use **Conventional Commits** on PRs to `master` — see [RELEASING.md](RELEASING.md).
 
+## [1.3.2](https://github.com/Sintexer/jvm-source-lens/compare/v1.3.1...v1.3.2) (2026-05-19)
+
+
+### Bug Fixes
+
+* add write outside home dir guard ([de6187a](https://github.com/Sintexer/jvm-source-lens/commit/de6187a2cb304fdb715c2d2af7b5e16ceacb04d0))
+* fix tests after access refactoring ([07fe089](https://github.com/Sintexer/jvm-source-lens/commit/07fe0890de616a9eb68430ae7d1963ab0c0f756a))
+
 ## [1.3.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.3.0...v1.3.1) (2026-05-19)
 
 
