@@ -1,17 +1,10 @@
 name: release-please
 
-# master push → open/update Release PR on master (conventional commits on master)
-# Merging that Release PR → tag + npm publish (release_created)
 on:
   push:
     branches:
       - master
   workflow_dispatch:
-
-permissions:
-  contents: write
-  pull-requests: write
-  id-token: write
 
 concurrency:
   group: release-please-${{ github.ref }}
@@ -20,6 +13,11 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: release
@@ -29,32 +27,28 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
+  publish-npm:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
       - uses: actions/checkout@v6
-        if: ${{ steps.release.outputs.release_created }}
 
       - uses: oven-sh/setup-bun@v2
-        if: ${{ steps.release.outputs.release_created }}
         with:
           bun-version: "1.3.14"
 
-      # Trusted publishing (npm): OIDC via id-token — do not set NODE_AUTH_TOKEN here.
-      # npmjs.com → jvmsrc → Settings → Trusted publishing → GitHub Actions (this repo + workflow).
       - uses: actions/setup-node@v5
-        if: ${{ steps.release.outputs.release_created }}
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
-      - name: Upgrade npm (trusted publishing requires npm ≥ 11.5.1)
-        if: ${{ steps.release.outputs.release_created }}
-        run: npm install -g npm@11 && npm --version
-
       - run: bun install --frozen-lockfile
-        if: ${{ steps.release.outputs.release_created }}
-
       - run: bun run setup:cfr
-        if: ${{ steps.release.outputs.release_created }}
 
       - run: npm publish --provenance --access public
         if: ${{ steps.release.outputs.release_created }}

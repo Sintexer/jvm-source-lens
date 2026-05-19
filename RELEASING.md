@@ -18,4 +18,4 @@
 
 **Manual publish:** `npm publish --access public` (`.npmrc` sets `provenance=false`; use `NPM_CONFIG_PROVENANCE=false` if needed). Prefer CI.
 
-**Stuck?** No Release PR → conventional titles on `master`? Re-run workflow. Publish `E404` after provenance → fix trusted publisher repo/workflow match. Publish `EOTP` → remove `NODE_AUTH_TOKEN` from workflow; don’t use 2FA publish tokens in CI.
+**Stuck?** No Release PR → conventional titles on `master`? Re-run workflow. Publish `E404` after provenance → npm trusted publisher must match `Sintexer/jvm-source-lens` + `release-please.yml` (Environment **empty**); CI uses `env -u NODE_AUTH_TOKEN npm publish` and `npm@11.6.2`. Publish `EOTP` → don’t use `NPM_TOKEN` with 2FA in CI.
