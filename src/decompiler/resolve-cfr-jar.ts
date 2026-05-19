@@ -4,6 +4,14 @@ import { getBundledResource } from '../bundled-resources.js';
 
 export type ResolveCfrJarPathResult = { ok: true; path: string } | { ok: false; message: string };
 
+let _overrideWarned = false;
+
+function warnOverrideOnce(envVar: string, resolvedPath: string): void {
+  if (_overrideWarned) return;
+  _overrideWarned = true;
+  process.stderr.write(`[jvmsrc] using CFR JAR override from ${envVar}: ${resolvedPath}\n`);
+}
+
 function trimEnv(name: string): string | undefined {
   const v = process.env[name]?.trim();
   return v && v.length > 0 ? v : undefined;
@@ -36,11 +44,15 @@ function resolveCandidate(rawPath: string, source: string): ResolveCfrJarPathRes
 export function resolveCfrJarPath(): ResolveCfrJarPathResult {
   const jvmsrc = trimEnv('JVMSRC_CFR_PATH');
   if (jvmsrc !== undefined) {
-    return resolveCandidate(jvmsrc, 'JVMSRC_CFR_PATH');
+    const r = resolveCandidate(jvmsrc, 'JVMSRC_CFR_PATH');
+    if (r.ok) warnOverrideOnce('JVMSRC_CFR_PATH', r.path);
+    return r;
   }
   const oracle = trimEnv('JVM_ORACLE_CFR_PATH');
   if (oracle !== undefined) {
-    return resolveCandidate(oracle, 'JVM_ORACLE_CFR_PATH');
+    const r = resolveCandidate(oracle, 'JVM_ORACLE_CFR_PATH');
+    if (r.ok) warnOverrideOnce('JVM_ORACLE_CFR_PATH', r.path);
+    return r;
   }
   try {
     return { ok: true, path: getBundledResource('cfr.jar') };

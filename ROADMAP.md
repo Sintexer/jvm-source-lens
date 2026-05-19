@@ -51,6 +51,18 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [ ] MCP / CLI `search_in_artifact` — grep-like search across all classes in one resolved dependency JAR (sources + CFR fallback); hits grouped by `className` + provenance (**vital gap · priority: P2**)
 - [ ] Auto-infer `modulePath` when the FQN resolves in exactly one module (keep explicit `modulePath` for conflicts; discovery via `resolve_dependencies` / `settings.gradle`)
 
+### Security hardening (post-audit 2026-05)
+
+- [ ] Strip JVM-injection env vars from Gradle subprocess (mirrors CFR/javap hardening)
+- [x] FQN validation before `javap` in bytecode-only path (flag-injection guard)
+- [x] Clamp `limit` at MCP Zod boundary for `search_classes`
+- [x] Log warning when `JVMSRC_CFR_PATH` / `JVM_ORACLE_CFR_PATH` override is used
+- [ ] JAR size guard before `fflate` reads (OOM via large / malicious JAR)
+- [ ] Document `gradlew` trust model + add `JVMSRC_USE_SYSTEM_GRADLE` opt-out
+- [ ] Validate `--dir` destination in `jvmsrc init` (warn/block paths outside home)
+- [ ] ReDoS mitigation for regex mode in `find_in_class_source`
+- [ ] Skip symlinks-to-directories in build-input cache walk
+
 ### P3 — Future / post–v2
 
 - [ ] MCP hierarchy discovery: `get_implementors` / `get_subclasses` (inverted index over resolved JARs; §12.2)
@@ -458,6 +470,30 @@ Optional: `modulePath`, `configuration`, `includeTest`, `forceRefresh` — same 
 - [ ] When `modulePath` is omitted and the class resolves in exactly one module, use that module
 - [ ] When multiple modules match, return a structured conflict (not a silent wrong module) with candidate `modulePath` values
 - [ ] Behavior unchanged when `modulePath` is explicitly provided
+
+---
+
+## Security hardening (post-audit 2026-05)
+
+Findings from structured security review (2026-05-19). Items ordered by effort — quick wins first.
+
+### Quick wins (trivial, no behaviour change)
+
+- [x] **Clamp `search_classes` `limit` at MCP boundary** — already present: `z.number().int().positive().max(200)` in `searchClassesInputSchema` (`src/mcp.ts:399`).
+- [x] **FQN guard before javap in bytecode path** — already present: both `get-method-signatures-bytecode.ts` and `get-class-structure.ts` gate through `findClasspathOwningClass` → `fqnToZipRelPaths`, which returns `INVALID_FQN` before any javap spawn.
+- [x] **Warn when CFR JAR override is active** — emit `[jvmsrc] using CFR JAR override: <path>` to stderr whenever `JVMSRC_CFR_PATH` / `JVM_ORACLE_CFR_PATH` is honoured, so operators see non-bundled JARs at runtime. (`src/decompiler/resolve-cfr-jar.ts`)
+- [ ] **Validate `--dir` destination in `jvmsrc init`** — resolve the path and warn (or refuse with `--force`) when it is outside the user's home directory, preventing accidental writes to sensitive locations. (`src/cli-skill-install.ts:119`)
+
+### Medium effort
+
+- [ ] **Strip JVM-injection env vars from Gradle subprocess** — reuse or extend `buildCfrSpawnEnv()` to strip `JAVA_TOOL_OPTIONS`, `_JAVA_OPTIONS`, `JDK_JAVA_OPTIONS`, `LD_PRELOAD`, `DYLD_INSERT_LIBRARIES` before spawning Gradle; currently only CFR/javap apply this hardening. (`src/resolvers/gradle/spawn-gradle.ts:80`)
+- [ ] **JAR size guard before `fflate` reads** — add a `statSync` size check (configurable via `JVMSRC_MAX_JAR_BYTES`, default 500 MB) before `readFileSync(jarAbsPath)` in `readZipEntryUtf8` / `zipEntryExists`; rejects unreasonably large or malicious JARs before they are loaded into memory. (`src/extractor/zip-entry.ts:31`)
+- [ ] **Skip symlinked directories in build-input cache walk** — call `lstatSync` before recursing in `walk()` and skip entries where `isSymbolicLink()` is true; prevents following symlinks that point outside the project root during cache hash computation. (`src/cache/index.ts:48`)
+
+### Larger / design work
+
+- [ ] **Document `gradlew` trust model + `JVMSRC_USE_SYSTEM_GRADLE` opt-out** — add a SECURITY.md / SPEC note stating that launching `./gradlew` is intentional (wrapper trust = project trust) and expose an env var `JVMSRC_USE_SYSTEM_GRADLE=1` that forces the system `gradle` binary, giving MCP-host operators a way to opt out of running untrusted wrapper scripts. (`src/resolvers/gradle/gradle-wrapper-command.ts`, SPEC.md)
+- [ ] **ReDoS mitigation for regex in `find_in_class_source`** — the current iteration cap (`maxHits + 10_000`) counts match advances, not backtracking steps; a catastrophic pattern against an 8 MiB source can still freeze the worker. Options: run regex in a `Worker` thread with a wall-clock deadline, adopt a linear-time engine (`re2`), or document and accept the risk. (`src/class-source-text-search.ts:169`)
 
 ---
 
