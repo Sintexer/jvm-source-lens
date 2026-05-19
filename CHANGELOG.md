@@ -4,6 +4,13 @@ All notable changes to **jvmsrc** are documented in this file.
 
 This file is updated by **[Release Please](https://github.com/googleapis/release-please)** when a release PR merges to `master`. Contributors use **Conventional Commits** on PRs to `master` — see [RELEASING.md](RELEASING.md).
 
+## [1.3.3](https://github.com/Sintexer/jvm-source-lens/compare/v1.3.2...v1.3.3) (2026-05-19)
+
+
+### Bug Fixes
+
+* strip env when spawning gradle subprocess ([59d95fb](https://github.com/Sintexer/jvm-source-lens/commit/59d95fb35755212020c8cc1d7b47a0ceb93e0fc2))
+
 ## [1.3.2](https://github.com/Sintexer/jvm-source-lens/compare/v1.3.1...v1.3.2) (2026-05-19)
 
 
