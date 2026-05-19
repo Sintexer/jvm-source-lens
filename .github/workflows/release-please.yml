@@ -37,6 +37,8 @@ jobs:
         with:
           bun-version: "1.3.14"
 
+      # Trusted publishing (npm): OIDC via id-token — do not set NODE_AUTH_TOKEN here.
+      # npmjs.com → jvmsrc → Settings → Trusted publishing → GitHub Actions (this repo + workflow).
       - uses: actions/setup-node@v5
         if: ${{ steps.release.outputs.release_created }}
         with:
@@ -51,5 +53,3 @@ jobs:
 
       - run: npm publish --provenance --access public
         if: ${{ steps.release.outputs.release_created }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -70,12 +70,27 @@ While **`0.x`**, `bump-minor-pre-major` makes `feat:` bump **minor** (0.1.0 → 
 | Stale Release PR | Close it if the base is wrong; re-run **release-please** on `master` |
 | Old PR targeted wrong branch | Close stale Release PR (e.g. into `develop`); re-run on `master` |
 
+### npm publish (CI)
+
+**Preferred: [Trusted publishing](https://docs.npmjs.com/trusted-publishers)** (no `NPM_TOKEN` secret).
+
+1. On [npmjs.com](https://www.npmjs.com/) → **jvmsrc** → **Settings** → **Trusted publishing** → **GitHub Actions**.
+2. Repository: `Sintexer/jvm-dependency-resolver` (adjust if forked).
+3. Workflow filename: `release-please.yml`, environment: *(leave empty unless you use a GitHub Environment)*.
+4. Merge the workflow change that **omits** `NODE_AUTH_TOKEN` on `npm publish` (OIDC only).
+
+`release-please.yml` already sets `permissions: id-token: write` and `registry-url` on `setup-node`; that is enough when trusted publishing is configured.
+
+**If publish still asks for OTP:** CI is still using a token (`NPM_TOKEN` secret or `NODE_AUTH_TOKEN` in the workflow). Remove the secret from the publish step. Do not use a personal **Publish** token with 2FA in CI.
+
+**Fallback (no trusted publishing):** Create an npm **Granular Access Token** or classic **Automation** token with publish rights and **“Bypass 2FA for automation”** enabled on your npm account. Store as repo secret `NPM_TOKEN` and set `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` on the publish step only — not both OIDC and token.
+
 ### Secrets
 
 | Secret | Purpose |
 |--------|---------|
-| **`NPM_TOKEN`** | npm publish (Automation token) |
-| `GITHUB_TOKEN` | Release Please PRs + GitHub releases |
+| `GITHUB_TOKEN` | Release Please PRs + GitHub releases (built-in) |
+| **`NPM_TOKEN`** | Optional fallback only if not using trusted publishing |
 
 ## What CI runs when
 
