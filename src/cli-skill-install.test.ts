@@ -66,7 +66,7 @@ describe('cli-skill-install', () => {
       scope: 'user',
       projectRoot: parent,
       destDir: parent,
-      overwrite: false,
+      overwrite: true, // --force required for paths outside home directory
       dryRun: false,
     });
     expect(r.ok).toBe(true);
@@ -83,7 +83,7 @@ describe('cli-skill-install', () => {
       scope: 'user',
       projectRoot: parent,
       destDir: parent,
-      overwrite: false,
+      overwrite: true, // --force required for paths outside home directory
       dryRun: false,
     });
     expect(first.ok).toBe(true);
