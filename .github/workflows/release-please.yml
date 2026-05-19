@@ -44,6 +44,11 @@ jobs:
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Upgrade npm (trusted publishing requires npm ≥ 11.5.1)
+        if: ${{ steps.release.outputs.release_created }}
+        run: npm install -g npm@11 && npm --version
 
       - run: bun install --frozen-lockfile
         if: ${{ steps.release.outputs.release_created }}

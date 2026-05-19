@@ -15,7 +15,7 @@ Report issues against the latest published version when possible.
 
 Please **do not** open public GitHub issues for security-sensitive reports.
 
-1. Use [GitHub private vulnerability reporting](https://github.com/Sintexer/jvm-dependency-resolver/security/advisories/new) for this repository, **or**
+1. Use [GitHub private vulnerability reporting](https://github.com/Sintexer/jvm-source-lens/security/advisories/new) for this repository, **or**
 2. Email the maintainer listed in [package.json](package.json) / repository contacts.
 
 Include steps to reproduce, impact, and affected versions. We aim to acknowledge reports within a few business days.

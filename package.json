@@ -6,11 +6,11 @@
   "author": "Ilya Buglakov",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Sintexer/jvm-dependency-resolver.git"
+    "url": "https://github.com/Sintexer/jvm-source-lens.git"
   },
-  "homepage": "https://github.com/Sintexer/jvm-dependency-resolver#readme",
+  "homepage": "https://github.com/Sintexer/jvm-source-lens#readme",
   "bugs": {
-    "url": "https://github.com/Sintexer/jvm-dependency-resolver/issues"
+    "url": "https://github.com/Sintexer/jvm-source-lens/issues"
   },
   "keywords": [
     "gradle",

@@ -2,7 +2,7 @@
 
 All notable changes to **jvmsrc** are documented in this file.
 
-This file is updated by **[Release Please](https://github.com/googleapis/release-please)** when a release PR merges to `master`. Contributors use **Conventional Commits** on PRs to `develop` — see [RELEASING.md](RELEASING.md).
+This file is updated by **[Release Please](https://github.com/googleapis/release-please)** when a release PR merges to `master`. Contributors use **Conventional Commits** on PRs to `master` — see [RELEASING.md](RELEASING.md).
 
 ## [1.3.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.2.1...v1.3.0) (2026-05-19)
 
@@ -87,7 +87,7 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 * improve windows compatibility ([5cfe0db](https://github.com/Sintexer/jvm-source-lens/commit/5cfe0db2c55fc9bfa8367c84743cad959ff85a24))
 * remove package.lock, switch to bun only ([215ae8f](https://github.com/Sintexer/jvm-source-lens/commit/215ae8ff9c3ef6cb5ea6f19d2f9cee4e9fd08b42))
 
-## [0.1.0](https://github.com/Sintexer/jvm-dependency-resolver/releases/tag/v0.1.0) (2026-05-19)
+## [0.1.0](https://github.com/Sintexer/jvm-source-lens/releases/tag/v0.1.0) (2026-05-19)
 
 ### Features
 
