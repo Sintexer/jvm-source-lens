@@ -13,6 +13,10 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ---
 
+## Plan to plan
+
+- [ ] Compact version of commands: json output is large. We need to keep it concise. Especialy discovery commands like get_class_structure. It should point out the clas use cases, it should not overflow the ontext on large file.
+
 ## Summary checklist
 
 ### P0 — MVP core
