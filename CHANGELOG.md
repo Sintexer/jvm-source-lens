@@ -16,6 +16,19 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 - Compact text formatters (`src/text-format/`): declaration-line method listings, resolution summary, search hits, etc.
 - MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
 
+## [1.7.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.6.0...v1.7.0) (2026-05-22)
+
+
+### Features
+
+* support concise formats by default ([1dc449a](https://github.com/Sintexer/jvm-source-lens/commit/1dc449a38dbb2455c96f3772a374aac3fb8b0f8f))
+
+
+### Bug Fixes
+
+* cover test class path resolution ([659fec5](https://github.com/Sintexer/jvm-source-lens/commit/659fec54909376f5e2165c39b227491b3c6d1474))
+* fix linter error in tests ([1c15228](https://github.com/Sintexer/jvm-source-lens/commit/1c15228d0f78a4cc21d143c2657c81a823874430))
+
 ## [1.6.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.5.0...v1.6.0) (2026-05-19)
 
 
