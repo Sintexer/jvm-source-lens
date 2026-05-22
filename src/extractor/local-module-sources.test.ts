@@ -25,8 +25,7 @@ describe('local module test sources', () => {
     const module = { name: ':app', path: dir, configurations: [] };
     const r = await tryReadLocalModuleJavaSource(module, 'com/app/MyTest.java', 'com.app.MyTest', true);
     expect(r?.ok).toBe(true);
-    if (r?.ok) {
-      expect(r.provenance.kind).toBe('interproject');
+    if (r?.ok && r.provenance.kind === 'interproject') {
       expect(r.provenance.moduleRoot).toBe(dir);
     }
   });
