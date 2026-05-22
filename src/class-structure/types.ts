@@ -129,6 +129,8 @@ export type ClassStructureField = {
 
 export type ClassStructureProvenance = MethodSignatureProvenance;
 
+export type ClassStructureScope = 'overview' | 'declared' | 'effective' | 'full';
+
 export type GetClassStructureSuccess = {
   ok: true;
   className: string;
@@ -140,6 +142,8 @@ export type GetClassStructureSuccess = {
   methods: ClassStructureMethod[];
   sourceAvailable: boolean;
   provenance: ClassStructureProvenance;
+  /** Raw class-level Javadoc when parsed from `.java` (for compact text `Purpose:`). */
+  classPurpose?: string | null;
   /** Present when `include` lists `hierarchy`. */
   typeHierarchy?: ClassStructureTypeHierarchy;
   /** Declared runtime-visible type annotations from javap when `include` lists `annotations`. */

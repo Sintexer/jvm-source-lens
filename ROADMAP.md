@@ -13,10 +13,6 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ---
 
-## Plan to plan
-
-- [ ] Compact version of commands: json output is large. We need to keep it concise. Especialy discovery commands like get_class_structure. It should point out the clas use cases, it should not overflow the ontext on large file.
-
 ## Summary checklist
 
 ### P0 — MVP core
@@ -54,6 +50,8 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] MCP / CLI `find_in_class_source` — pattern match inside one resolved compilation unit; return hit line(s) or block + optional ±N context lines (**relevance: high · priority: P2**)
 - [ ] MCP / CLI `search_in_artifact` — grep-like search across all classes in one resolved dependency JAR (sources + CFR fallback); hits grouped by `className` + provenance (**vital gap · priority: P2**)
 - [ ] Auto-infer `modulePath` when the FQN resolves in exactly one module (keep explicit `modulePath` for conflicts; discovery via `resolve_dependencies` / `settings.gradle`)
+- [x] Compact (plain text) / full (JSON) response modes — default compact; `--full` / MCP `full: true`; `get_class_structure` scopes
+- [ ] Compact / summary response modes for discovery tools (`get_class_structure`, `resolve_dependencies`, others) — agent-sized JSON without losing “what to call next” (**priority: P2**)
 
 ### Security hardening (post-audit 2026-05)
 
@@ -474,6 +472,32 @@ Optional: `modulePath`, `configuration`, `includeTest`, `forceRefresh` — same 
 - [ ] When `modulePath` is omitted and the class resolves in exactly one module, use that module
 - [ ] When multiple modules match, return a structured conflict (not a silent wrong module) with candidate `modulePath` values
 - [ ] Behavior unchanged when `modulePath` is explicitly provided
+
+---
+
+### Compact (plain text) / full (JSON) response modes
+
+**Shipped:** Default responses are **plain text** (no JSON on success). **`full: true`** (MCP) or **`--full` / `--json`** (CLI) restores structured JSON. **`--verbose` / `-v`** on CLI remains **Gradle stderr only** — not payload size.
+
+**`get_class_structure` scopes (compact text):**
+
+| Scope | Use |
+|-------|-----|
+| **`overview`** (default) | Class purpose, declared method **names**, counts — no signature lines |
+| **`declared`** | Declaration lines per declared method + fields |
+| **`effective`** | Declared + capped inherited API (plain-text footer when truncated) |
+| **`full: true`** | Legacy JSON `structuredContent` |
+
+**Other tools (compact text):** `resolve_dependencies`, `search_classes`, `get_method_signature`, `find_in_class_source`, `get_class_source` (source + provenance footer), `list_modules`.
+
+**References:** [SPEC.md §8.1.4](SPEC.md), [SPEC.md §8.2](SPEC.md), [src/text-format/](src/text-format/), [src/response-detail.ts](src/response-detail.ts), [src/mcp-tool-result.ts](src/mcp-tool-result.ts)
+
+- [x] SPEC §8.1.4 + §8.2: compact vs full; scopes; agent ladder in MCP instructions
+- [x] `src/text-format/` declaration-line renderers
+- [x] `get_class_structure` scopes + `classPurpose`
+- [x] MCP: omit `structuredContent` on compact success; `full` on all tools
+- [x] CLI: `resolve` text default; `--full` / `--json` for JSON
+- [x] Tests + jvmsrc skill + MCP tool descriptions
 
 ---
 

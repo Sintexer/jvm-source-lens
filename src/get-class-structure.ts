@@ -18,6 +18,7 @@ import type {
   ClassStructureIncludeSection,
   ClassStructureMethod,
   ClassStructureProvenance,
+  ClassStructureScope,
   ClassStructureTypeHierarchy,
   GetClassStructureResult,
   JavapClassHeader,
@@ -45,6 +46,8 @@ export type GetClassStructureOptions = {
   forceRefresh?: boolean;
   /** When set, selects optional response sections; omit for legacy defaults (fields on; hierarchy/annotations off). */
   include?: ClassStructureIncludeSection[];
+  /** Compact text projection; `full` scope is for JSON via MCP `full: true`. Default `overview`. */
+  scope?: ClassStructureScope;
 };
 
 function wantsSection(include: ClassStructureIncludeSection[] | undefined, section: ClassStructureIncludeSection): boolean {
@@ -605,6 +608,7 @@ export async function getClassStructure(
     methods,
     sourceAvailable,
     provenance,
+    classPurpose: skeleton?.typeJavadoc ?? null,
     ...(typeHierarchy ? { typeHierarchy } : {}),
     ...(classAnnotations ? { classAnnotations } : {}),
   };

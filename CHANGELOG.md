@@ -4,6 +4,18 @@ All notable changes to **jvmsrc** are documented in this file.
 
 This file is updated by **[Release Please](https://github.com/googleapis/release-please)** when a release PR merges to `master`. Contributors use **Conventional Commits** on PRs to `master` — see [RELEASING.md](RELEASING.md).
 
+## Unreleased
+
+### Breaking changes
+
+- **MCP / CLI default responses are plain text**, not JSON. Scripts and agents that parsed `structuredContent` on every success must pass **`full: true`** (MCP) or **`jvmsrc resolve --full`** / **`--json`** (CLI) for structured JSON.
+- **`get_class_structure`:** default compact text uses **`scope: overview`** (class purpose + method names). Use **`scope: declared`** for declaration lines, **`full: true`** for the previous JSON payload.
+
+### Features
+
+- Compact text formatters (`src/text-format/`): declaration-line method listings, resolution summary, search hits, etc.
+- MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
+
 ## [1.6.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.5.0...v1.6.0) (2026-05-19)
 
 

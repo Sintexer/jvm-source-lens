@@ -35,20 +35,21 @@ search_classes(query: "*Repository", projectRoot: "...", modulePath: ":core", li
 
 Skip if you already have the FQN from an `import`. Pick best hit; disambiguate with `get_class_structure` if needed.
 
-### 3 — Inspect (minimal tool)
+### 3 — Inspect (compact text default)
 
-**Escalate left → right; stop when enough:**
+**Default:** plain text responses. Do **not** pass `full: true` unless parsing JSON. **`--verbose`** on CLI is Gradle stderr only.
 
-`get_method_signature` → `get_class_structure` → `find_in_class_source` → `get_class_source` (excerpt) → `get_class_source` (full file)
+**Discovery ladder:** `search_classes` → `get_class_structure` (**`scope: overview`**) → `get_method_signature` → `get_class_structure` (**`scope: declared`**) → `find_in_class_source` → `get_class_source` (excerpt) → full file / `full: true`.
 
 | Need | Tool |
 |------|------|
-| Parameters, return type, overloads, `throws` | `get_method_signature` (`methodName: "<init>"` for constructors) |
-| Fields, hierarchy, annotations, API browse | `get_class_structure` — optional `include: ['hierarchy','fields','annotations']` |
-| String/regex inside a known class | `find_in_class_source` (`regex: true` optional; `contextLines`, `maxHits`) |
-| Method bodies or line slice | `get_class_source` with `methodNames` and/or `startLine`+`endLine` (both required for lines) |
-| JVM descriptors / synthetic members | `get_method_signature` with `bytecodeOnly: true` |
-| Dependency graph / module list | `resolve_dependencies` |
+| What is this class? (purpose, method names) | `get_class_structure` (default overview) |
+| One method’s overloads | `get_method_signature` |
+| Declared signatures as lines | `get_class_structure` `scope: declared` |
+| String/regex in known class | `find_in_class_source` |
+| Method bodies / line slice | `get_class_source` with `methodNames` / line range |
+| JVM descriptors | `get_method_signature` `bytecodeOnly: true` |
+| Module list (text) | `resolve_dependencies` — `full: true` only for full JSON graph |
 
 **`get_class_source` excerpts:** `methodNames` (or single `methodName`); `<init>` for constructors; response may include `excerpt` with `matchedMethodNames` / `unmatchedMethodNames`. Line ranges are **1-based inclusive**. When `sourceAvailable: false`, `lineNumbersReliable` may be false.
 
@@ -104,12 +105,13 @@ Pass **`modulePath`** when known. Without it, all modules are searched; conflict
 ## Quick reference
 
 ```
-resolve_dependencies(projectRoot, forceRefresh?)
 search_classes(query, projectRoot, modulePath?, limit?)
-get_method_signature(className, methodName, projectRoot, modulePath?, bytecodeOnly?)
-get_class_structure(className, projectRoot, modulePath?, include?)
-find_in_class_source(className, projectRoot, query, modulePath?, regex?, contextLines?, maxHits?)
-get_class_source(className, projectRoot, modulePath?, methodNames?, startLine?, endLine?)
+get_class_structure(className, projectRoot, scope: "overview")   # discovery
+get_class_structure(className, projectRoot, scope: "declared")  # signature lines
+get_method_signature(className, methodName, projectRoot, modulePath?)
+find_in_class_source(className, projectRoot, query, ...)
+get_class_source(className, projectRoot, methodNames: ["foo"])
+resolve_dependencies(projectRoot)   # text summary; full: true for JSON
 ```
 
 **CLI:** `jvmsrc get … --method foo`, `jvmsrc find-in-class Fqn "needle" -p …`

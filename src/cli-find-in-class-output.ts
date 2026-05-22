@@ -1,14 +1,20 @@
 import type { FindInClassSourceResult } from './find-in-class-source.js';
+import {
+  formatFindInClassNoMatchText,
+  formatFindInClassSourceText,
+} from './text-format/format-find-in-class.js';
 
 export type CliFindInClassOutputOptions = {
+  /** Full structured JSON on stdout (implies full detail). */
   json?: boolean;
+  full?: boolean;
 };
 
 export function writeCliFindInClassResult(
   result: FindInClassSourceResult,
   options?: CliFindInClassOutputOptions,
 ): void {
-  const json = options?.json ?? false;
+  const json = Boolean(options?.json || options?.full);
   const failureExtras =
     !result.ok && result.diagnosticId !== undefined
       ? { diagnosticId: result.diagnosticId, ...(result.hint !== undefined ? { hint: result.hint } : {}) }
@@ -34,25 +40,12 @@ export function writeCliFindInClassResult(
   }
 
   if (!result.found) {
-    console.error(result.description);
+    console.log(formatFindInClassNoMatchText(result));
     process.exitCode = 1;
     return;
   }
 
-  for (const hit of result.hits) {
-    const loc = hit.block
-      ? `lines ${hit.block.startLine}-${hit.block.endLine}`
-      : `line ${hit.line}, column ${hit.column}`;
-    console.log(`--- ${loc} ---`);
-    for (const line of hit.contextBefore) {
-      console.log(line);
-    }
-    console.log(hit.matchedText);
-    for (const line of hit.contextAfter) {
-      console.log(line);
-    }
-    console.log('');
-  }
+  console.log(formatFindInClassSourceText(result));
   if (result.truncated) {
     console.error(
       `(${result.hitCount} of ${result.totalMatches} match(es) shown; increase --max-hits or narrow the query)`,

@@ -24,6 +24,21 @@ import { buildListModulesPayload } from './list-modules-payload.js';
 import type { ClassSearchHit, ClassSearchIndexMeta, SearchClassesResult } from './class-search/types.js';
 import type { ClassSourceTextSearchHit } from './class-source-text-search.js';
 import type { FindInClassSourceResult } from './find-in-class-source.js';
+import { resolveResponseDetailWithEnv, type ResponseDetail } from './response-detail.js';
+import {
+  formatClassStructureSummaryLine,
+  formatClassStructureText,
+} from './text-format/format-class-structure.js';
+import { formatClassSourceCompactText } from './text-format/format-class-source.js';
+import {
+  formatFindInClassNoMatchText,
+  formatFindInClassSourceText,
+} from './text-format/format-find-in-class.js';
+import { formatMethodSignatureText } from './text-format/format-method-signature.js';
+import { formatResolutionSummaryText } from './text-format/format-resolve.js';
+import { formatListModulesText } from './text-format/format-list-modules.js';
+import { formatSearchClassesText } from './text-format/format-search.js';
+import type { ClassStructureScope as ClassStructureScopeType } from './class-structure/types.js';
 
 /** MCP agent recovery categories (transient / validation / business / permission). */
 export type McpErrorCategory = 'transient' | 'validation' | 'business' | 'permission';
@@ -159,7 +174,32 @@ export type ClassSourceQueryContext = {
   modulePath?: string;
   configuration?: string;
   includeTest?: boolean;
+  /** When true, return structured JSON (`structuredContent`). Default compact plain text. */
+  full?: boolean;
 };
+
+export type ClassStructureQueryContext = ClassSourceQueryContext & {
+  scope?: ClassStructureScopeType;
+};
+
+function toolResponseDetail(full?: boolean): ResponseDetail {
+  return resolveResponseDetailWithEnv(full);
+}
+
+function mcpCompactSuccess(text: string): CallToolResult {
+  return {
+    isError: false,
+    content: [{ type: 'text', text }],
+  };
+}
+
+function mcpFullSuccess(text: string, structuredContent: Record<string, unknown>): CallToolResult {
+  return {
+    isError: false,
+    content: [{ type: 'text', text }],
+    structuredContent,
+  };
+}
 
 export type McpMethodSignatureSuccessPayload = {
   ok: true;
@@ -279,6 +319,7 @@ export function mcpToolResultFromFindInClassSource(
   result: FindInClassSourceResult,
   query: FindInClassSourceQueryContext,
 ): CallToolResult {
+  const detail = toolResponseDetail(query.full);
   if (!result.ok) {
     if (result.error.code === 'CLASS_NOT_FOUND') {
       return mcpNotFoundResult(result.error, query);
@@ -287,6 +328,9 @@ export function mcpToolResultFromFindInClassSource(
   }
 
   if (!result.found) {
+    if (detail === 'compact') {
+      return mcpCompactSuccess(formatFindInClassNoMatchText(result));
+    }
     const payload: McpFindInClassSourceNoMatchPayload = {
       ok: true,
       found: false,
@@ -299,18 +343,14 @@ export function mcpToolResultFromFindInClassSource(
       description: result.description,
     };
     const scope = formatQueryScope(query);
-    return {
-      isError: false,
-      content: [
-        {
-          type: 'text',
-          text:
-            `find_in_class_source: no matches for ${JSON.stringify(result.query)} in ${result.className}${scope}. ` +
-            `The class was resolved successfully.`,
-        },
-      ],
-      structuredContent: payload,
-    };
+    return mcpFullSuccess(
+      `find_in_class_source: no matches for ${JSON.stringify(result.query)} in ${result.className}${scope}.`,
+      payload,
+    );
+  }
+
+  if (detail === 'compact') {
+    return mcpCompactSuccess(formatFindInClassSourceText(result));
   }
 
   const hits = result.hits.map(mapFindHit);
@@ -332,21 +372,18 @@ export function mcpToolResultFromFindInClassSource(
   const scope = formatQueryScope(query);
   const lineHint = result.lineNumbersReliable ? '' : ' (line numbers approximate; decompiled source)';
   const truncHint = result.truncated ? `; showing ${result.hitCount} of ${result.totalMatches}` : '';
-  return {
-    isError: false,
-    content: [
-      {
-        type: 'text',
-        text:
-          `find_in_class_source: ${result.totalMatches} match(es) for ${JSON.stringify(result.query)} in ${result.className}${scope}; returning ${result.hitCount}${truncHint}${lineHint}.`,
-      },
-    ],
-    structuredContent: payload,
-  };
+  return mcpFullSuccess(
+    `find_in_class_source: ${result.totalMatches} match(es) for ${JSON.stringify(result.query)} in ${result.className}${scope}; returning ${result.hitCount}${truncHint}${lineHint}.`,
+    payload,
+  );
 }
 
 export function mcpToolResultFromClassSource(result: ClassSourceLookupResult, query: ClassSourceQueryContext): CallToolResult {
+  const detail = toolResponseDetail(query.full);
   if (result.ok) {
+    if (detail === 'compact') {
+      return mcpCompactSuccess(formatClassSourceCompactText(result));
+    }
     const payload: McpClassSourceSuccessPayload = {
       ok: true,
       found: true,
@@ -368,7 +405,7 @@ export function mcpToolResultFromClassSource(result: ClassSourceLookupResult, qu
     const truncHint = result.outputTruncated
       ? `; source truncated (${result.sourceLength} chars before cap)`
       : '';
-    return mcpSuccessResult(
+    return mcpFullSuccess(
       result.sourceAvailable
         ? `Retrieved source for ${result.className} (original sources).${excerptHint}${truncHint}`
         : `Retrieved source for ${result.className} (decompiled; sourceAvailable=false).${excerptHint}${truncHint}`,
@@ -418,20 +455,21 @@ function mcpToolResultFromResolutionFailure(
 export function mcpToolResultFromResolutionResult(
   result: ResolutionResult,
   projectRoot: string,
+  full?: boolean,
 ): CallToolResult {
+  const detail = toolResponseDetail(full);
   if (result.ok) {
     const { output } = result;
+    if (detail === 'compact') {
+      return mcpCompactSuccess(formatResolutionSummaryText(output));
+    }
     const payload: McpResolveDependenciesSuccessPayload = { ok: true, resolution: output };
     const partialErrors = output.errors.length;
     const summary =
       `Resolved ${output.modules.length} module(s) at ${output.resolvedAt}` +
       (partialErrors > 0 ? ` with ${partialErrors} partial resolution warning(s) in errors[]` : '') +
       '.';
-    return {
-      isError: false,
-      content: [{ type: 'text', text: summary }],
-      structuredContent: payload,
-    };
+    return mcpFullSuccess(summary, payload);
   }
 
   return mcpToolResultFromResolutionFailure(result, projectRoot);
@@ -440,9 +478,14 @@ export function mcpToolResultFromResolutionResult(
 export function mcpToolResultFromListModules(
   result: ResolutionResult,
   projectRoot: string,
+  full?: boolean,
 ): CallToolResult {
+  const detail = toolResponseDetail(full);
   if (result.ok) {
     const data = buildListModulesPayload(result.output);
+    if (detail === 'compact') {
+      return mcpCompactSuccess(formatListModulesText(data));
+    }
     const payload: McpListModulesSuccessPayload = { ok: true, ...data };
     const configRows = data.modules.reduce((n, m) => n + m.configurations.length, 0);
     const summary =
@@ -451,11 +494,7 @@ export function mcpToolResultFromListModules(
         ? ` (${data.resolutionWarningCount} resolution warning(s); use resolve_dependencies for full errors[])`
         : '') +
       '.';
-    return {
-      isError: false,
-      content: [{ type: 'text', text: summary }],
-      structuredContent: payload,
-    };
+    return mcpFullSuccess(summary, payload);
   }
 
   return mcpToolResultFromResolutionFailure(result, projectRoot);
@@ -465,7 +504,18 @@ export function mcpToolResultFromSearchClasses(
   result: SearchClassesResult,
   query: SearchClassesQueryContext,
 ): CallToolResult {
+  const detail = toolResponseDetail(query.full);
   if (result.ok) {
+    if (detail === 'compact') {
+      return mcpCompactSuccess(
+        formatSearchClassesText({
+          query: result.query,
+          totalMatches: result.totalMatches,
+          hits: result.hits,
+          limit: result.limit,
+        }),
+      );
+    }
     const hits: McpSearchClassesHitPayload[] = result.hits.map((h: ClassSearchHit) => ({
       className: h.className,
       simpleName: h.simpleName,
@@ -492,11 +542,7 @@ export function mcpToolResultFromSearchClasses(
     const summary =
       `search_classes: ${result.totalMatches} matching class(es) for ${JSON.stringify(result.query)}${scope}; returning ${hits.length} hit(s) (limit ${result.limit}). ` +
       `Index v${result.indexMeta.indexFormatVersion}, ${result.indexMeta.entryCount} entr(ies), sourceEnriched=${result.indexMeta.sourceEnrichedEntries}, skippedArtifacts=${result.indexMeta.skippedArtifacts}.`;
-    return {
-      isError: false,
-      content: [{ type: 'text', text: summary }],
-      structuredContent: payload,
-    };
+    return mcpFullSuccess(summary, payload);
   }
 
   return mcpFailureResult(result.error, query, pickDiag(result));
@@ -525,7 +571,11 @@ export function mcpToolResultFromMethodSignature(
   result: GetMethodSignatureResult,
   query: MethodSignatureQueryContext,
 ): CallToolResult {
+  const detail = toolResponseDetail(query.full);
   if (result.ok) {
+    if (detail === 'compact') {
+      return mcpCompactSuccess(formatMethodSignatureText(result));
+    }
     const overloads =
       result.sourceAvailable === true
         ? result.overloads.map((o) => {
@@ -563,11 +613,7 @@ export function mcpToolResultFromMethodSignature(
     const summary = result.methodFound
       ? `Found ${result.overloads.length} overload(s) for ${result.methodName} on ${result.className} (${metaHint}; sourceAvailable=${result.sourceAvailable}).`
       : `Class ${result.className} found on the classpath, but no overloads matched method ${JSON.stringify(result.methodName)} (constructors use <init>).`;
-    return {
-      isError: false,
-      content: [{ type: 'text', text: summary }],
-      structuredContent: payload,
-    };
+    return mcpFullSuccess(summary, payload);
   }
 
   if (result.error.code === 'CLASS_NOT_FOUND') {
@@ -595,9 +641,20 @@ function classStructureMethodsForMcpPayload(
 
 export function mcpToolResultFromClassStructure(
   result: GetClassStructureResult,
-  query: ClassSourceQueryContext,
+  query: ClassStructureQueryContext,
 ): CallToolResult {
+  const detail = toolResponseDetail(query.full);
   if (result.ok) {
+    if (detail === 'compact') {
+      const scope: ClassStructureScopeType =
+        query.scope && query.scope !== 'full' ? query.scope : 'overview';
+      return mcpCompactSuccess(
+        formatClassStructureText(result, {
+          scope,
+          classPurpose: result.classPurpose ?? null,
+        }),
+      );
+    }
     const payload: McpClassStructureSuccessPayload = {
       ok: true,
       found: true,
@@ -614,15 +671,7 @@ export function mcpToolResultFromClassStructure(
       ...(result.typeHierarchy ? { typeHierarchy: result.typeHierarchy } : {}),
       ...(result.classAnnotations ? { classAnnotations: result.classAnnotations } : {}),
     };
-    const inh = result.methods.filter((m: ClassStructureMethod) => m.inherited).length;
-    const summary =
-      `Structure for ${result.className}: ${result.methods.length} method(s) (${inh} inherited), ${result.fields.length} field(s); ` +
-      `sourceAvailable=${result.sourceAvailable}.`;
-    return {
-      isError: false,
-      content: [{ type: 'text', text: summary }],
-      structuredContent: payload,
-    };
+    return mcpFullSuccess(formatClassStructureSummaryLine(result), payload);
   }
 
   if (result.error.code === 'CLASS_NOT_FOUND') {
@@ -634,8 +683,9 @@ export function mcpToolResultFromClassStructure(
 
 function mcpClassStructureNotFoundResult(
   error: Extract<ClassSourceError, { code: 'CLASS_NOT_FOUND' }>,
-  query: ClassSourceQueryContext,
+  query: ClassStructureQueryContext,
 ): CallToolResult {
+  const detail = toolResponseDetail(query.full);
   const scope = formatQueryScope(query);
   const description =
     `The project classpath was resolved successfully${scope}, and ${error.searchedArtifactCount} external JAR(s) were scanned, ` +
@@ -644,6 +694,11 @@ function mcpClassStructureNotFoundResult(
     `Verify the fully-qualified name, ensure the dependency is declared, try a different modulePath or configuration ` +
     `(default compileClasspath; use includeTest for testCompileClasspath), or use forceRefresh after dependency changes. ` +
     `Inter-project module sources are not searched in this version.`;
+
+  const text = `No class found for ${JSON.stringify(error.className)} after scanning ${error.searchedArtifactCount} artifact(s)${scope}. The lookup completed successfully; the class is not on this classpath.`;
+  if (detail === 'compact') {
+    return mcpCompactSuccess(text);
+  }
 
   const payload: McpClassStructureNotFoundPayload = {
     ok: true,
@@ -655,16 +710,7 @@ function mcpClassStructureNotFoundResult(
     description,
   };
 
-  return {
-    isError: false,
-    content: [
-      {
-        type: 'text',
-        text: `No class found for ${JSON.stringify(error.className)} after scanning ${error.searchedArtifactCount} artifact(s)${scope}. The lookup completed successfully; the class is not on this classpath.`,
-      },
-    ],
-    structuredContent: payload,
-  };
+  return mcpFullSuccess(text, payload);
 }
 
 function mcpMethodSignatureNotFoundResult(
@@ -749,14 +795,6 @@ function mcpFailureResult(
   const envelope = classifyClassSourceError(error, query);
   const payload: McpClassSourceFailurePayload = { ...envelope.payload, ...diagnostics };
   return buildMcpErrorCallResult(envelope.summary, payload);
-}
-
-function mcpSuccessResult(summary: string, payload: McpClassSourceSuccessPayload): CallToolResult {
-  return {
-    isError: false,
-    content: [{ type: 'text', text: summary }],
-    structuredContent: payload,
-  };
 }
 
 function buildMcpErrorCallResult(summary: string, payload: McpClassSourceFailurePayload): CallToolResult {

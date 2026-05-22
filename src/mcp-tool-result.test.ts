@@ -50,7 +50,7 @@ test('CLASS_NOT_FOUND is not an MCP error (valid empty result)', () => {
   expect(sc.description).toContain('12');
 });
 
-test('mcpToolResultFromClassStructure CLASS_NOT_FOUND is not MCP error', () => {
+test('mcpToolResultFromClassStructure CLASS_NOT_FOUND is not MCP error (compact text)', () => {
   const r = mcpToolResultFromClassStructure(
     {
       ok: false,
@@ -64,9 +64,10 @@ test('mcpToolResultFromClassStructure CLASS_NOT_FOUND is not MCP error', () => {
     query,
   );
   expect(r.isError).toBe(false);
-  const sc = r.structuredContent as { found: boolean; searchedArtifactCount: number };
-  expect(sc.found).toBe(false);
-  expect(sc.searchedArtifactCount).toBe(5);
+  expect(r.structuredContent).toBeUndefined();
+  expect(r.content[0]?.type).toBe('text');
+  expect((r.content[0] as { text: string }).text).toContain('com.example.Missing');
+  expect((r.content[0] as { text: string }).text).toContain('5');
 });
 
 test('SIGNATURE_EXTRACT_FAILED without methodName classifies like javap failure', () => {
@@ -213,7 +214,7 @@ test('project root missing is validation', () => {
   expect(sc.code).toBe('RESOLUTION_FAILED');
 });
 
-test('success includes found=true', () => {
+test('success compact returns source text without structuredContent', () => {
   const r = mcpToolResultFromClassSource(
     {
       ok: true,
@@ -227,6 +228,26 @@ test('success includes found=true', () => {
       },
     },
     query,
+  );
+  expect(r.isError).toBe(false);
+  expect(r.structuredContent).toBeUndefined();
+  expect((r.content[0] as { text: string }).text).toContain('class T');
+});
+
+test('success full=true includes structured JSON', () => {
+  const r = mcpToolResultFromClassSource(
+    {
+      ok: true,
+      source: 'class T {}',
+      sourceAvailable: true,
+      className: 'com.example.T',
+      provenance: {
+        kind: 'sourcesJar',
+        coordinates: { group: 'g', name: 'a', version: '1' },
+        jarPath: '/tmp/a-sources.jar',
+      },
+    },
+    { ...query, full: true },
   );
   expect(r.isError).toBe(false);
   const sc = r.structuredContent as { found: boolean; source: string };

@@ -99,7 +99,7 @@ jvmsrc get com.example.MyClass -p /path/to/project -q > MyClass.java
 jvmsrc resolve -p /path/to/project --force-refresh
 ```
 
-Useful flags: `-p` / `--project`, `--module` (`:core:api`), `--configuration`, `--include-test`, `--force-refresh`, `--verbose`, `--method`, `--start-line` / `--end-line`.
+Useful flags: `-p` / `--project`, `--module` (`:core:api`), `--configuration`, `--include-test`, `--force-refresh`, `--verbose` (Gradle stderr only), `--method`, `--start-line` / `--end-line`. `jvmsrc resolve` defaults to a **text summary**; add `--full` or `--json` for full JSON.
 
 Repo fixture: `test/fixtures/gradle-smoke` — e.g. `jvmsrc get com.smoke.Core -p test/fixtures/gradle-smoke --module :core`.
 
@@ -120,18 +120,18 @@ After install, a typical server entry:
 
 Restart the MCP host after upgrading `jvmsrc`.
 
-> **Agents:** copy or reference **[SKILL.md](SKILL.md)** in your agent rules.
+> **Agents:** use **`jvmsrc init`** or **[SKILL.md](SKILL.md)**. Default tool responses are **plain text** (compact). Pass MCP **`full: true`** only when you need JSON (`structuredContent`). Discovery: `search_classes` → `get_class_structure` with **`scope: overview`** → `get_method_signature` for one method — not full-file source.
 
 ### Tools
 
 | Tool | Use when |
 |------|----------|
 | `search_classes` | Unknown FQN — substring or `*`/`?` glob on classpath |
-| `get_method_signature` | Overloads / parameters / `throws` (`bytecodeOnly: true` for strict javap) |
-| `get_class_structure` | Fields, methods, hierarchy — without full source |
+| `get_class_structure` | **Discovery:** default `scope: overview` (purpose + method names). **`scope: declared`** for signature lines. `full: true` for JSON |
+| `get_method_signature` | One method’s overloads (compact declaration lines) |
 | `find_in_class_source` | Search inside one class |
-| `get_class_source` | Full body or excerpt (`methodNames`, line range) — last resort |
-| `resolve_dependencies` | Dependency graph, `modules[]`, warm cache |
+| `get_class_source` | Body or excerpt (`methodNames`, line range) — last resort |
+| `resolve_dependencies` | Module summary (text); `full: true` for full `ResolutionOutput` |
 
 Prefer **`get_method_signature`** or **`get_class_structure`** over **`get_class_source`**. Every source response has **`sourceAvailable`**: `true` = real sources; `false` = CFR (structure OK, names/Javadoc may be synthetic).
 

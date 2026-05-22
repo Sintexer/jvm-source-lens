@@ -14,6 +14,7 @@ import { getClassSource } from './get-class-source.js';
 import { mergeSourceExcerptInputs } from './source-excerpt.js';
 import { resolveProjectRoot } from './project-path.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
+import { formatResolutionSummaryText } from './text-format/format-resolve.js';
 
 /** `jvmsrc com.example.Foo` → same as `jvmsrc get com.example.Foo` */
 function injectImplicitGetSubcommand(): void {
@@ -149,11 +150,15 @@ program
 
 program
   .command('resolve')
-  .description('Resolve Gradle dependencies and print ResolutionOutput JSON (uses resolution cache unless --force-refresh)')
+  .description(
+    'Resolve Gradle dependencies (compact text summary by default; --full or --json for ResolutionOutput JSON)',
+  )
   .option('-p, --project <path>', 'Path to the project root', process.cwd())
   .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle')
   .option('-v, --verbose', 'Stream Gradle stderr during resolution', false)
-  .action(async (options: { project: string; forceRefresh?: boolean; verbose?: boolean }) => {
+  .option('--full', 'Print full ResolutionOutput JSON (same as --json)', false)
+  .option('--json', 'Alias for --full', false)
+  .action(async (options: { project: string; forceRefresh?: boolean; verbose?: boolean; full?: boolean; json?: boolean }) => {
     const root = resolveProjectRoot(options.project);
     if (!root.ok) {
       console.error(root.message);
@@ -184,7 +189,12 @@ program
         process.exitCode = 1;
         return;
       }
-      console.log(JSON.stringify(result.output, null, 2));
+      const printFull = Boolean(options.full || options.json);
+      if (printFull) {
+        console.log(JSON.stringify(result.output, null, 2));
+      } else {
+        console.log(formatResolutionSummaryText(result.output));
+      }
     } finally {
       progress.finalize();
     }
@@ -204,7 +214,8 @@ program
   .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle', false)
   .option('-q, --quiet', 'Disable progress labels on stderr', false)
   .option('-v, --verbose', 'Stream Gradle stderr during resolution', false)
-  .option('--json', 'Print one JSON object on stdout', false)
+  .option('--json', 'Print one JSON object on stdout (full structured result)', false)
+  .option('--full', 'Alias for --json on find-in-class', false)
   .option('--context-lines <n>', 'Context lines above/below each hit (default 3)', (v) => parseInt(v, 10))
   .option('--max-hits <n>', 'Maximum hits to return (default 20, max 100)', (v) => parseInt(v, 10))
   .option('--regex', 'Treat query as a JavaScript RegExp pattern', false)

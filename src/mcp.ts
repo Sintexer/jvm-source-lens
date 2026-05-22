@@ -16,6 +16,7 @@ import {
   mcpToolResultFromUnexpectedError,
   mcpToolResultFromClassStructure,
   type ClassSourceQueryContext,
+  type ClassStructureQueryContext,
   type FindInClassSourceQueryContext,
   type MethodSignatureQueryContext,
   type SearchClassesQueryContext,
@@ -248,6 +249,8 @@ export const mcpFindInClassSourcePayloadSchema = z.union([
   }),
 ]);
 
+const fullResponseInput = { full: z.boolean().optional() };
+
 const findInClassSourceInputSchema = z.object({
   className: z.string().min(1),
   projectRoot: z.string().min(1),
@@ -259,6 +262,7 @@ const findInClassSourceInputSchema = z.object({
   contextLines: z.number().int().min(0).max(50).optional(),
   maxHits: z.number().int().min(1).max(100).optional(),
   regex: z.boolean().optional(),
+  ...fullResponseInput,
 });
 
 const getClassSourceInputSchema = z.object({
@@ -275,6 +279,7 @@ const getClassSourceInputSchema = z.object({
   /** 1-based inclusive line range in the full compilation unit (combine with `methodNames`). */
   startLine: z.number().int().positive().optional(),
   endLine: z.number().int().positive().optional(),
+  ...fullResponseInput,
 });
 
 const buildSystemInfoSchema = z.object({
@@ -397,11 +402,13 @@ const searchClassesInputSchema = z.object({
   includeTest: z.boolean().optional(),
   forceRefresh: z.boolean().optional(),
   limit: z.number().int().positive().max(200).optional(),
+  ...fullResponseInput,
 });
 
 const resolveDependenciesInputSchema = z.object({
   projectRoot: z.string().min(1),
   forceRefresh: z.boolean().optional(),
+  ...fullResponseInput,
 });
 
 const javapParameterSchema = z.object({
@@ -467,6 +474,7 @@ const getMethodSignatureInputSchema = z.object({
   forceRefresh: z.boolean().optional(),
   /** When true: javap -private -verbose only (no sources JAR or src/ fallback). Default false = IDE-first. */
   bytecodeOnly: z.boolean().optional(),
+  ...fullResponseInput,
 });
 
 const mcpMethodSignatureFailureSchema = z.object({
@@ -555,6 +563,8 @@ const classStructureTypeHierarchySchema = z.object({
   allSuperinterfaces: z.array(z.string()),
 });
 
+const classStructureScopeSchema = z.enum(['overview', 'declared', 'effective', 'full']);
+
 const getClassStructureInputSchema = z.object({
   className: z.string().min(1),
   projectRoot: z.string().min(1),
@@ -563,6 +573,9 @@ const getClassStructureInputSchema = z.object({
   includeTest: z.boolean().optional(),
   forceRefresh: z.boolean().optional(),
   include: z.array(z.enum(['hierarchy', 'fields', 'annotations'])).optional(),
+  /** Compact text detail: overview (default), declared, effective. Use full=true for JSON. */
+  scope: classStructureScopeSchema.optional(),
+  ...fullResponseInput,
 });
 
 const mcpClassStructureFailureSchema = z.object({
@@ -624,27 +637,37 @@ this project uses. If a tool fails, surface the error — do not fall back to ma
 under the repo or treat 0 hits as "class missing." Dependency classes live on the resolved
 classpath (JARs), not as source files under the module you are editing. Simple name only →
 \`search_classes\`; FQN from import → \`get_*\` directly. \`projectRoot\` = Gradle root (where gradlew lives).
- 
-## Tool Selection
- 
-Use the most specific tool for the task:
- 
-- Unknown FQN or simple class name (e.g. TradingMaskUtils) → \`search_classes\` on classpath — NOT \`**/Name.java\` in repo
-- Method signature / overloads / exceptions → \`get_method_signature\` (default: source-first)
-- Strict JVM descriptors, bridge or synthetic members → \`get_method_signature\` with \`bytecodeOnly: true\`
-- API surface, hierarchy, fields, annotations → \`get_class_structure\`
-- Full implementation body (only when needed) → \`get_class_source\` (use \`methodNames\` excerpt when possible)
-- Needle inside a known class (log literal, throw message) → \`find_in_class_source\`
-- Submodule names, dependency graph, version conflicts → \`resolve_dependencies\` (read \`resolution.modules[].name\`)
 
-Prefer \`get_method_signature\` or \`get_class_structure\` over \`get_class_source\` —
-they answer most questions at a fraction of the context cost.
+## Response detail (compact default)
 
-Full-file \`get_class_source\` may set \`outputTruncated: true\` when the body exceeds the configured
-character cap — use \`methodNames\` or line-range excerpts instead of raising limits.
+Tools return **plain text by default** (readable declaration lines, summaries). Omit \`full\` or set \`full: false\`.
+Pass \`full: true\` only when you must parse structured JSON programmatically.
 
-Always pass \`projectRoot\` (absolute path). Pass \`modulePath\` (Gradle logical name, e.g. \`:core:api\`)
-when scoping one submodule — from settings.gradle or resolve_dependencies once per session. Omit for single-module projects.
+**Discovery phase:** keep compact text. Do not pass \`full: true\` on every call.
+
+## Tool selection (narrowest tool first)
+
+Follow this ladder — do not skip to full-file source:
+
+1. \`search_classes\` — unknown FQN or simple name
+2. \`get_class_structure\` with default \`scope: overview\` — what is this class? (purpose + method names)
+3. \`get_method_signature\` — one method's overloads (preferred over listing all methods)
+4. \`get_class_structure\` with \`scope: declared\` — signature lines for many declared members
+5. \`find_in_class_source\` — needle in a known class (not repo grep)
+6. \`get_class_source\` with \`methodNames\` or line range — method bodies
+7. \`get_class_source\` full file or \`full: true\` — rare
+
+Anti-patterns:
+- Full \`get_class_source\` to discover method names → use \`get_class_structure\` overview
+- \`get_class_structure\` without \`scope\` on huge framework types → use \`overview\` or \`declared\`
+- \`full: true\` by default → wastes context; compact text is enough for agents
+- Full \`resolve_dependencies\` JSON for module names → compact text summary (default)
+
+Other tools:
+- Strict JVM descriptors → \`get_method_signature\` with \`bytecodeOnly: true\`
+- Hierarchy / annotations → \`get_class_structure\` with \`include\` (still prefer compact text; use \`full: true\` only if parsing JSON)
+
+Always pass \`projectRoot\` (absolute path). Pass \`modulePath\` when scoping one submodule.
  
 ## sourceAvailable
  
@@ -691,6 +714,7 @@ export async function startMcpServer(): Promise<void> {
       description:
         'Resolves the project classpath (cached), then returns Java source for a fully-qualified class name. ' +
         'Optional excerpt: methodNames (array; use <init> for constructors), and/or startLine/endLine (1-based) to avoid full-file payloads. ' +
+        'Agent usage: last resort for bodies; use methodNames excerpt first. Default compact=text source + provenance footer; full=true for JSON envelope. ' +
         'On failure: isError=true with errorCategory, isRetryable, description, and stable code (§7). ' +
         'When the class is absent from a successfully resolved classpath: isError=false, found=false (do not treat as access failure).',
       inputSchema: getClassSourceInputSchema,
@@ -702,6 +726,7 @@ export async function startMcpServer(): Promise<void> {
         modulePath: args.modulePath,
         configuration: args.configuration,
         includeTest: args.includeTest,
+        full: args.full,
       };
 
       const root = resolveProjectRoot(args.projectRoot);
@@ -740,6 +765,7 @@ export async function startMcpServer(): Promise<void> {
       description:
         'Resolves classpath source for a fully-qualified class (same as get_class_source), then searches for a literal ' +
         'substring or regex. Returns hits with line/column, matched text, optional multiline block, and context lines. ' +
+        'Agent usage: when class is known and you need a needle — not workspace grep. Default compact=text hits; full=true for JSON. ' +
         'When the class is missing from the classpath: isError=false, found=false (CLASS_NOT_FOUND). ' +
         'When the class exists but nothing matches: isError=false, found=false, querySucceeded=true.',
       inputSchema: findInClassSourceInputSchema,
@@ -753,6 +779,7 @@ export async function startMcpServer(): Promise<void> {
         includeTest: args.includeTest,
         query: args.query,
         regex: args.regex,
+        full: args.full,
       };
 
       const root = resolveProjectRoot(args.projectRoot);
@@ -785,6 +812,7 @@ export async function startMcpServer(): Promise<void> {
       title: 'Resolve Gradle dependencies',
       description:
         'Runs or loads cached Gradle dependency resolution for the project and returns ResolutionOutput (§5.5.2). ' +
+        'Agent usage: compact text module/config summary by default; full=true only for full artifact JSON. ' +
         'Use forceRefresh to bypass the hash cache after dependency changes without build-file edits. ' +
         'On failure: isError=true with errorCategory, isRetryable, description, and code RESOLUTION_FAILED.',
       inputSchema: resolveDependenciesInputSchema,
@@ -801,7 +829,7 @@ export async function startMcpServer(): Promise<void> {
           forceRefresh: Boolean(args.forceRefresh),
           diagnosticOperation: 'resolve_dependencies',
         });
-        return mcpToolResultFromResolutionResult(result, args.projectRoot);
+        return mcpToolResultFromResolutionResult(result, args.projectRoot, args.full);
       } catch (e) {
         if (e instanceof UnsupportedProjectError) {
           return mcpToolResultFromProjectRootError(e.message, args.projectRoot);
@@ -818,8 +846,8 @@ export async function startMcpServer(): Promise<void> {
       description:
         'Capability discovery when the FQN is unknown (SPEC §12.3): resolves or loads cached Gradle output, builds or reuses a disk index for the selected module + configuration, ' +
         'then returns ranked FQN hits. Query is a case-insensitive substring over the index `searchText` (FQN, simple name, and when sources exist: declared method/field identifiers and Javadoc plain text), or a glob with * and ? matched against FQN or simple name only. ' +
+        'Agent usage: discovery only; follow with get_class_structure scope=overview — not full source. Default compact=text hit list; full=true for JSON. ' +
         'Optional limit (default 50, max 200). Same projectRoot, modulePath, configuration, includeTest, and forceRefresh semantics as get_class_source. ' +
-        'v3 indexes external and local-file JAR `.class` paths (ZIP central directory) plus source enrichment from sibling `-sources.jar` when Gradle listed `sourcesJarPath`, and from inter-project `src/main/java` (+ `src/test/java` when includeTest). ' +
         'On failure: isError=true with code RESOLUTION_FAILED or classpath validation codes.',
       inputSchema: searchClassesInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
@@ -831,6 +859,7 @@ export async function startMcpServer(): Promise<void> {
         configuration: args.configuration,
         includeTest: args.includeTest,
         query: args.query,
+        full: args.full,
       };
 
       const root = resolveProjectRoot(args.projectRoot);
@@ -864,6 +893,7 @@ export async function startMcpServer(): Promise<void> {
       title: 'Get Java method overload signatures',
       description:
         'Overload listing (SPEC §7.2). Default (bytecodeOnly omitted or false): IDE-first — parse `.java` from sources JAR or inter-project src when present (sourceAvailable=true); else javap -private -verbose fallback (sourceAvailable=false). ' +
+        'Agent usage: preferred for one method — do not use get_class_source for signatures. Default compact=declaration lines per overload; full=true for JSON. ' +
         'bytecodeOnly=true: javap only on the binary classpath element — no sources/src fallback; sourceAvailable always false (full JVM descriptors, flags, synthetic members). ' +
         'Use methodName <init> for constructors. CLASS_NOT_FOUND: isError=false, found=false. No matching overloads: methodFound=false.',
       inputSchema: getMethodSignatureInputSchema,
@@ -876,6 +906,7 @@ export async function startMcpServer(): Promise<void> {
         configuration: args.configuration,
         includeTest: args.includeTest,
         methodName: args.methodName,
+        full: args.full,
       };
 
       const root = resolveProjectRoot(args.projectRoot);
@@ -906,22 +937,21 @@ export async function startMcpServer(): Promise<void> {
     {
       title: 'Get structured Java class API',
       description:
-        'Returns structured metadata for a fully-qualified class: kind, superclass, interfaces, type parameters, fields, and methods. ' +
-        'Includes inherited public/protected instance methods from supertypes (javap on the resolved classpath). ' +
-        'Optional `include`: array of `hierarchy` (recursive superclass chain + all super-interfaces), `fields` (omit to return an empty fields array when projecting), `annotations` (runtime-visible annotations from javap on the primary type, class, declared fields/methods — javap-rendered summaries). ' +
-        'When `include` is omitted, behavior matches the original tool (fields populated; no typeHierarchy or class/member annotations sections). ' +
-        'sourceAvailable is true when the primary type was loaded from a sources JAR (Javadoc on declared members); inherited entries are still bytecode-derived. ' +
-        'Does not decompile (no CFR). Uses the same classpath selection as get_class_source. ' +
-        'Inter-project submodule classes (`origin: interproject`) resolve from Gradle output dirs for javap and from `src/main/java`/`src/test/java` for sourced metadata when available. On javap failure: code SIGNATURE_EXTRACT_FAILED.',
+        'Returns metadata for a fully-qualified class. Default compact=text with scope=overview (class purpose + declared method names). ' +
+        'scope: overview | declared (signature lines) | effective (capped inherited API). full=true returns JSON (legacy shape). ' +
+        'Agent usage: discovery → scope=overview; many signatures → scope=declared; one method → get_method_signature instead. ' +
+        'Optional `include` for hierarchy/fields/annotations (mainly with full=true). Does not decompile (no CFR). On javap failure: SIGNATURE_EXTRACT_FAILED.',
       inputSchema: getClassStructureInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
-      const query: ClassSourceQueryContext = {
+      const query: ClassStructureQueryContext = {
         projectRoot: args.projectRoot,
         modulePath: args.modulePath,
         configuration: args.configuration,
         includeTest: args.includeTest,
+        full: args.full ?? (args.scope === 'full' ? true : undefined),
+        scope: args.scope,
       };
 
       const root = resolveProjectRoot(args.projectRoot);
@@ -937,6 +967,7 @@ export async function startMcpServer(): Promise<void> {
           includeTest: Boolean(args.includeTest),
           forceRefresh: Boolean(args.forceRefresh),
           include: args.include,
+          scope: args.scope === 'full' ? 'overview' : args.scope,
         });
         return mcpToolResultFromClassStructure(result, query);
       } catch (e) {

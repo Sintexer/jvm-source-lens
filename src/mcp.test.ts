@@ -47,7 +47,7 @@ test('mcpFindInClassSourcePayloadSchema accepts success with hits', () => {
   expect(parsed.success).toBe(true);
 });
 
-test('mcpToolResultFromFindInClassSource no-match is not MCP error', () => {
+test('mcpToolResultFromFindInClassSource no-match is not MCP error (compact text)', () => {
   const r = mcpToolResultFromFindInClassSource(
     {
       ok: true,
@@ -67,8 +67,8 @@ test('mcpToolResultFromFindInClassSource no-match is not MCP error', () => {
     { projectRoot: '/tmp/app', query: 'missing' },
   );
   expect(r.isError).toBe(false);
-  const sc = r.structuredContent as { found: boolean };
-  expect(sc.found).toBe(false);
+  expect(r.structuredContent).toBeUndefined();
+  expect((r.content[0] as { text: string }).text).toContain('no matches');
 });
 
 test('mcpClassSourceToolPayloadSchema accepts interproject provenance', () => {
@@ -359,7 +359,7 @@ test('mcpToolResultFromSearchClasses success', () => {
   expect(r.isError).toBe(false);
 });
 
-test('mcpToolResultFromListModules success sets isError false and module summary', () => {
+test('mcpToolResultFromListModules success compact text by default', () => {
   const result = mcpToolResultFromListModules(
     {
       ok: true,
@@ -387,6 +387,38 @@ test('mcpToolResultFromListModules success sets isError false and module summary
     '/tmp/proj',
   );
   expect(result.isError).toBe(false);
+  expect(result.structuredContent).toBeUndefined();
+  expect((result.content[0] as { text: string }).text).toContain(':app');
+});
+
+test('mcpToolResultFromListModules full=true returns JSON', () => {
+  const result = mcpToolResultFromListModules(
+    {
+      ok: true,
+      output: {
+        schemaVersion: '1.1',
+        resolvedAt: '2026-05-15T12:00:00Z',
+        buildSystem: { type: 'gradle', version: '8.7', wrapper: true },
+        projectRoot: '/tmp/proj',
+        modules: [
+          {
+            name: ':app',
+            path: '/tmp/proj/app',
+            configurations: [
+              {
+                name: 'compileClasspath',
+                scope: 'compile',
+                artifacts: [],
+              },
+            ],
+          },
+        ],
+        errors: [],
+      },
+    },
+    '/tmp/proj',
+    true,
+  );
   expect(result.structuredContent).toMatchObject({
     ok: true,
     projectRoot: '/tmp/proj',
@@ -662,7 +694,7 @@ test('mcpToolResultFromMethodSignature timeout-like SIGNATURE_EXTRACT_FAILED is 
   expect(sc.isRetryable).toBe(true);
 });
 
-test('mcpToolResultFromResolutionResult success sets isError false and resolution payload', () => {
+test('mcpToolResultFromResolutionResult success compact text by default', () => {
   const result = mcpToolResultFromResolutionResult(
     {
       ok: true,
@@ -678,6 +710,26 @@ test('mcpToolResultFromResolutionResult success sets isError false and resolutio
     '/tmp/proj',
   );
   expect(result.isError).toBe(false);
+  expect(result.structuredContent).toBeUndefined();
+  expect((result.content[0] as { text: string }).text).toContain(':app');
+});
+
+test('mcpToolResultFromResolutionResult full=true returns resolution JSON', () => {
+  const result = mcpToolResultFromResolutionResult(
+    {
+      ok: true,
+      output: {
+        schemaVersion: '1.1',
+        resolvedAt: '2026-05-15T12:00:00Z',
+        buildSystem: { type: 'gradle', version: '8.7', wrapper: true },
+        projectRoot: '/tmp/proj',
+        modules: [{ name: ':app', path: '/tmp/proj/app', configurations: [] }],
+        errors: [],
+      },
+    },
+    '/tmp/proj',
+    true,
+  );
   expect(result.structuredContent).toEqual({
     ok: true,
     resolution: expect.objectContaining({ projectRoot: '/tmp/proj', modules: expect.any(Array) }),
