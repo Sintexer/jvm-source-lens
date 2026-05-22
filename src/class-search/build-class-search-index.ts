@@ -74,6 +74,52 @@ export function buildClassSearchIndex(
   let skippedArtifacts = 0;
   let sourceEnrichedEntries = 0;
 
+  const localListed = listFqnsFromInterprojectSources(module.path, includeTest);
+  if (localListed.ok) {
+    const localArtifact: ResolvedArtifact = {
+      group: 'project',
+      name: module.name,
+      version: null,
+      type: 'project',
+      jarPath: null,
+      sourcesJarPath: null,
+      origin: 'interproject',
+      direct: true,
+      interproject: { moduleName: module.name, modulePath: module.path },
+    };
+    for (const fqn of new Set(localListed.fqns)) {
+      let blob: string | null = null;
+      const abs = resolveInterprojectJavaAbsolutePath(module.path, fqn, includeTest);
+      if (abs !== null) {
+        try {
+          const text = fs.readFileSync(abs, 'utf8');
+          const b = buildJavaSourceSearchBlob(text, fqn);
+          if (b.length > 0) {
+            blob = b;
+          }
+        } catch {
+          /* omit enrichment */
+        }
+      }
+      if (blob !== null) {
+        sourceEnrichedEntries += 1;
+      }
+      entries.push(
+        makeEntry(
+          fqn,
+          localArtifact,
+          module.name,
+          configuration.name,
+          'interproject',
+          null,
+          module.path,
+          module.name,
+          blob,
+        ),
+      );
+    }
+  }
+
   for (const a of configuration.artifacts) {
     if (isClasspathBinaryJarArtifact(a)) {
       if (!a.jarPath) {

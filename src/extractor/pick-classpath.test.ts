@@ -103,6 +103,35 @@ describe('pickResolvedConfiguration', () => {
     }
   });
 
+  test('includeTest falls back to jvmTestCompileClasspath when testCompileClasspath absent', () => {
+    const out: ResolutionOutput = {
+      ...minimalOutput(),
+      modules: [
+        {
+          name: 'root',
+          path: '/tmp/p',
+          configurations: [
+            {
+              name: 'jvmCompileClasspath',
+              scope: 'compile',
+              artifacts: [artifact({ group: 'g', name: 'a', jarPath: '/x.jar' })],
+            },
+            {
+              name: 'jvmTestCompileClasspath',
+              scope: 'test-compile',
+              artifacts: [artifact({ group: 'g', name: 't', jarPath: '/t.jar' })],
+            },
+          ],
+        },
+      ],
+    };
+    const r = pickResolvedConfiguration(out, { includeTest: true });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.configuration.name).toBe('jvmTestCompileClasspath');
+    }
+  });
+
   test('CONFIGURATION_NOT_FOUND when missing on module', () => {
     const r = pickResolvedConfiguration(minimalOutput(), {
       modulePath: ':lib',

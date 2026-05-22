@@ -15,15 +15,30 @@ export type PickClasspathResult =
   | { ok: true; module: ResolvedModule; configuration: ResolvedConfiguration }
   | { ok: false; error: ClassSourceError };
 
-function defaultConfigurationName(includeTest: boolean | undefined): string {
-  return includeTest ? 'testCompileClasspath' : 'compileClasspath';
+const COMPILE_CONFIGURATION_CANDIDATES = ['compileClasspath', 'jvmCompileClasspath'] as const;
+const TEST_CONFIGURATION_CANDIDATES = ['testCompileClasspath', 'jvmTestCompileClasspath'] as const;
+
+function configurationCandidates(
+  explicitName: string | undefined,
+  includeTest: boolean | undefined,
+): readonly string[] {
+  if (explicitName !== undefined && explicitName.length > 0) {
+    return [explicitName];
+  }
+  return includeTest ? TEST_CONFIGURATION_CANDIDATES : COMPILE_CONFIGURATION_CANDIDATES;
 }
 
 function pickConfiguration(
   module: ResolvedModule,
-  name: string,
+  names: readonly string[],
 ): ResolvedConfiguration | undefined {
-  return module.configurations.find((c) => c.name === name);
+  for (const name of names) {
+    const hit = module.configurations.find((c) => c.name === name);
+    if (hit !== undefined) {
+      return hit;
+    }
+  }
+  return undefined;
 }
 
 export function pickResolvedConfiguration(
@@ -58,20 +73,17 @@ export function pickResolvedConfiguration(
     }
   }
 
-  const configName =
-    opts.configuration !== undefined && opts.configuration.length > 0
-      ? opts.configuration
-      : defaultConfigurationName(opts.includeTest);
-
-  const configuration = pickConfiguration(module, configName);
+  const candidates = configurationCandidates(opts.configuration, opts.includeTest);
+  const configuration = pickConfiguration(module, candidates);
   if (configuration === undefined) {
+    const wanted = candidates.join(' or ');
     return {
       ok: false,
       error: {
         code: 'CONFIGURATION_NOT_FOUND',
-        message: `Module ${JSON.stringify(module.name)} has no configuration ${JSON.stringify(configName)}`,
+        message: `Module ${JSON.stringify(module.name)} has none of: ${wanted}`,
         moduleName: module.name,
-        configuration: configName,
+        configuration: candidates[0] ?? 'compileClasspath',
       },
     };
   }

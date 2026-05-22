@@ -5,6 +5,7 @@ import { resolveInterprojectClasspathRootForBinary } from './interproject-paths.
 import type { ResolvedArtifact } from '../resolvers/resolution-output.js';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
 import type { ClassSourceError } from './class-source-types.js';
+import { findLocalModuleClasspathRoot } from './local-module-sources.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
 import { zipEntryExists } from './zip-entry.js';
 
@@ -71,6 +72,44 @@ export function findClasspathOwningClass(
 
   const artifacts = picked.configuration.artifacts;
   const searchedArtifactCount = countClasspathSearchArtifacts(artifacts);
+
+  const localRoot = findLocalModuleClasspathRoot(
+    picked.module,
+    paths.classRelPath,
+    Boolean(opts.includeTest),
+  );
+  if (localRoot !== null) {
+    return {
+      ok: true,
+      hit: {
+        kind: 'interprojectBytecode',
+        artifact: {
+          group: 'project',
+          name: picked.module.name,
+          version: null,
+          type: 'project',
+          jarPath: null,
+          sourcesJarPath: null,
+          origin: 'interproject',
+          direct: true,
+          interproject: {
+            moduleName: picked.module.name,
+            modulePath: picked.module.path,
+          },
+        },
+        coordinates: {
+          group: 'project',
+          name: picked.module.name,
+          version: null,
+        },
+        classRelPath: paths.classRelPath,
+        classpath: localRoot,
+        moduleName: picked.module.name,
+        moduleRoot: picked.module.path,
+        searchedArtifactCount,
+      },
+    };
+  }
 
   for (const a of artifacts) {
     const coordinates: ArtifactCoordinates = {

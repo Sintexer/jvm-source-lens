@@ -9,6 +9,7 @@ import { isClasspathBinaryJarArtifact, isExternalJarArtifact } from './class-sou
 import { findExternalJarAmongArtifacts } from './find-external-class-jar.js';
 import { fqnToZipRelPaths } from './fqn-paths.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
+import { tryReadLocalModuleJavaSource } from './local-module-sources.js';
 import { readInterprojectJavaIfPresent } from './read-interproject-java-source.js';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
 import { readZipEntryUtf8 } from './zip-entry.js';
@@ -62,6 +63,27 @@ export async function tryReadJavaSourceFromClasspath(
   const paths = fqnToZipRelPaths(opts.className);
   if (!paths.ok) {
     return { ok: false, error: paths.error };
+  }
+
+  const local = await tryReadLocalModuleJavaSource(
+    picked.module,
+    paths.sourceRelPath,
+    opts.className,
+    Boolean(opts.includeTest),
+  );
+  if (local !== null) {
+    if (!local.ok) {
+      return { ok: false, error: local.error };
+    }
+    const ipp = local.provenance;
+    if (ipp.kind === 'interproject') {
+      return {
+        ok: true,
+        hit: true,
+        sourceText: local.source,
+        provenance: ipp,
+      };
+    }
   }
 
   for (const edge of picked.configuration.artifacts) {
