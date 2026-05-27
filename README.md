@@ -1,106 +1,126 @@
-# JVM Source Lens (`jvmsrc`)
-
+# jvmsrc — give your coding agent a Java IDE
 
 [![CI](https://github.com/Sintexer/jvm-source-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/Sintexer/jvm-source-lens/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/jvmsrc)](https://www.npmjs.com/package/jvmsrc)
 [![License: MIT](https://img.shields.io/github/license/Sintexer/jvm-source-lens)](https://github.com/Sintexer/jvm-source-lens/blob/master/LICENSE)
 [![Node](https://img.shields.io/node/v/jvmsrc)](https://www.npmjs.com/package/jvmsrc)
 
-Resolve a JVM project's **actual classpath** through Gradle, then read Java source, signatures, and structure for any class on that classpath — with the **version your project uses**, not whatever happens to sit in `~/.gradle/caches`.
+**An MCP server and CLI** that gives your coding agent the one thing it's
+missing on JVM codebases: the actual classpath.
 
-Built for **CLI** use and **MCP** agents (Cursor, Claude Code, Windsurf, etc.).
+You use an IDE to write Java. Your coding agent doesn't have one.
 
-**Contents:** [Why](#why-this-exists) · [How it works](#how-it-works) · [Requirements](#requirements) · [Limitations](#known-limitations) · [Install](#install) · [Quick start](#quick-start) · [MCP](#mcp) · [Security](#security-and-privacy) · [Troubleshooting](#troubleshooting) · [Building from source](#building-from-source)
+So when it hits an unfamiliar library type — say, a superclass from a proprietary
+internal library — it spends 25+ turns walking `~/.gradle/caches`, opening JARs
+by hand with `jar tf`, picking one by guesswork, and trying to answer a question
+your IDE would answer in one keystroke: *does this superclass have a public
+utility method called X?*
 
-## Why this exists
+`jvmsrc` asks Gradle for *this project's* resolved classpath, then hands your
+agent real source, real signatures, real structure — for the exact version your
+build actually uses.
 
-Coding agents on JVM codebases often hit a library type that is not in the workspace. A common failure mode: see an import, try to open the class in the repo, fail, then **panic** — sibling repos, `**/*.java` globs, `~/.gradle/caches` / `~/.m2` walks, or long shell chains (`find`, `jar tf`, `javap`), often on the **wrong JAR** because global caches hold many versions. In the worst case the agent guesses an API from the wrong artifact or from memory.
+Two ways to run it:
 
-Even when something works, the cost is high: noisy output, many tool rounds, wasted tokens, and subprocesses on paths you did not mean to expose.
+- **As an MCP server** — connect to Claude Code, Cursor, Windsurf, or any
+  other MCP host and your agent gets six purpose-built classpath tools
+- **As the `jvmsrc` CLI** — same engine, scriptable, pipe-friendly, useful on
+  its own when you just want to read a class
 
-**jvmsrc** offers one path: **ask Gradle** for the resolved classpath for *this* project, then return source, signatures, or structure with provenance — or a clear error. Global cache directories are not a substitute: they store every version ever downloaded; only the build tool knows which one your module uses. Picking a JAR by name is guesswork; wrong output is worse than an error.
+## What it saves me, daily
 
-## How it works
+I use jvmsrc every day on Java projects with internal libraries that don't
+have public Javadoc. Concretely:
 
-1. **Resolve** — `gradlew` / `gradle` runs with a bundled Groovy init script; result is cached until build inputs change.
-2. **Locate class** — inter-project `src/` first, then dependency JARs on the chosen classpath.
-3. **Read** — sources JAR when available; otherwise CFR decompile into a **global** cache (nothing written under your project tree).
+- **~50K tokens saved** per "what's on this external class" investigation —
+  roughly **70%** of what those tasks used to cost
+- **15+ agent panic loops avoided per day** — the kind where the agent grinds
+  through cache directories, opens the wrong JAR, and either gives up or guesses
+- Tasks I used to refuse to delegate (anything touching internal SDKs) are
+  back on the table
 
-First resolution on a project is often 5–30s; later calls reuse the cache.
+If your codebase pulls in private libraries, framework versions that drift
+across modules, or anything else your agent's training data doesn't cover,
+**this is what changes**.
 
-## Compared to similar tools
+## What happens without jvmsrc
 
-| Tool | Approach | Gap |
-|------|----------|-----|
-| Cache indexers / `~/.gradle` grep | Scan global caches | No per-project resolved version |
-| Static `build.gradle` parsers | Parse declarations only | Miss transitives, BOMs, dynamic versions |
-| `mcp-javadc` / path-only CFR | User supplies JAR paths | No Gradle resolution |
-| Gradle MCP (tooling API) | Task/build focused | Not classpath-accurate source for arbitrary FQNs |
-| **jvmsrc** | **`gradlew` + init script → resolved graph** | **Version-correct source/signatures for agents** |
+A real failure mode, paraphrased from an actual session:
 
-## Requirements
+    User: Override the audit hook from AbstractTradingService — is there a
+          public utility method on it we should reuse?
 
-**On your machine:** Node.js **≥ 20** to run the published CLI; Java on `PATH` (CFR + `javap`). [Developing jvmsrc](CONTRIBUTING.md) uses **Bun** only (`bun.lock`).
+    Agent: [searches workspace for AbstractTradingService.java — 0 hits]
+           [runs: find ~/.gradle -name "trading-core*"]
+           [finds 4 versions: 2.1.0, 2.3.0, 2.4.1, 3.0.0-SNAPSHOT]
+           [picks trading-core-2.4.1.jar — project actually uses 3.0.0-SNAPSHOT]
+           [runs: jar tf, javap -p on the wrong jar]
+           [22 turns later] "I don't see a utility method, you'll have to
+                             implement it yourself."
 
-**Project types:** JVM codebases (Java, Kotlin, Scala, Groovy, …). jvmsrc calls the **build tool**, not your editor.
+    Reality: 3.0.0-SNAPSHOT added `maskSensitiveFields()` as a protected helper
+             exactly for this case.
 
-| Build system | Status |
-|--------------|--------|
-| **Gradle** | Supported — multimodule included |
-| Maven, Bazel, … | Planned ([SPEC.md](SPEC.md)) |
+The agent didn't hallucinate — it just couldn't see the right version. That's
+the common failure on JVM codebases: not invention, *invisibility*.
 
-Point `-p` / `projectRoot` at the Gradle root (`settings.gradle(.kts)` or root `build.gradle(.kts)`). Uses `./gradlew` when present, else `gradle` on `PATH`. Maven-only trees get an explicit unsupported error.
+## What happens with jvmsrc
 
-## Known limitations
+    User: Override the audit hook from AbstractTradingService — is there a
+          public utility method on it we should reuse?
 
-Early software; the supported path is narrow:
+    Agent: [search_classes("AbstractTradingService")]
+           [get_class_structure(scope: "overview")]
+           → finds maskSensitiveFields(), protected, in 3.0.0-SNAPSHOT
+           [get_method_signature("maskSensitiveFields")]
+           → writes the override correctly, first try.
 
-| Area | Today |
-|------|--------|
-| Build tool | **Gradle only** |
-| Integration | **Groovy init script** (`--init-script`) — not a Gradle Portal plugin |
-| Classpaths | Standard JVM + Kotlin MPP `jvm*` configurations when Gradle exposes them |
-| Output | **Java-shaped** `.java` text (sources JAR, inter-project `src`, or CFR) |
+One resolution, three narrow calls, correct answer. No cache walking, no
+guessing, no wrong version.
 
-Your repo may use `build.gradle` or `build.gradle.kts`; the **jvmsrc** side is still a **Groovy** init script. Composite builds, Android-only layouts, and exotic configurations are not fully validated. See [ROADMAP.md](ROADMAP.md).
+## Why this works
+
+The global Gradle and Maven caches hold every version of every library you've
+ever downloaded. Picking a JAR by name is guesswork — and guesswork at the
+classpath layer means wrong APIs, wrong overloads, wrong defaults.
+
+Only your build tool knows which version *this* project resolves. jvmsrc asks
+it, caches the answer, and gives your agent a narrow set of tools to read
+exactly what's on that classpath — nothing more, nothing from the wrong
+version, nothing hallucinated.
+
+Think of it as: you use an IDE to write code, jvmsrc is the IDE your agent
+gets. The classpath your agent was missing. Real Java sources for AI coding
+agents, with the version your build actually resolves.
 
 ## Install
 
-```bash
+```
 npm install -g jvmsrc
-# or
+# or use it directly via npx
 npx jvmsrc <command>
 ```
 
-Published package includes prebuilt `dist/` and bundled CFR — **Node ≥ 20**.
+Requires **Node ≥ 20** and **Java on `PATH`** (for CFR + `javap`).
 
 ## Quick start
 
-```bash
-# 1. Paste-ready MCP config, then restart your AI tool
+```
+# 1. Generate a paste-ready MCP config for your agent
 jvmsrc config --project /path/to/gradle-project
 
-# 2. Fetch class source
+# 2. Or use the CLI directly
 jvmsrc get com.example.MyClass -p /path/to/gradle-project
 ```
 
-More CLI examples:
+That's it. Restart your AI tool after pasting the config and your agent has
+its IDE.
 
-```bash
-jvmsrc com.example.MyClass -p /path/to/gradle-project          # shorthand for get
-jvmsrc get com.example.MyClass -p /path/to/project -q > MyClass.java
-jvmsrc resolve -p /path/to/project --force-refresh
+## MCP setup
+
+The MCP server runs over stdio via `jvmsrc mcp`. Add this to your host config:
+
 ```
-
-Useful flags: `-p` / `--project`, `--module` (`:core:api`), `--configuration`, `--include-test`, `--force-refresh`, `--verbose` (Gradle stderr only), `--method`, `--start-line` / `--end-line`. `jvmsrc resolve` defaults to a **text summary**; add `--full` or `--json` for full JSON.
-
-Repo fixture: `test/fixtures/gradle-smoke` — e.g. `jvmsrc get com.smoke.Core -p test/fixtures/gradle-smoke --module :core`.
-
-## MCP
-
-After install, a typical server entry:
-
-```json
 {
   "mcpServers": {
     "jvmsrc": {
@@ -111,45 +131,130 @@ After install, a typical server entry:
 }
 ```
 
-Restart the MCP host after upgrading `jvmsrc`.
+Restart your MCP host (Claude Code, Cursor, Windsurf, …) after install or
+upgrade.
 
-> **Agents:** connect via MCP (`jvmsrc config` for a paste-ready server snippet). Default tool responses are **plain text** (compact); pass MCP **`full: true`** when you need JSON. On **empty results and failures**, read the **`message`** field (compact: **`---`** footer) — it tells you the next tool to call; happy-path successes omit **`message`**. Discovery: `search_classes` → `get_class_structure` with **`scope: overview`** → `get_method_signature` for one method — not full-file source.
+### Tools your agent gets
 
-### Tools
+| Tool | What it does |
+|------|--------------|
+| `search_classes` | Find a class by simple name or glob across the resolved classpath |
+| `get_class_structure` | Class overview (purpose + method names) or declared signatures |
+| `get_method_signature` | Real overloads for one method, with parameter names and generics |
+| `find_in_class_source` | Search inside one resolved class |
+| `get_class_source` | Method bodies or line ranges — last resort |
+| `resolve_dependencies` | The actual dependency graph this project uses |
 
-| Tool | Use when |
-|------|----------|
-| `search_classes` | Unknown FQN — substring or `*`/`?` glob on classpath |
-| `get_class_structure` | **Discovery:** default `scope: overview` (purpose + method names). **`scope: declared`** for signature lines. `full: true` for JSON |
-| `get_method_signature` | One method’s overloads (compact declaration lines) |
-| `find_in_class_source` | Search inside one class |
-| `get_class_source` | Body or excerpt (`methodNames`, line range) — last resort |
-| `resolve_dependencies` | Module summary (text); `full: true` for full `ResolutionOutput` |
+Every source response includes `sourceAvailable`: `true` for real sources
+(Javadoc, parameter names, generics are ground truth), `false` for CFR
+decompilation (structure reliable, names may be synthetic).
 
-Prefer **`get_method_signature`** or **`get_class_structure`** over **`get_class_source`**. Every source response has **`sourceAvailable`**: `true` = real sources; `false` = CFR (structure OK, names/Javadoc may be synthetic).
+## How it compares
 
-## Security and privacy
+| Tool | Approach | Gap |
+|------|----------|-----|
+| Cache indexers / `~/.gradle` grep | Scan global caches | No per-project resolved version |
+| Static `build.gradle` parsers | Parse declarations only | Miss transitives, BOMs, dynamic versions |
+| `mcp-javadc` / path-only CFR | User supplies JAR paths | No Gradle resolution |
+| Gradle MCP (tooling API) | Task/build focused | Not classpath-accurate source for arbitrary FQNs |
+| **jvmsrc** | **Asks Gradle, caches the answer** | **Version-correct source/signatures for agents** |
 
-- **No telemetry**
-- **Local only** — caches and diagnostics on disk; never writes under the project root for resolution
-- **Subprocesses:** Gradle, `java`, `javap` via argv (no shell interpolation) — [SECURITY.md](SECURITY.md)
-- **`JVMSRC_ALLOWED_ROOTS`** — optional allowlist for `projectRoot`
-- **Output cap** — 512 KiB default (`JVMSRC_MAX_SOURCE_OUTPUT_CHARS`); use excerpts or structure tools for large types
+## Who it's for today
 
-## Local data
+Primarily **Java + Spring Boot** projects on Gradle. Other JVM languages
+(Kotlin, Scala) and Android work today on a best-effort basis and are on the
+roadmap as first-class targets — see [ROADMAP.md](ROADMAP.md).
 
-Override with absolute paths: **`JVMSRC_CACHE_ROOT`** (resolution + decompile), **`JVMSRC_LOG_DIR`** (failure diagnostics).
+If you're on Maven or Bazel, it's planned but not shipping yet. Star the repo
+or open an issue and I'll prioritize accordingly.
 
-Defaults (via [`env-paths`](https://www.npmjs.com/package/env-paths)): cache under `~/Library/Caches/jvmsrc` (macOS), `~/.cache/jvmsrc` (Linux), `%LOCALAPPDATA%\jvmsrc\Cache` (Windows); logs under `~/Library/Logs/jvmsrc`, `~/.local/state/jvmsrc`, or `%LOCALAPPDATA%\jvmsrc\Logs`.
+## Requirements
 
-Per-project buckets under `projects/<id>/` (`resolution.json`, search index, …) and shared `decompiled/<coordinates>/`. Gradle's `~/.gradle` is unchanged. Full layout: [SPEC.md](SPEC.md) section 6.
+<details>
+<summary>Click to expand</summary>
 
-```bash
-jvmsrc diagnostics list
-jvmsrc diagnostics show <diagnosticId>
+**Runtime:** Node.js ≥ 20, Java on `PATH`.
+
+**Project types:** JVM codebases (Java, Kotlin, Scala, Groovy). jvmsrc calls
+the build tool, not your editor.
+
+| Build system | Status |
+|--------------|--------|
+| **Gradle** | Supported — multimodule included |
+| Maven, Bazel | Planned ([SPEC.md](SPEC.md)) |
+
+Point `-p` / `projectRoot` at the Gradle root (`settings.gradle(.kts)` or
+root `build.gradle(.kts)`). Uses `./gradlew` when present, else `gradle` on
+`PATH`. Maven-only trees get an explicit unsupported error.
+
+</details>
+
+## Known limitations
+
+<details>
+<summary>Click to expand</summary>
+
+Early software; the supported path is narrow:
+
+| Area | Today |
+|------|--------|
+| Build tool | **Gradle only** |
+| Integration | **Groovy init script** (`--init-script`) — not a Gradle Portal plugin |
+| Classpaths | Standard JVM + Kotlin MPP `jvm*` configurations when Gradle exposes them |
+| Output | **Java-shaped** `.java` text (sources JAR, inter-project `src`, or CFR) |
+
+Composite builds, Android-only layouts, and exotic configurations are not
+fully validated. See [ROADMAP.md](ROADMAP.md).
+
+</details>
+
+## Security & privacy
+
+- **No telemetry.**
+- **Local only** — caches and diagnostics stay on disk; never writes under
+  your project root.
+- **Subprocesses** via argv only (no shell interpolation) — see
+  [SECURITY.md](SECURITY.md).
+- Optional `JVMSRC_ALLOWED_ROOTS` to lock down which projects jvmsrc may
+  resolve.
+
+## CLI reference
+
+<details>
+<summary>Click to expand</summary>
+
+```
+jvmsrc com.example.MyClass -p /path/to/gradle-project          # shorthand for get
+jvmsrc get com.example.MyClass -p /path/to/project -q > MyClass.java
+jvmsrc resolve -p /path/to/project --force-refresh
+jvmsrc mcp                                                     # run as MCP server
 ```
 
-## Environment variables
+Useful flags: `-p` / `--project`, `--module` (`:core:api`), `--configuration`,
+`--include-test`, `--force-refresh`, `--verbose` (Gradle stderr only),
+`--method`, `--start-line` / `--end-line`.
+
+Repo fixture for trying it without your own project:
+`test/fixtures/gradle-smoke` —
+`jvmsrc get com.smoke.Core -p test/fixtures/gradle-smoke --module :core`.
+
+</details>
+
+## Troubleshooting
+
+<details>
+<summary>Click to expand</summary>
+
+- Resolution failures: `jvmsrc diagnostics list` then `jvmsrc diagnostics show <id>`
+- After upgrading jvmsrc: restart your MCP host
+- Stale classpath: `jvmsrc resolve --force-refresh`
+
+</details>
+
+## Configuration
+
+<details>
+<summary>Environment variables</summary>
 
 | Variable | Purpose |
 |----------|---------|
@@ -160,13 +265,10 @@ jvmsrc diagnostics show <diagnosticId>
 | `JVMSRC_GRADLE_TIMEOUT_MS` | Gradle timeout |
 | `JVMSRC_CFR_PATH` | Custom CFR JAR |
 
-More (CFR/javap capture limits, error codes): [SPEC.md](SPEC.md).
+Defaults follow [`env-paths`](https://www.npmjs.com/package/env-paths)
+conventions per OS. Full layout: [SPEC.md](SPEC.md) §6.
 
-## Troubleshooting
-
-- Resolution failures: `jvmsrc diagnostics list` / `show <id>`
-- After upgrade: reinstall or rebuild, then **restart** the MCP server
-- Stale classpath: `jvmsrc resolve --force-refresh`
+</details>
 
 ## Documentation
 
@@ -181,14 +283,14 @@ More (CFR/javap capture limits, error codes): [SPEC.md](SPEC.md).
 
 ## Building from source
 
-```bash
+```
 git clone https://github.com/Sintexer/jvm-source-lens.git
 cd jvm-source-lens
 bun install && bun run setup:cfr && bun run build
 node dist/cli.js --version
 ```
 
-Full contributor workflow: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+Full contributor workflow: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
