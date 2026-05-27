@@ -27,6 +27,9 @@ Two ways to run it:
 - **As the `jvmsrc` CLI** — same engine, scriptable, pipe-friendly, useful on
   its own when you just want to read a class
 
+![jvmsrc resolving a Spring class in Claude Code](docs/assets/demo.gif)
+*Claude Code resolving HandlerInterceptor signatures via jvmsrc — 3 calls, correct answer, no cache walking.*
+
 ## What it saves me, daily
 
 I use jvmsrc every day on Java projects with internal libraries that don't
@@ -291,6 +294,10 @@ node dist/cli.js --version
 ```
 
 Full contributor workflow: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+I built jvmsrc because I kept running into the same wall: agents that are great at writing Java but blind to the actual classpath. If it saves you the same 25-turn grind it saved me, that's exactly why this exists. Found a bug, have an idea, or just want to say it helped? Open an issue or a PR — I read everything.
 
 ## License
 
