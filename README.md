@@ -124,8 +124,8 @@ The MCP server runs over stdio via `jvmsrc mcp`. Add this to your host config:
 {
   "mcpServers": {
     "jvmsrc": {
-      "command": "npx",
-      "args": ["-y", "jvmsrc", "mcp"]
+      "command": "jvmsrc",
+      "args": ["mcp"]
     }
   }
 }
