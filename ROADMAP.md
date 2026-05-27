@@ -61,7 +61,6 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] Log warning when `JVMSRC_CFR_PATH` / `JVM_ORACLE_CFR_PATH` override is used
 - [ ] JAR size guard before `fflate` reads (OOM via large / malicious JAR)
 - [ ] Document `gradlew` trust model + add `JVMSRC_USE_SYSTEM_GRADLE` opt-out
-- [x] Validate `--dir` destination in `jvmsrc init` (warn/block paths outside home)
 - [ ] ReDoS mitigation for regex mode in `find_in_class_source`
 - [ ] Skip symlinks-to-directories in build-input cache walk
 
@@ -497,7 +496,7 @@ Optional: `modulePath`, `configuration`, `includeTest`, `forceRefresh` — same 
 - [x] `get_class_structure` scopes + `classPurpose`
 - [x] MCP: omit `structuredContent` on compact success; `full` on all tools
 - [x] CLI: `resolve` text default; `--full` / `--json` for JSON
-- [x] Tests + jvmsrc skill + MCP tool descriptions
+- [x] Tests + MCP tool descriptions
 
 ---
 
@@ -510,8 +509,6 @@ Findings from structured security review (2026-05-19). Items ordered by effort �
 - [x] **Clamp `search_classes` `limit` at MCP boundary** — already present: `z.number().int().positive().max(200)` in `searchClassesInputSchema` (`src/mcp.ts:399`).
 - [x] **FQN guard before javap in bytecode path** — already present: both `get-method-signatures-bytecode.ts` and `get-class-structure.ts` gate through `findClasspathOwningClass` → `fqnToZipRelPaths`, which returns `INVALID_FQN` before any javap spawn.
 - [x] **Warn when CFR JAR override is active** — emit `[jvmsrc] using CFR JAR override: <path>` to stderr whenever `JVMSRC_CFR_PATH` / `JVM_ORACLE_CFR_PATH` is honoured, so operators see non-bundled JARs at runtime. (`src/decompiler/resolve-cfr-jar.ts`)
-- [x] **Validate `--dir` destination in `jvmsrc init`** — resolve the path and warn (or refuse with `--force`) when it is outside the user's home directory, preventing accidental writes to sensitive locations. (`src/cli-skill-install.ts:119`)
-
 ### Medium effort
 
 - [x] **Strip JVM-injection env vars from Gradle subprocess** — reuse or extend `buildCfrSpawnEnv()` to strip `JAVA_TOOL_OPTIONS`, `_JAVA_OPTIONS`, `JDK_JAVA_OPTIONS`, `LD_PRELOAD`, `DYLD_INSERT_LIBRARIES` before spawning Gradle; currently only CFR/javap apply this hardening. (`src/resolvers/gradle/spawn-gradle.ts:80`)

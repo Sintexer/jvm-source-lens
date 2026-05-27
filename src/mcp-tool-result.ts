@@ -39,9 +39,21 @@ import { formatResolutionSummaryText } from './text-format/format-resolve.js';
 import { formatListModulesText } from './text-format/format-list-modules.js';
 import { formatSearchClassesText } from './text-format/format-search.js';
 import type { ClassStructureScope as ClassStructureScopeType } from './class-structure/types.js';
+import {
+  appendGuidanceFooter,
+  guidedEnvelope,
+  outcomeOnlySuccessFields,
+  withGuidedEnvelope,
+} from './guided-response/envelope.js';
+import {
+  buildClassNotFoundMessage,
+  buildMethodNotFoundOnClassMessage,
+  buildSearchClassesEmptyMessage,
+  formatClasspathScope,
+} from './guided-response/messages.js';
+import type { GuidedEnvelopeFields, McpErrorCategory } from './guided-response/types.js';
 
-/** MCP agent recovery categories (transient / validation / business / permission). */
-export type McpErrorCategory = 'transient' | 'validation' | 'business' | 'permission';
+export type { McpErrorCategory };
 
 export type McpClassSourceSuccessPayload = {
   ok: true;
@@ -63,7 +75,7 @@ export type McpClassSourceNotFoundPayload = {
   searchedArtifactCount: number;
   querySucceeded: true;
   code: 'CLASS_NOT_FOUND';
-  description: string;
+  message: string;
 };
 
 export type McpClassSourceFailurePayload = {
@@ -72,7 +84,7 @@ export type McpClassSourceFailurePayload = {
   code: ClassSourceError['code'];
   errorCategory: McpErrorCategory;
   isRetryable: boolean;
-  description: string;
+  message: string;
   diagnosticId?: string;
   hint?: string;
 };
@@ -134,7 +146,7 @@ export type McpFindInClassSourceNoMatchPayload = {
   regex: boolean;
   sourceAvailable: boolean;
   provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
-  description: string;
+  message: string;
 };
 
 export type McpFindInClassSourceToolPayload =
@@ -158,6 +170,7 @@ export type McpSearchClassesHitPayload = {
 
 export type McpSearchClassesSuccessPayload = {
   ok: true;
+  found: boolean;
   querySucceeded: true;
   query: string;
   limit: number;
@@ -201,6 +214,37 @@ function mcpFullSuccess(text: string, structuredContent: Record<string, unknown>
   };
 }
 
+function returnCompactPlain(text: string): CallToolResult {
+  return mcpCompactSuccess(text);
+}
+
+function returnFullPlain(summary: string, payload: Record<string, unknown>, found = true): CallToolResult {
+  return mcpFullSuccess(summary, withGuidedEnvelope(payload, outcomeOnlySuccessFields(found)));
+}
+
+function returnCompactGuided(text: string, env: GuidedEnvelopeFields): CallToolResult {
+  return mcpCompactSuccess(appendGuidanceFooter(text, env));
+}
+
+function returnFullGuided(summary: string, payload: Record<string, unknown>, env: GuidedEnvelopeFields): CallToolResult {
+  return mcpFullSuccess(summary, withGuidedEnvelope(payload, env));
+}
+
+function classNotFoundEnvelope(
+  error: Extract<ClassSourceError, { code: 'CLASS_NOT_FOUND' }>,
+  query: ClassSourceQueryContext & { methodName?: string },
+): GuidedEnvelopeFields {
+  const message = buildClassNotFoundMessage({
+    className: error.className,
+    searchedArtifactCount: error.searchedArtifactCount,
+    modulePath: query.modulePath,
+    configuration: query.configuration,
+    includeTest: query.includeTest,
+    methodName: query.methodName,
+  });
+  return guidedEnvelope(message, false);
+}
+
 export type McpMethodSignatureSuccessPayload = {
   ok: true;
   found: true;
@@ -232,7 +276,7 @@ export type McpMethodSignatureNotFoundPayload = {
   searchedArtifactCount: number;
   querySucceeded: true;
   code: 'CLASS_NOT_FOUND';
-  description: string;
+  message: string;
 };
 
 export type McpMethodSignatureToolPayload =
@@ -294,7 +338,7 @@ export type McpClassStructureNotFoundPayload = {
   searchedArtifactCount: number;
   querySucceeded: true;
   code: 'CLASS_NOT_FOUND';
-  description: string;
+  message: string;
 };
 
 export type McpClassStructureToolPayload =
@@ -328,8 +372,9 @@ export function mcpToolResultFromFindInClassSource(
   }
 
   if (!result.found) {
+    const env = guidedEnvelope(result.message, false);
     if (detail === 'compact') {
-      return mcpCompactSuccess(formatFindInClassNoMatchText(result));
+      return returnCompactGuided(formatFindInClassNoMatchText(result), env);
     }
     const payload: McpFindInClassSourceNoMatchPayload = {
       ok: true,
@@ -340,17 +385,17 @@ export function mcpToolResultFromFindInClassSource(
       regex: result.regex,
       sourceAvailable: result.sourceAvailable,
       provenance: result.provenance,
-      description: result.description,
+      message: result.message,
     };
-    const scope = formatQueryScope(query);
-    return mcpFullSuccess(
-      `find_in_class_source: no matches for ${JSON.stringify(result.query)} in ${result.className}${scope}.`,
+    return returnFullGuided(
+      `find_in_class_source: no matches for ${JSON.stringify(result.query)} in ${result.className}${formatClasspathScope(query)}.`,
       payload,
+      env,
     );
   }
 
   if (detail === 'compact') {
-    return mcpCompactSuccess(formatFindInClassSourceText(result));
+    return returnCompactPlain(formatFindInClassSourceText(result));
   }
 
   const hits = result.hits.map(mapFindHit);
@@ -369,11 +414,9 @@ export function mcpToolResultFromFindInClassSource(
     truncated: result.truncated,
     hits,
   };
-  const scope = formatQueryScope(query);
-  const lineHint = result.lineNumbersReliable ? '' : ' (line numbers approximate; decompiled source)';
-  const truncHint = result.truncated ? `; showing ${result.hitCount} of ${result.totalMatches}` : '';
-  return mcpFullSuccess(
-    `find_in_class_source: ${result.totalMatches} match(es) for ${JSON.stringify(result.query)} in ${result.className}${scope}; returning ${result.hitCount}${truncHint}${lineHint}.`,
+  const scope = formatClasspathScope(query);
+  return returnFullPlain(
+    `find_in_class_source: ${result.totalMatches} match(es) for ${JSON.stringify(result.query)} in ${result.className}${scope}.`,
     payload,
   );
 }
@@ -382,7 +425,7 @@ export function mcpToolResultFromClassSource(result: ClassSourceLookupResult, qu
   const detail = toolResponseDetail(query.full);
   if (result.ok) {
     if (detail === 'compact') {
-      return mcpCompactSuccess(formatClassSourceCompactText(result));
+      return returnCompactPlain(formatClassSourceCompactText(result));
     }
     const payload: McpClassSourceSuccessPayload = {
       ok: true,
@@ -394,23 +437,7 @@ export function mcpToolResultFromClassSource(result: ClassSourceLookupResult, qu
       ...(result.excerpt !== undefined ? { excerpt: result.excerpt } : {}),
       ...(result.outputTruncated ? { outputTruncated: true, sourceLength: result.sourceLength } : {}),
     };
-    const excerptHint =
-      result.excerpt !== undefined
-        ? ` excerpt: ${result.excerpt.matchedMethodNames.length} method(s)` +
-          (result.excerpt.unmatchedMethodNames.length > 0
-            ? `, ${result.excerpt.unmatchedMethodNames.length} unmatched`
-            : '') +
-          (result.excerpt.lineNumbersReliable ? '' : '; line numbers approximate (decompiled)')
-        : '';
-    const truncHint = result.outputTruncated
-      ? `; source truncated (${result.sourceLength} chars before cap)`
-      : '';
-    return mcpFullSuccess(
-      result.sourceAvailable
-        ? `Retrieved source for ${result.className} (original sources).${excerptHint}${truncHint}`
-        : `Retrieved source for ${result.className} (decompiled; sourceAvailable=false).${excerptHint}${truncHint}`,
-      payload,
-    );
+    return returnFullPlain(`Retrieved source for ${result.className}.`, payload);
   }
 
   if (result.error.code === 'CLASS_NOT_FOUND') {
@@ -461,15 +488,10 @@ export function mcpToolResultFromResolutionResult(
   if (result.ok) {
     const { output } = result;
     if (detail === 'compact') {
-      return mcpCompactSuccess(formatResolutionSummaryText(output));
+      return returnCompactPlain(formatResolutionSummaryText(output));
     }
     const payload: McpResolveDependenciesSuccessPayload = { ok: true, resolution: output };
-    const partialErrors = output.errors.length;
-    const summary =
-      `Resolved ${output.modules.length} module(s) at ${output.resolvedAt}` +
-      (partialErrors > 0 ? ` with ${partialErrors} partial resolution warning(s) in errors[]` : '') +
-      '.';
-    return mcpFullSuccess(summary, payload);
+    return returnFullPlain(`Resolved ${output.modules.length} module(s).`, payload);
   }
 
   return mcpToolResultFromResolutionFailure(result, projectRoot);
@@ -484,17 +506,10 @@ export function mcpToolResultFromListModules(
   if (result.ok) {
     const data = buildListModulesPayload(result.output);
     if (detail === 'compact') {
-      return mcpCompactSuccess(formatListModulesText(data));
+      return returnCompactPlain(formatListModulesText(data));
     }
     const payload: McpListModulesSuccessPayload = { ok: true, ...data };
-    const configRows = data.modules.reduce((n, m) => n + m.configurations.length, 0);
-    const summary =
-      `Listed ${data.modules.length} module(s), ${configRows} classpath configuration row(s)` +
-      (data.resolutionWarningCount > 0
-        ? ` (${data.resolutionWarningCount} resolution warning(s); use resolve_dependencies for full errors[])`
-        : '') +
-      '.';
-    return mcpFullSuccess(summary, payload);
+    return returnFullPlain(`Listed ${data.modules.length} module(s).`, payload);
   }
 
   return mcpToolResultFromResolutionFailure(result, projectRoot);
@@ -506,15 +521,21 @@ export function mcpToolResultFromSearchClasses(
 ): CallToolResult {
   const detail = toolResponseDetail(query.full);
   if (result.ok) {
+    const found = result.totalMatches > 0;
     if (detail === 'compact') {
-      return mcpCompactSuccess(
-        formatSearchClassesText({
-          query: result.query,
-          totalMatches: result.totalMatches,
-          hits: result.hits,
-          limit: result.limit,
-        }),
-      );
+      const text = formatSearchClassesText({
+        query: result.query,
+        totalMatches: result.totalMatches,
+        hits: result.hits,
+        limit: result.limit,
+      });
+      if (!found) {
+        return returnCompactGuided(
+          text,
+          guidedEnvelope(buildSearchClassesEmptyMessage({ ...query, query: result.query }), false),
+        );
+      }
+      return returnCompactPlain(text);
     }
     const hits: McpSearchClassesHitPayload[] = result.hits.map((h: ClassSearchHit) => ({
       className: h.className,
@@ -530,6 +551,7 @@ export function mcpToolResultFromSearchClasses(
     }));
     const payload: McpSearchClassesSuccessPayload = {
       ok: true,
+      found,
       querySucceeded: true,
       query: result.query,
       limit: result.limit,
@@ -538,11 +560,18 @@ export function mcpToolResultFromSearchClasses(
       hits,
       indexMeta: result.indexMeta,
     };
-    const scope = formatQueryScope(query);
-    const summary =
-      `search_classes: ${result.totalMatches} matching class(es) for ${JSON.stringify(result.query)}${scope}; returning ${hits.length} hit(s) (limit ${result.limit}). ` +
-      `Index v${result.indexMeta.indexFormatVersion}, ${result.indexMeta.entryCount} entr(ies), sourceEnriched=${result.indexMeta.sourceEnrichedEntries}, skippedArtifacts=${result.indexMeta.skippedArtifacts}.`;
-    return mcpFullSuccess(summary, payload);
+    const scope = formatClasspathScope(query);
+    if (!found) {
+      return returnFullGuided(
+        `search_classes: 0 matches for ${JSON.stringify(result.query)}${scope}.`,
+        payload,
+        guidedEnvelope(buildSearchClassesEmptyMessage({ ...query, query: result.query }), false),
+      );
+    }
+    return returnFullPlain(
+      `search_classes: ${result.totalMatches} match(es) for ${JSON.stringify(result.query)}${scope}.`,
+      payload,
+    );
   }
 
   return mcpFailureResult(result.error, query, pickDiag(result));
@@ -573,8 +602,16 @@ export function mcpToolResultFromMethodSignature(
 ): CallToolResult {
   const detail = toolResponseDetail(query.full);
   if (result.ok) {
-    if (detail === 'compact') {
-      return mcpCompactSuccess(formatMethodSignatureText(result));
+    if (!result.methodFound) {
+      const env = guidedEnvelope(
+        buildMethodNotFoundOnClassMessage(result.className, result.methodName),
+        true,
+      );
+      if (detail === 'compact') {
+        return returnCompactGuided(formatMethodSignatureText(result), env);
+      }
+    } else if (detail === 'compact') {
+      return returnCompactPlain(formatMethodSignatureText(result));
     }
     const overloads =
       result.sourceAvailable === true
@@ -606,14 +643,17 @@ export function mcpToolResultFromMethodSignature(
       overloads,
       provenance: result.provenance,
     };
-    const metaHint =
-      result.sourceAvailable === true
-        ? 'parsed `.java` on classpath'
-        : 'javap bytecode metadata';
-    const summary = result.methodFound
-      ? `Found ${result.overloads.length} overload(s) for ${result.methodName} on ${result.className} (${metaHint}; sourceAvailable=${result.sourceAvailable}).`
-      : `Class ${result.className} found on the classpath, but no overloads matched method ${JSON.stringify(result.methodName)} (constructors use <init>).`;
-    return mcpFullSuccess(summary, payload);
+    if (!result.methodFound) {
+      return returnFullGuided(
+        `No overloads for ${result.methodName} on ${result.className}.`,
+        payload,
+        guidedEnvelope(buildMethodNotFoundOnClassMessage(result.className, result.methodName), true),
+      );
+    }
+    return returnFullPlain(
+      `Found ${result.overloads.length} overload(s) for ${result.methodName} on ${result.className}.`,
+      payload,
+    );
   }
 
   if (result.error.code === 'CLASS_NOT_FOUND') {
@@ -648,7 +688,7 @@ export function mcpToolResultFromClassStructure(
     if (detail === 'compact') {
       const scope: ClassStructureScopeType =
         query.scope && query.scope !== 'full' ? query.scope : 'overview';
-      return mcpCompactSuccess(
+      return returnCompactPlain(
         formatClassStructureText(result, {
           scope,
           classPurpose: result.classPurpose ?? null,
@@ -671,7 +711,7 @@ export function mcpToolResultFromClassStructure(
       ...(result.typeHierarchy ? { typeHierarchy: result.typeHierarchy } : {}),
       ...(result.classAnnotations ? { classAnnotations: result.classAnnotations } : {}),
     };
-    return mcpFullSuccess(formatClassStructureSummaryLine(result), payload);
+    return returnFullPlain(formatClassStructureSummaryLine(result), payload);
   }
 
   if (result.error.code === 'CLASS_NOT_FOUND') {
@@ -685,102 +725,44 @@ function mcpClassStructureNotFoundResult(
   error: Extract<ClassSourceError, { code: 'CLASS_NOT_FOUND' }>,
   query: ClassStructureQueryContext,
 ): CallToolResult {
-  const detail = toolResponseDetail(query.full);
-  const scope = formatQueryScope(query);
-  const description =
-    `The project classpath was resolved successfully${scope}, and ${error.searchedArtifactCount} external JAR(s) were scanned, ` +
-    `but no .class entry was found for ${JSON.stringify(error.className)}. ` +
-    `This is not a tool or network failure — the class is absent from the selected classpath. ` +
-    `Verify the fully-qualified name, ensure the dependency is declared, try a different modulePath or configuration ` +
-    `(default compileClasspath; use includeTest for testCompileClasspath), or use forceRefresh after dependency changes. ` +
-    `Inter-project module sources are not searched in this version.`;
-
-  const text = `No class found for ${JSON.stringify(error.className)} after scanning ${error.searchedArtifactCount} artifact(s)${scope}. The lookup completed successfully; the class is not on this classpath.`;
-  if (detail === 'compact') {
-    return mcpCompactSuccess(text);
-  }
-
-  const payload: McpClassStructureNotFoundPayload = {
-    ok: true,
-    found: false,
-    className: error.className,
-    searchedArtifactCount: error.searchedArtifactCount,
-    querySucceeded: true,
-    code: 'CLASS_NOT_FOUND',
-    description,
-  };
-
-  return mcpFullSuccess(text, payload);
+  return mcpNotFoundResult(error, query);
 }
 
 function mcpMethodSignatureNotFoundResult(
   error: Extract<ClassSourceError, { code: 'CLASS_NOT_FOUND' }>,
   query: MethodSignatureQueryContext,
 ): CallToolResult {
-  const scope = formatQueryScope(query);
-  const description =
-    `The project classpath was resolved successfully${scope}, and ${error.searchedArtifactCount} external JAR(s) were scanned, ` +
-    `but no .class entry was found for ${JSON.stringify(error.className)} while looking up ${JSON.stringify(query.methodName)}. ` +
-    `This is not a tool or network failure — the class is absent from the selected classpath. ` +
-    `Verify the fully-qualified name, ensure the dependency is declared, try a different modulePath or configuration ` +
-    `(default compileClasspath; use includeTest for testCompileClasspath), or use forceRefresh after dependency changes. ` +
-    `Inter-project module sources are not searched in this version.`;
-
-  const payload: McpMethodSignatureNotFoundPayload = {
-    ok: true,
-    found: false,
-    className: error.className,
-    methodName: query.methodName,
-    searchedArtifactCount: error.searchedArtifactCount,
-    querySucceeded: true,
-    code: 'CLASS_NOT_FOUND',
-    description,
-  };
-
-  return {
-    isError: false,
-    content: [
-      {
-        type: 'text',
-        text:
-          `No class found for ${JSON.stringify(error.className)} after scanning ${error.searchedArtifactCount} artifact(s)${scope} ` +
-          `(method query ${JSON.stringify(query.methodName)}). The lookup completed successfully; the class is not on this classpath.`,
-      },
-    ],
-    structuredContent: payload,
-  };
+  return mcpNotFoundResult(error, { ...query, methodName: query.methodName });
 }
 
-function mcpNotFoundResult(error: Extract<ClassSourceError, { code: 'CLASS_NOT_FOUND' }>, query: ClassSourceQueryContext): CallToolResult {
-  const scope = formatQueryScope(query);
-  const description =
-    `The project classpath was resolved successfully${scope}, and ${error.searchedArtifactCount} external JAR(s) were scanned, ` +
-    `but no .class entry was found for ${JSON.stringify(error.className)}. ` +
-    `This is not a tool or network failure — the class is absent from the selected classpath. ` +
-    `Verify the fully-qualified name, ensure the dependency is declared, try a different modulePath or configuration ` +
-    `(default compileClasspath; use includeTest for testCompileClasspath), or use forceRefresh after dependency changes. ` +
-    `Inter-project module sources are not searched in this version.`;
+function mcpNotFoundResult(
+  error: Extract<ClassSourceError, { code: 'CLASS_NOT_FOUND' }>,
+  query: ClassSourceQueryContext & { methodName?: string },
+): CallToolResult {
+  const detail = toolResponseDetail(query.full);
+  const scope = formatClasspathScope(query);
+  const env = classNotFoundEnvelope(error, query);
+  const text = `No class found for ${JSON.stringify(error.className)} after scanning ${error.searchedArtifactCount} artifact(s)${scope}.`;
+  if (detail === 'compact') {
+    return returnCompactGuided(text, env);
+  }
 
-  const payload: McpClassSourceNotFoundPayload = {
-    ok: true,
-    found: false,
+  const basePayload = {
+    ok: true as const,
+    found: false as const,
     className: error.className,
     searchedArtifactCount: error.searchedArtifactCount,
-    querySucceeded: true,
-    code: 'CLASS_NOT_FOUND',
-    description,
+    querySucceeded: true as const,
+    code: 'CLASS_NOT_FOUND' as const,
+    message: env.message,
   };
 
-  return {
-    isError: false,
-    content: [
-      {
-        type: 'text',
-        text: `No class found for ${JSON.stringify(error.className)} after scanning ${error.searchedArtifactCount} artifact(s)${scope}. The lookup completed successfully; the class is not on this classpath.`,
-      },
-    ],
-    structuredContent: payload,
-  };
+  const payload =
+    query.methodName !== undefined
+      ? ({ ...basePayload, methodName: query.methodName } satisfies McpMethodSignatureNotFoundPayload)
+      : (basePayload satisfies McpClassSourceNotFoundPayload | McpClassStructureNotFoundPayload);
+
+  return returnFullGuided(text, payload, env);
 }
 
 function pickDiag(r: { diagnosticId?: string; hint?: string }): { diagnosticId: string; hint?: string } | undefined {
@@ -798,13 +780,19 @@ function mcpFailureResult(
 }
 
 function buildMcpErrorCallResult(summary: string, payload: McpClassSourceFailurePayload): CallToolResult {
+  const env: GuidedEnvelopeFields = {
+    message: payload.message,
+    errorCategory: payload.errorCategory,
+    found: false,
+    querySucceeded: false,
+  };
   return {
     isError: true,
     content: [{ type: 'text', text: summary }],
-    structuredContent: payload,
+    structuredContent: withGuidedEnvelope(payload, env),
     errorCategory: payload.errorCategory,
     isRetryable: payload.isRetryable,
-    description: payload.description,
+    message: payload.message,
   } as CallToolResult;
 }
 
@@ -1065,7 +1053,7 @@ function envelope(
   errorCategory: McpErrorCategory,
   isRetryable: boolean,
   summary: string,
-  description: string,
+  message: string,
 ): ErrorEnvelope {
   const payload: McpClassSourceFailurePayload = {
     ok: false,
@@ -1073,24 +1061,9 @@ function envelope(
     code: error.code,
     errorCategory,
     isRetryable,
-    description,
+    message,
   };
   return { summary, payload };
-}
-
-function formatQueryScope(query: ClassSourceQueryContext): string {
-  const parts: string[] = [];
-  if (query.modulePath) {
-    parts.push(`module ${JSON.stringify(query.modulePath)}`);
-  }
-  if (query.configuration) {
-    parts.push(`configuration ${JSON.stringify(query.configuration)}`);
-  } else if (query.includeTest) {
-    parts.push('configuration testCompileClasspath');
-  } else {
-    parts.push('configuration compileClasspath');
-  }
-  return parts.length > 0 ? ` (${parts.join(', ')})` : '';
 }
 
 function joinDiagnosticBlob(message: string, stderr?: string): string {

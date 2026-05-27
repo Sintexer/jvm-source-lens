@@ -40,14 +40,14 @@ test('CLASS_NOT_FOUND is not an MCP error (valid empty result)', () => {
         searchedArtifactCount: 12,
       },
     },
-    query,
+    { ...query, full: true },
   );
   expect(r.isError).toBe(false);
-  const sc = r.structuredContent as { found: boolean; querySucceeded: boolean; description: string };
+  const sc = r.structuredContent as { found: boolean; querySucceeded: boolean; message: string };
   expect(sc.found).toBe(false);
   expect(sc.querySucceeded).toBe(true);
-  expect(sc.description).toContain('resolved successfully');
-  expect(sc.description).toContain('12');
+  expect(sc.message).toContain('Classpath resolved successfully');
+  expect(sc.message).toContain('12');
 });
 
 test('mcpToolResultFromClassStructure CLASS_NOT_FOUND is not MCP error (compact text)', () => {
@@ -68,6 +68,7 @@ test('mcpToolResultFromClassStructure CLASS_NOT_FOUND is not MCP error (compact 
   expect(r.content[0]?.type).toBe('text');
   expect((r.content[0] as { text: string }).text).toContain('com.example.Missing');
   expect((r.content[0] as { text: string }).text).toContain('5');
+  expect((r.content[0] as { text: string }).text).toContain('message:');
 });
 
 test('SIGNATURE_EXTRACT_FAILED without methodName classifies like javap failure', () => {
@@ -97,11 +98,11 @@ test('INVALID_FQN is validation and retryable after fix', () => {
   const sc = r.structuredContent as {
     errorCategory: string;
     isRetryable: boolean;
-    description: string;
+    message: string;
   };
   expect(sc.errorCategory).toBe('validation');
   expect(sc.isRetryable).toBe(true);
-  expect(sc.description).toContain('FQN');
+  expect(sc.message).toContain('FQN');
 });
 
 test('MODULE_NOT_FOUND is validation', () => {
@@ -125,10 +126,10 @@ test('RESOLUTION_FAILED with timeout is transient', () => {
     },
     query,
   );
-  const sc = r.structuredContent as { errorCategory: string; isRetryable: boolean; description: string };
+  const sc = r.structuredContent as { errorCategory: string; isRetryable: boolean; message: string };
   expect(sc.errorCategory).toBe('transient');
   expect(sc.isRetryable).toBe(true);
-  expect(sc.description).toContain('retry');
+  expect(sc.message).toContain('retry');
 });
 
 test('RESOLUTION_FAILED with 401 is permission', () => {
@@ -232,6 +233,7 @@ test('success compact returns source text without structuredContent', () => {
   expect(r.isError).toBe(false);
   expect(r.structuredContent).toBeUndefined();
   expect((r.content[0] as { text: string }).text).toContain('class T');
+  expect((r.content[0] as { text: string }).text).not.toContain('message:');
 });
 
 test('success full=true includes structured JSON', () => {
@@ -250,7 +252,8 @@ test('success full=true includes structured JSON', () => {
     { ...query, full: true },
   );
   expect(r.isError).toBe(false);
-  const sc = r.structuredContent as { found: boolean; source: string };
+  const sc = r.structuredContent as { found: boolean; source: string; message?: string };
   expect(sc.found).toBe(true);
   expect(sc.source).toContain('class T');
+  expect(sc.message).toBeUndefined();
 });

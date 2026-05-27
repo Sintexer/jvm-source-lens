@@ -16,11 +16,21 @@ import {
   mcpToolResultFromSearchClasses,
 } from './mcp-tool-result.js';
 
+const outcomeOk = {
+  errorCategory: null,
+};
+
+const guidedFail = {
+  message: 'Agent guidance for failure.',
+  found: false as const,
+  querySucceeded: false as const,
+};
+
 test('mcpFindInClassSourcePayloadSchema accepts success with hits', () => {
   const parsed = mcpFindInClassSourcePayloadSchema.safeParse({
     ok: true,
     found: true,
-    querySucceeded: true,
+    ...outcomeOk,
     className: 'x.Y',
     query: 'needle',
     regex: false,
@@ -62,19 +72,21 @@ test('mcpToolResultFromFindInClassSource no-match is not MCP error (compact text
         coordinates: { group: 'g', name: 'a', version: '1' },
         jarPath: '/tmp/a-sources.jar',
       },
-      description: 'no matches',
+      message: 'Class x.Y was resolved, but no matches.',
     },
     { projectRoot: '/tmp/app', query: 'missing' },
   );
   expect(r.isError).toBe(false);
   expect(r.structuredContent).toBeUndefined();
   expect((r.content[0] as { text: string }).text).toContain('no matches');
+  expect((r.content[0] as { text: string }).text).toContain('message:');
 });
 
 test('mcpClassSourceToolPayloadSchema accepts interproject provenance', () => {
   const parsed = mcpClassSourceToolPayloadSchema.safeParse({
     ok: true,
     found: true,
+    ...outcomeOk,
     source: 'package x;\npublic class Y {}\n',
     sourceAvailable: true,
     className: 'x.Y',
@@ -94,7 +106,7 @@ test('mcpGetMethodSignaturePayloadSchema accepts interprojectBytecode provenance
   const parsed = mcpGetMethodSignaturePayloadSchema.safeParse({
     ok: true,
     found: true,
-    querySucceeded: true,
+    ...outcomeOk,
     className: 'x.Y',
     methodName: 'run',
     methodFound: true,
@@ -115,7 +127,7 @@ test('mcpGetMethodSignaturePayloadSchema accepts interprojectSource provenance',
   const parsed = mcpGetMethodSignaturePayloadSchema.safeParse({
     ok: true,
     found: true,
-    querySucceeded: true,
+    ...outcomeOk,
     className: 'x.Y',
     methodName: 'run',
     methodFound: true,
@@ -137,7 +149,7 @@ test('mcpGetMethodSignaturePayloadSchema accepts sourcesJar provenance', () => {
   const parsed = mcpGetMethodSignaturePayloadSchema.safeParse({
     ok: true,
     found: true,
-    querySucceeded: true,
+    ...outcomeOk,
     className: 'g.a.Foo',
     methodName: 'bar',
     methodFound: false,
@@ -156,7 +168,7 @@ test('mcpGetClassStructurePayloadSchema accepts interprojectBytecode provenance'
   const parsed = mcpGetClassStructurePayloadSchema.safeParse({
     ok: true,
     found: true,
-    querySucceeded: true,
+    ...outcomeOk,
     className: 'x.Y',
     kind: 'class',
     superclass: 'java.lang.Object',
@@ -180,7 +192,7 @@ test('mcpGetClassStructurePayloadSchema accepts interprojectSource provenance', 
   const parsed = mcpGetClassStructurePayloadSchema.safeParse({
     ok: true,
     found: true,
-    querySucceeded: true,
+    ...outcomeOk,
     className: 'x.Y',
     kind: 'class',
     superclass: 'java.lang.Object',
@@ -205,6 +217,7 @@ test('mcpClassSourceToolPayloadSchema accepts success with found=true', () => {
   const parsed = mcpClassSourceToolPayloadSchema.safeParse({
     ok: true,
     found: true,
+    ...outcomeOk,
     source: 'public class T {}',
     sourceAvailable: true,
     className: 'com.example.T',
@@ -225,7 +238,8 @@ test('mcpClassSourceToolPayloadSchema accepts not-found payload', () => {
     searchedArtifactCount: 3,
     querySucceeded: true,
     code: 'CLASS_NOT_FOUND',
-    description: 'Classpath resolved; class absent.',
+    message: 'Classpath resolved; class absent.',
+    errorCategory: null,
   });
   expect(parsed.success).toBe(true);
 });
@@ -236,7 +250,8 @@ test('mcpClassSourceToolPayloadSchema accepts categorized failure', () => {
     code: 'INVALID_FQN',
     errorCategory: 'validation',
     isRetryable: true,
-    description: 'Fix the class name.',
+    ...guidedFail,
+    message: 'Fix the class name.',
     error: { code: 'INVALID_FQN', message: 'bad' },
   });
   expect(parsed.success).toBe(true);
@@ -245,6 +260,8 @@ test('mcpClassSourceToolPayloadSchema accepts categorized failure', () => {
 test('mcpListModulesPayloadSchema accepts success payload', () => {
   const parsed = mcpListModulesPayloadSchema.safeParse({
     ok: true,
+    found: true,
+    ...outcomeOk,
     projectRoot: '/tmp/proj',
     resolvedAt: '2026-05-15T12:00:00Z',
     schemaVersion: '1.1',
@@ -274,7 +291,8 @@ test('mcpListModulesPayloadSchema accepts RESOLUTION_FAILED failure', () => {
     code: 'RESOLUTION_FAILED',
     errorCategory: 'validation',
     isRetryable: true,
-    description: 'Not Gradle.',
+    ...guidedFail,
+    message: 'Not Gradle.',
     error: { code: 'RESOLUTION_FAILED', message: 'Not Gradle.' },
   });
   expect(parsed.success).toBe(true);
@@ -283,7 +301,8 @@ test('mcpListModulesPayloadSchema accepts RESOLUTION_FAILED failure', () => {
 test('mcpSearchClassesPayloadSchema accepts success payload', () => {
   const parsed = mcpSearchClassesPayloadSchema.safeParse({
     ok: true,
-    querySucceeded: true,
+    found: true,
+    ...outcomeOk,
     query: 'Repository',
     limit: 50,
     totalMatches: 2,
@@ -440,6 +459,8 @@ test('mcpToolResultFromListModules failure matches resolve_dependencies failure 
 test('mcpResolveDependenciesPayloadSchema accepts success with resolution', () => {
   const parsed = mcpResolveDependenciesPayloadSchema.safeParse({
     ok: true,
+    found: true,
+    ...outcomeOk,
     resolution: {
       schemaVersion: '1.1',
       resolvedAt: '2026-05-15T12:00:00Z',
@@ -458,7 +479,8 @@ test('mcpResolveDependenciesPayloadSchema accepts RESOLUTION_FAILED failure', ()
     code: 'RESOLUTION_FAILED',
     errorCategory: 'transient',
     isRetryable: true,
-    description: 'Gradle failed.',
+    ...guidedFail,
+    message: 'Gradle failed.',
     error: { code: 'RESOLUTION_FAILED', message: 'Gradle failed.' },
   });
   expect(parsed.success).toBe(true);
@@ -468,7 +490,7 @@ test('mcpGetMethodSignaturePayloadSchema accepts IDE-minimal overloads (source p
   const parsed = mcpGetMethodSignaturePayloadSchema.safeParse({
     ok: true,
     found: true,
-    querySucceeded: true,
+    ...outcomeOk,
     className: 'com.example.Foo',
     methodName: 'bar',
     methodFound: true,
@@ -495,7 +517,7 @@ test('mcpGetMethodSignaturePayloadSchema accepts success with overloads', () => 
   const parsed = mcpGetMethodSignaturePayloadSchema.safeParse({
     ok: true,
     found: true,
-    querySucceeded: true,
+    ...outcomeOk,
     className: 'java.lang.String',
     methodName: 'substring',
     methodFound: true,
@@ -527,7 +549,8 @@ test('mcpGetMethodSignaturePayloadSchema accepts SIGNATURE_EXTRACT_FAILED failur
     code: 'SIGNATURE_EXTRACT_FAILED',
     errorCategory: 'business',
     isRetryable: false,
-    description: 'javap failed.',
+    ...guidedFail,
+    message: 'javap failed.',
     error: {
       code: 'SIGNATURE_EXTRACT_FAILED',
       message: 'javap exited',
@@ -543,7 +566,7 @@ test('mcpGetClassStructurePayloadSchema accepts success', () => {
   const parsed = mcpGetClassStructurePayloadSchema.safeParse({
     ok: true,
     found: true,
-    querySucceeded: true,
+    ...outcomeOk,
     className: 'com.example.T',
     kind: 'class',
     superclass: 'com.example.Base',
@@ -582,7 +605,7 @@ test('mcpGetClassStructurePayloadSchema accepts hierarchy and annotations enrich
   const parsed = mcpGetClassStructurePayloadSchema.safeParse({
     ok: true,
     found: true,
-    querySucceeded: true,
+    ...outcomeOk,
     className: 'com.example.T',
     kind: 'class',
     superclass: 'com.example.Base',
@@ -644,7 +667,8 @@ test('mcpGetClassStructurePayloadSchema accepts SIGNATURE_EXTRACT_FAILED without
     code: 'SIGNATURE_EXTRACT_FAILED',
     errorCategory: 'business',
     isRetryable: false,
-    description: 'javap failed.',
+    ...guidedFail,
+    message: 'javap failed.',
     error: {
       code: 'SIGNATURE_EXTRACT_FAILED',
       message: 'javap exited',
@@ -666,10 +690,10 @@ test('mcpToolResultFromMethodSignature CLASS_NOT_FOUND is not MCP error', () => 
         searchedArtifactCount: 4,
       },
     },
-    { projectRoot: '/tmp/app', methodName: 'run' },
+    { projectRoot: '/tmp/app', methodName: 'run', full: true },
   );
   expect(r.isError).toBe(false);
-  const sc = r.structuredContent as { found: boolean; methodName: string };
+  const sc = r.structuredContent as { found: boolean; methodName: string; message: string };
   expect(sc.found).toBe(false);
   expect(sc.methodName).toBe('run');
 });
@@ -730,10 +754,14 @@ test('mcpToolResultFromResolutionResult full=true returns resolution JSON', () =
     '/tmp/proj',
     true,
   );
-  expect(result.structuredContent).toEqual({
+  expect(result.structuredContent).toMatchObject({
     ok: true,
+    found: true,
+    querySucceeded: true,
+    errorCategory: null,
     resolution: expect.objectContaining({ projectRoot: '/tmp/proj', modules: expect.any(Array) }),
   });
+  expect((result.structuredContent as { message?: string }).message).toBeUndefined();
 });
 
 test('mcpToolResultFromResolutionResult failure sets isError true', () => {

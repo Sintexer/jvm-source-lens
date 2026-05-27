@@ -36,10 +36,5 @@ export function formatFindInClassSourceText(
 export function formatFindInClassNoMatchText(
   result: Extract<FindInClassSourceResult, { ok: true; found: false }>,
 ): string {
-  return [
-    `find_in_class_source: no matches for ${JSON.stringify(result.query)} in ${result.className}`,
-    result.description,
-    '',
-    'Use full=true for structured JSON.',
-  ].join('\n');
+  return `find_in_class_source: no matches for ${JSON.stringify(result.query)} in ${result.className}`;
 }

@@ -9,6 +9,7 @@ import {
   searchClassSourceText,
   type ClassSourceTextSearchHit,
 } from './class-source-text-search.js';
+import { buildFindInClassNoMatchMessage } from './guided-response/messages.js';
 import { getClassSource, type GetClassSourceCliOptions, type GetClassSourceOptions } from './get-class-source.js';
 
 export type FindInClassSourceOptions = {
@@ -48,7 +49,7 @@ export type FindInClassSourceNoMatches = {
   regex: boolean;
   sourceAvailable: boolean;
   provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
-  description: string;
+  message: string;
 };
 
 export type FindInClassSourceResult =
@@ -96,7 +97,12 @@ function successFromSource(
       regex,
       sourceAvailable: extracted.sourceAvailable,
       provenance: extracted.provenance,
-      description: `Class ${extracted.className} was resolved, but no matches for ${JSON.stringify(query)}.`,
+      message: buildFindInClassNoMatchMessage({
+        className: extracted.className,
+        query,
+        regex,
+        sourceAvailable: extracted.sourceAvailable,
+      }),
     };
   }
 

@@ -10,11 +10,14 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 
 - **MCP / CLI default responses are plain text**, not JSON. Scripts and agents that parsed `structuredContent` on every success must pass **`full: true`** (MCP) or **`jvmsrc resolve --full`** / **`--json`** (CLI) for structured JSON.
 - **`get_class_structure`:** default compact text uses **`scope: overview`** (class purpose + method names). Use **`scope: declared`** for declaration lines, **`full: true`** for the previous JSON payload.
+- **MCP guided envelope:** agent-directed **`message`** on failures and empty results only (not happy-path success). Removed **`description`** on MCP payloads. **`search_classes`** adds **`found: false`** when **`totalMatches === 0`**. Compact mode appends a **`---`** footer with **`message`**, **`found`**, **`querySucceeded`**, **`errorCategory`** when guidance is present; success responses are payload text only.
+- **Removed agent skill:** dropped **`jvmsrc init`**, bundled **`SKILL.md`**, and **`src/cli-skill-install.ts`**. Use **`jvmsrc config`** + MCP **`JVMSRC_INSTRUCTIONS`** / guided **`message`** responses instead.
 
 ### Features
 
 - Compact text formatters (`src/text-format/`): declaration-line method listings, resolution summary, search hits, etc.
 - MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
+- **`src/guided-response/`:** centralized agent recovery copy for CLASS_NOT_FOUND, empty search, decompiled source warnings, and related outcomes.
 
 ## [1.7.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.6.0...v1.7.0) (2026-05-22)
 
@@ -307,4 +310,3 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 - CLI (`jvmsrc get`, `resolve`, `find-in-class`, `config`, `diagnostics`, `mcp`)
 - MCP tools: `get_class_source`, `get_method_signature`, `get_class_structure`, `search_classes`, `find_in_class_source`, `resolve_dependencies`
 - Resolution cache, CFR decompilation fallback, structured error codes
-- Agent skill ([SKILL.md](SKILL.md))

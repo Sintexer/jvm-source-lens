@@ -132,6 +132,25 @@ const classSourceErrorSchema = z.discriminatedUnion('code', [
 
 const mcpErrorCategorySchema = z.enum(['transient', 'validation', 'business', 'permission']);
 
+/** Agent-directed guidance on failures and empty results (full=true). */
+const guidedMessageSchema = { message: z.string() };
+
+/** Happy-path success: no agent `message` (found/querySucceeded on each branch). */
+const outcomeOnlySuccessSchema = {
+  errorCategory: z.null(),
+};
+
+const guidedNotFoundEnvelopeSchema = {
+  ...guidedMessageSchema,
+  errorCategory: z.null(),
+};
+
+const guidedFailureEnvelopeSchema = {
+  ...guidedMessageSchema,
+  found: z.literal(false),
+  querySucceeded: z.literal(false),
+};
+
 const classSourceErrorCodeSchema = z.enum([
   'INVALID_FQN',
   'MODULE_NOT_FOUND',
@@ -157,6 +176,8 @@ export const mcpClassSourceToolPayloadSchema = z.union([
   z.object({
     ok: z.literal(true),
     found: z.literal(true),
+    querySucceeded: z.literal(true),
+    ...outcomeOnlySuccessSchema,
     source: z.string(),
     sourceAvailable: z.boolean(),
     className: z.string(),
@@ -181,7 +202,7 @@ export const mcpClassSourceToolPayloadSchema = z.union([
     searchedArtifactCount: z.number(),
     querySucceeded: z.literal(true),
     code: z.literal('CLASS_NOT_FOUND'),
-    description: z.string(),
+    ...guidedNotFoundEnvelopeSchema,
   }),
   z.object({
     ok: z.literal(false),
@@ -189,7 +210,7 @@ export const mcpClassSourceToolPayloadSchema = z.union([
     code: classSourceErrorCodeSchema,
     errorCategory: mcpErrorCategorySchema,
     isRetryable: z.boolean(),
-    description: z.string(),
+    ...guidedFailureEnvelopeSchema,
   }),
 ]);
 
@@ -208,6 +229,7 @@ export const mcpFindInClassSourcePayloadSchema = z.union([
     ok: z.literal(true),
     found: z.literal(true),
     querySucceeded: z.literal(true),
+    ...outcomeOnlySuccessSchema,
     className: z.string(),
     query: z.string(),
     regex: z.boolean(),
@@ -228,7 +250,7 @@ export const mcpFindInClassSourcePayloadSchema = z.union([
     regex: z.boolean(),
     sourceAvailable: z.boolean(),
     provenance: provenanceSchema,
-    description: z.string(),
+    ...guidedNotFoundEnvelopeSchema,
   }),
   z.object({
     ok: z.literal(true),
@@ -237,7 +259,7 @@ export const mcpFindInClassSourcePayloadSchema = z.union([
     searchedArtifactCount: z.number(),
     querySucceeded: z.literal(true),
     code: z.literal('CLASS_NOT_FOUND'),
-    description: z.string(),
+    ...guidedNotFoundEnvelopeSchema,
   }),
   z.object({
     ok: z.literal(false),
@@ -245,7 +267,7 @@ export const mcpFindInClassSourcePayloadSchema = z.union([
     code: classSourceErrorCodeSchema,
     errorCategory: mcpErrorCategorySchema,
     isRetryable: z.boolean(),
-    description: z.string(),
+    ...guidedFailureEnvelopeSchema,
   }),
 ]);
 
@@ -328,13 +350,16 @@ const resolveDependenciesFailureSchema = z.object({
   code: z.literal('RESOLUTION_FAILED'),
   errorCategory: mcpErrorCategorySchema,
   isRetryable: z.boolean(),
-  description: z.string(),
+  ...guidedFailureEnvelopeSchema,
 });
 
 /** Documented MCP tool payloads for resolve_dependencies (success or categorized failure). */
 export const mcpResolveDependenciesPayloadSchema = z.union([
   z.object({
     ok: z.literal(true),
+    found: z.literal(true),
+    querySucceeded: z.literal(true),
+    ...outcomeOnlySuccessSchema,
     resolution: resolutionOutputSchema,
   }),
   resolveDependenciesFailureSchema,
@@ -343,6 +368,9 @@ export const mcpResolveDependenciesPayloadSchema = z.union([
 export const mcpListModulesPayloadSchema = z.union([
   z.object({
     ok: z.literal(true),
+    found: z.literal(true),
+    querySucceeded: z.literal(true),
+    ...outcomeOnlySuccessSchema,
     projectRoot: z.string(),
     resolvedAt: z.string(),
     schemaVersion: z.string(),
@@ -383,7 +411,9 @@ const searchClassesHitSchema = z.object({
 export const mcpSearchClassesPayloadSchema = z.union([
   z.object({
     ok: z.literal(true),
+    found: z.boolean(),
     querySucceeded: z.literal(true),
+    ...outcomeOnlySuccessSchema,
     query: z.string(),
     limit: z.number(),
     totalMatches: z.number(),
@@ -483,7 +513,7 @@ const mcpMethodSignatureFailureSchema = z.object({
   code: classSourceErrorCodeSchema,
   errorCategory: mcpErrorCategorySchema,
   isRetryable: z.boolean(),
-  description: z.string(),
+  ...guidedFailureEnvelopeSchema,
 });
 
 /** Documented MCP tool payloads for get_method_signature. */
@@ -492,6 +522,7 @@ export const mcpGetMethodSignaturePayloadSchema = z.union([
     ok: z.literal(true),
     found: z.literal(true),
     querySucceeded: z.literal(true),
+    ...outcomeOnlySuccessSchema,
     className: z.string(),
     methodName: z.string(),
     methodFound: z.boolean(),
@@ -507,7 +538,7 @@ export const mcpGetMethodSignaturePayloadSchema = z.union([
     searchedArtifactCount: z.number(),
     querySucceeded: z.literal(true),
     code: z.literal('CLASS_NOT_FOUND'),
-    description: z.string(),
+    ...guidedNotFoundEnvelopeSchema,
   }),
   mcpMethodSignatureFailureSchema,
 ]);
@@ -584,7 +615,7 @@ const mcpClassStructureFailureSchema = z.object({
   code: classSourceErrorCodeSchema,
   errorCategory: mcpErrorCategorySchema,
   isRetryable: z.boolean(),
-  description: z.string(),
+  ...guidedFailureEnvelopeSchema,
 });
 
 export const mcpGetClassStructurePayloadSchema = z.union([
@@ -592,6 +623,7 @@ export const mcpGetClassStructurePayloadSchema = z.union([
     ok: z.literal(true),
     found: z.literal(true),
     querySucceeded: z.literal(true),
+    ...outcomeOnlySuccessSchema,
     className: z.string(),
     kind: classStructureKindSchema,
     superclass: z.string().nullable(),
@@ -611,7 +643,7 @@ export const mcpGetClassStructurePayloadSchema = z.union([
     searchedArtifactCount: z.number(),
     querySucceeded: z.literal(true),
     code: z.literal('CLASS_NOT_FOUND'),
-    description: z.string(),
+    ...guidedNotFoundEnvelopeSchema,
   }),
   mcpClassStructureFailureSchema,
 ]);
@@ -637,17 +669,17 @@ When to reach for jvmsrc:
 - Inspecting inherited behavior from an external superclass
 - Debugging ClassCastException, NoSuchMethodError, or version mismatch
 
-Scope: Gradle projects only. `projectRoot` = directory containing gradlew.
+Scope: Gradle projects only. projectRoot = directory containing gradlew.
 
 ## Tool Selection — Narrowest First
 
-1. `search_classes`                          — unknown FQN or simple name
-2. `get_class_structure` scope: overview     — purpose + method names (start here)
-3. `get_method_signature`                    — one method's overloads
-4. `get_class_structure` scope: declared     — signature lines for many members
-5. `find_in_class_source`                    — needle in a known class
-6. `get_class_source` with methodNames/range — method bodies
-7. `get_class_source` full / full: true      — last resort only
+1. search_classes                          — unknown FQN or simple name
+2. get_class_structure scope: overview     — purpose + method names (start here)
+3. get_method_signature                    — one method's overloads
+4. get_class_structure scope: declared     — signature lines for many members
+5. find_in_class_source                    — needle in a known class
+6. get_class_source with methodNames/range — method bodies
+7. get_class_source full / full: true      — last resort only
 
 Anti-patterns:
 - Globbing **/Foo.java for external types — they live in JARs, not source trees
@@ -657,13 +689,19 @@ Anti-patterns:
 
 ## Response Format
 
-Plain text by default. Never pass `full: true` unless parsing JSON programmatically.
-If response has `outputTruncated: true`, use methodNames excerpts or get_class_structure —
+Plain text by default. Never pass full: true unless parsing JSON programmatically.
+
+Failures and empty results include agent-directed guidance:
+- full=true: read structuredContent.message (also found, querySucceeded, errorCategory).
+- compact (default): same fields in a --- footer after the payload text.
+Happy-path successes return payload text only (no message footer); full=true JSON includes found, querySucceeded, errorCategory: null.
+
+If outputTruncated is true, use methodNames excerpts or get_class_structure —
 do not assume missing code is absent.
 
 ## modulePath
 
-Pass `modulePath` (e.g. `:app`) when scoping to one submodule — from settings.gradle
+Pass modulePath (e.g. ":app") when scoping to one submodule — from settings.gradle
 or resolve_dependencies → resolution.modules[].name. Omit for single-module projects.
 Without it, all modules are searched and version conflicts across modules are surfaced.
 
@@ -701,17 +739,9 @@ republish or manual cache wipe — not routinely.
 
 ## Errors
 
-| errorCategory | Action                            |
-|---------------|-----------------------------------|
-| transient     | Retry once, then surface          |
-| validation    | Fix input; do not retry unchanged |
-| permission    | Surface; do not retry             |
-| business      | Expected outcome — see below      |
-
-Business outcomes (not failures):
-- found: false, querySucceeded: true  — class not on classpath; fix FQN or dependency
-- found: true, methodFound: false     — wrong method name; use get_class_structure
-- sourceAvailable: false              — decompilation used; proceed normally
+On failures and empty results, read message — it explains what happened and the next tool call to try.
+errorCategory transient: retry once; validation: fix inputs; permission: escalate credentials.
+found:false with querySucceeded:true is a successful scan with no match (not isError).
 `;
 
 export async function startMcpServer(): Promise<void> {
@@ -733,7 +763,7 @@ export async function startMcpServer(): Promise<void> {
         'Resolves the project classpath (cached), then returns Java source for a fully-qualified class name. ' +
         'Optional excerpt: methodNames (array; use <init> for constructors), and/or startLine/endLine (1-based) to avoid full-file payloads. ' +
         'Agent usage: last resort for bodies; use methodNames excerpt first. Default compact=text source + provenance footer; full=true for JSON envelope. ' +
-        'On failure: isError=true with errorCategory, isRetryable, description, and stable code (§7). ' +
+        'On failure: isError=true with errorCategory, isRetryable, message, and stable code (§7). ' +
         'When the class is absent from a successfully resolved classpath: isError=false, found=false (do not treat as access failure).',
       inputSchema: getClassSourceInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
@@ -832,7 +862,7 @@ export async function startMcpServer(): Promise<void> {
         'Runs or loads cached Gradle dependency resolution for the project and returns ResolutionOutput (§5.5.2). ' +
         'Agent usage: compact text module/config summary by default; full=true only for full artifact JSON. ' +
         'Use forceRefresh to bypass the hash cache after dependency changes without build-file edits. ' +
-        'On failure: isError=true with errorCategory, isRetryable, description, and code RESOLUTION_FAILED.',
+        'On failure: isError=true with errorCategory, isRetryable, message, and code RESOLUTION_FAILED.',
       inputSchema: resolveDependenciesInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },

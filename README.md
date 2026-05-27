@@ -77,19 +77,12 @@ Published package includes prebuilt `dist/` and bundled CFR — **Node ≥ 20**.
 ## Quick start
 
 ```bash
-# 1. Install the agent skill for your AI tool
-jvmsrc init --agent cursor          # Cursor (user skills)
-jvmsrc init --agent claude          # Claude Code
-jvmsrc init --agent cursor --scope project -p /path/to/gradle-project   # repo-shared
-
-# 2. Paste-ready MCP config, then restart your AI tool
+# 1. Paste-ready MCP config, then restart your AI tool
 jvmsrc config --project /path/to/gradle-project
 
-# 3. Fetch class source
+# 2. Fetch class source
 jvmsrc get com.example.MyClass -p /path/to/gradle-project
 ```
-
-Skill paths: `~/.cursor/skills/jvmsrc/SKILL.md`, `~/.claude/skills/jvmsrc/SKILL.md`, or `.cursor/skills/jvmsrc/SKILL.md` in a repo.
 
 More CLI examples:
 
@@ -120,7 +113,7 @@ After install, a typical server entry:
 
 Restart the MCP host after upgrading `jvmsrc`.
 
-> **Agents:** use **`jvmsrc init`** or **[SKILL.md](SKILL.md)**. Default tool responses are **plain text** (compact). Pass MCP **`full: true`** only when you need JSON (`structuredContent`). Discovery: `search_classes` → `get_class_structure` with **`scope: overview`** → `get_method_signature` for one method — not full-file source.
+> **Agents:** connect via MCP (`jvmsrc config` for a paste-ready server snippet). Default tool responses are **plain text** (compact); pass MCP **`full: true`** when you need JSON. On **empty results and failures**, read the **`message`** field (compact: **`---`** footer) — it tells you the next tool to call; happy-path successes omit **`message`**. Discovery: `search_classes` → `get_class_structure` with **`scope: overview`** → `get_method_signature` for one method — not full-file source.
 
 ### Tools
 
@@ -180,7 +173,6 @@ More (CFR/javap capture limits, error codes): [SPEC.md](SPEC.md).
 | Document | Contents |
 |----------|----------|
 | [SPEC.md](SPEC.md) | Schemas, contracts, CLI/MCP details |
-| [SKILL.md](SKILL.md) | Agent skill |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Build, test, PR notes |
 | [RELEASING.md](RELEASING.md) | Branching, semver, npm releases |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |

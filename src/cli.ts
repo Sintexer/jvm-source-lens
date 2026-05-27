@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { buildJvmsrcMcpConfigPayload } from './cli-config-command.js';
-import { registerInitCli } from './cli-init-command.js';
 import { registerDiagnosticsCli } from './diagnostics/cli-diagnostics-command.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import { writeCliFindInClassResult } from './cli-find-in-class-output.js';
@@ -23,7 +22,6 @@ function injectImplicitGetSubcommand(): void {
     'find-in-class',
     'mcp',
     'config',
-    'init',
     'resolve',
     'diagnostics',
   ]);
@@ -270,7 +268,6 @@ program
   );
 
 registerDiagnosticsCli(program);
-registerInitCli(program);
 
 program
   .command('config')
