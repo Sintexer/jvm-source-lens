@@ -27,7 +27,7 @@ Two ways to run it:
 - **As the `jvmsrc` CLI** — same engine, scriptable, pipe-friendly, useful on
   its own when you just want to read a class
 
-![jvmsrc resolving a Spring class in Claude Code](docs/assets/demo.gif)
+![jvmsrc resolving a Spring class in Claude Code](docs/assets/jvmsrc-demo.gif)
 *Claude Code resolving HandlerInterceptor signatures via jvmsrc — 3 calls, correct answer, no cache walking.*
 
 ## What it saves me, daily
