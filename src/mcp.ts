@@ -617,83 +617,101 @@ export const mcpGetClassStructurePayloadSchema = z.union([
 ]);
 
 const JVMSRC_INSTRUCTIONS = `
-You have access to jvmsrc — JVM Source Lens. It resolves a project's exact classpath
-by invoking the build tool, then extracts source or metadata for any class on that
-classpath. The resolved version is always the one the project actually uses.
- 
-## Mandatory Rule
- 
-ALWAYS use jvmsrc tools for any JVM class or dependency task. NEVER:
-- Manually locate or parse JARs under ~/.gradle, ~/.m2, or build output directories
-- Run javap, unzip, or jar commands to inspect class contents
-- Scan or grep build cache directories for artifact paths
-- Infer signatures, method contracts, or type hierarchies from memory or training data
- 
-This rule is absolute. The global dependency cache holds multiple versions of every
-library. Manual inspection silently picks the wrong one. Only jvmsrc knows which version
-this project uses. If a tool fails, surface the error — do not fall back to manual inspection.
+jvmsrc inspects external JVM dependencies — libraries and modules that are on the
+project's classpath but are NOT part of its own source tree. For local classes
+(anything under src/), use standard tools: grep, glob, bash, file search.
 
-**Never use workspace file search instead of jvmsrc** for JVM types: do not glob \`**/Foo.java\`
-under the repo or treat 0 hits as "class missing." Dependency classes live on the resolved
-classpath (JARs), not as source files under the module you are editing. Simple name only →
-\`search_classes\`; FQN from import → \`get_*\` directly. \`projectRoot\` = Gradle root (where gradlew lives).
+The boundary:
+- External dependency (in a JAR, resolved by Gradle) → jvmsrc, always
+- Local source file (lives under src/ in this repo)  → grep/glob/bash, never jvmsrc
 
-## Response detail (compact default)
+Why this matters: the global Gradle cache holds many versions of every library.
+Only jvmsrc resolves the exact version this project uses. Manual JAR inspection
+(javap, unzip, jar, cache browsing) silently picks the wrong one. There is no
+fallback: if jvmsrc fails, surface the error — do not substitute manual inspection.
 
-Tools return **plain text by default** (readable declaration lines, summaries). Omit \`full\` or set \`full: false\`.
-Pass \`full: true\` only when you must parse structured JSON programmatically.
+When to reach for jvmsrc:
+- Understanding an external class, interface, or annotation
+- Finding which dependency provides a type (unknown FQN or simple name)
+- Verifying a method signature, overloads, or return type from a library
+- Inspecting inherited behavior from an external superclass
+- Debugging ClassCastException, NoSuchMethodError, or version mismatch
 
-**Discovery phase:** keep compact text. Do not pass \`full: true\` on every call.
+Scope: Gradle projects only. `projectRoot` = directory containing gradlew.
 
-## Tool selection (narrowest tool first)
+## Tool Selection — Narrowest First
 
-Follow this ladder — do not skip to full-file source:
-
-1. \`search_classes\` — unknown FQN or simple name
-2. \`get_class_structure\` with default \`scope: overview\` — what is this class? (purpose + method names)
-3. \`get_method_signature\` — one method's overloads (preferred over listing all methods)
-4. \`get_class_structure\` with \`scope: declared\` — signature lines for many declared members
-5. \`find_in_class_source\` — needle in a known class (not repo grep)
-6. \`get_class_source\` with \`methodNames\` or line range — method bodies
-7. \`get_class_source\` full file or \`full: true\` — rare
+1. `search_classes`                          — unknown FQN or simple name
+2. `get_class_structure` scope: overview     — purpose + method names (start here)
+3. `get_method_signature`                    — one method's overloads
+4. `get_class_structure` scope: declared     — signature lines for many members
+5. `find_in_class_source`                    — needle in a known class
+6. `get_class_source` with methodNames/range — method bodies
+7. `get_class_source` full / full: true      — last resort only
 
 Anti-patterns:
-- Full \`get_class_source\` to discover method names → use \`get_class_structure\` overview
-- \`get_class_structure\` without \`scope\` on huge framework types → use \`overview\` or \`declared\`
-- \`full: true\` by default → wastes context; compact text is enough for agents
-- Full \`resolve_dependencies\` JSON for module names → compact text summary (default)
+- Globbing **/Foo.java for external types — they live in JARs, not source trees
+- Full get_class_source to discover method names → use get_class_structure overview
+- full: true by default → compact text is enough; only use when parsing JSON
+- resolve_dependencies full: true for module names → default text summary suffices
 
-Other tools:
-- Strict JVM descriptors → \`get_method_signature\` with \`bytecodeOnly: true\`
-- Hierarchy / annotations → \`get_class_structure\` with \`include\` (still prefer compact text; use \`full: true\` only if parsing JSON)
+## Response Format
 
-Always pass \`projectRoot\` (absolute path). Pass \`modulePath\` when scoping one submodule.
- 
+Plain text by default. Never pass `full: true` unless parsing JSON programmatically.
+If response has `outputTruncated: true`, use methodNames excerpts or get_class_structure —
+do not assume missing code is absent.
+
+## modulePath
+
+Pass `modulePath` (e.g. `:app`) when scoping to one submodule — from settings.gradle
+or resolve_dependencies → resolution.modules[].name. Omit for single-module projects.
+Without it, all modules are searched and version conflicts across modules are surfaced.
+
 ## sourceAvailable
- 
-Every source response includes \`sourceAvailable\`:
-- \`true\` — original source; Javadoc, parameter names, and generics are ground truth
-- \`false\` — CFR decompilation; structure reliable, Javadoc absent, names may be synthetic
- 
-## Cache
- 
-First call per project invokes the build tool (5–10s). Subsequent calls reuse the cache
-(<100ms). All extraction tools share the same warm cache. Use \`forceRefresh: true\` on
-\`resolve_dependencies\` only when artifacts changed without build file edits (e.g. SNAPSHOT
-republish, manual cache wipe) — not on every call.
- 
+
+- true  — original source; Javadoc, parameter names, generics are ground truth
+- false — CFR decompilation; structure reliable, names may be synthetic (arg0) —
+          confirm with get_method_signature if parameter names matter
+
+Never invent signatures after a tool returned the real ones.
+
+## Session Cache
+
+Cache projectRoot and modulePath once per session. First call invokes Gradle (5–10s);
+subsequent calls reuse cache (<100ms). Use forceRefresh: true only for SNAPSHOT
+republish or manual cache wipe — not routinely.
+
+## Debugging
+
+| Symptom                                 | Action                                          |
+|-----------------------------------------|-------------------------------------------------|
+| NoSuchMethodError / AbstractMethodError | resolve_dependencies — version mismatch         |
+| ClassCastException across libs          | resolve_dependencies — duplicate coordinates    |
+| Unexpected runtime behavior             | get_class_source excerpt; check sourceAvailable |
+| Unfamiliar class in stack trace         | search_classes → get_class_structure            |
+| Stale SNAPSHOT / after cache wipe       | resolve_dependencies(forceRefresh: true)        |
+
+## Excerpt Edge Cases
+
+- methodNames: use <init> for constructors; response includes matchedMethodNames /
+  unmatchedMethodNames
+- find_in_class_source: found: false + querySucceeded: true — pattern absent, not a
+  search_classes substitute
+- EXCERPT_NOT_FOUND / EXCERPT_REQUEST_INVALID — fix methodNames or line range
+
 ## Errors
- 
-- \`transient\` (isRetryable: true) — retry once after a delay, then surface the failure
-- \`validation\` — fix the input; retrying will always fail
-- \`permission\` — environment needs fixing; do not retry
-- \`business\` — expected outcomes, not failures:
-  - \`found: false, querySucceeded: true\` → class absent from classpath; verify the FQN
-  - \`found: true, methodFound: false\` → class exists, method name wrong; use \`get_class_structure\` to browse
-  - \`find_in_class_source\` with \`found: false, querySucceeded: true\` → class resolved, substring/regex absent; adjust query
-  - \`sourceAvailable: false\` → no sources JAR; decompilation used automatically, not an error
- 
-On any error: surface it. Never fall back to manual inspection.
+
+| errorCategory | Action                            |
+|---------------|-----------------------------------|
+| transient     | Retry once, then surface          |
+| validation    | Fix input; do not retry unchanged |
+| permission    | Surface; do not retry             |
+| business      | Expected outcome — see below      |
+
+Business outcomes (not failures):
+- found: false, querySucceeded: true  — class not on classpath; fix FQN or dependency
+- found: true, methodFound: false     — wrong method name; use get_class_structure
+- sourceAvailable: false              — decompilation used; proceed normally
 `;
 
 export async function startMcpServer(): Promise<void> {
