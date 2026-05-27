@@ -19,6 +19,16 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 - MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
 - **`src/guided-response/`:** centralized agent recovery copy for CLASS_NOT_FOUND, empty search, decompiled source warnings, and related outcomes.
 
+## [1.8.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.7.0...v1.8.0) (2026-05-27)
+
+
+### Features
+
+* extend error and empty mcp result description ([86d4cd3](https://github.com/Sintexer/jvm-source-lens/commit/86d4cd3e2a558f8f4b9a482011ad3e667da70207))
+* refactor MCP description ([e3b2cf8](https://github.com/Sintexer/jvm-source-lens/commit/e3b2cf87f1f122d7d3f664270301094ebd13ad66))
+* remove SKILL.md as mcp description is good enough on its own ([f181908](https://github.com/Sintexer/jvm-source-lens/commit/f1819085cb495f2c9e9cf1428f758b07e763a54f))
+* update core deps versions ([ef0c4ed](https://github.com/Sintexer/jvm-source-lens/commit/ef0c4edb4c951a27b49072dc4f3f2549d686a9eb))
+
 ## [1.7.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.6.0...v1.7.0) (2026-05-22)
 
 
