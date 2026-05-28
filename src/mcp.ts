@@ -29,6 +29,7 @@ import { getClassStructure } from './get-class-structure.js';
 import { getMethodSignaturesBytecode } from './get-method-signatures-bytecode.js';
 import { getMethodSignatures } from './get-method-signatures.js';
 import { searchClasses } from './search-classes.js';
+import { JVMSRC_INSTRUCTIONS, MCP_TOOL_COPY } from './copy/index.js';
 
 const artifactCoordinatesSchema = z.object({
   group: z.string(),
@@ -648,102 +649,6 @@ export const mcpGetClassStructurePayloadSchema = z.union([
   mcpClassStructureFailureSchema,
 ]);
 
-const JVMSRC_INSTRUCTIONS = `
-jvmsrc inspects external JVM dependencies — libraries and modules that are on the
-project's classpath but are NOT part of its own source tree. For local classes
-(anything under src/), use standard tools: grep, glob, bash, file search.
-
-The boundary:
-- External dependency (in a JAR, resolved by Gradle) → jvmsrc, always
-- Local source file (lives under src/ in this repo)  → grep/glob/bash, never jvmsrc
-
-Why this matters: the global Gradle cache holds many versions of every library.
-Only jvmsrc resolves the exact version this project uses. Manual JAR inspection
-(javap, unzip, jar, cache browsing) silently picks the wrong one. There is no
-fallback: if jvmsrc fails, surface the error — do not substitute manual inspection.
-
-When to reach for jvmsrc:
-- Understanding an external class, interface, or annotation
-- Finding which dependency provides a type (unknown FQN or simple name)
-- Verifying a method signature, overloads, or return type from a library
-- Inspecting inherited behavior from an external superclass
-- Debugging ClassCastException, NoSuchMethodError, or version mismatch
-
-Scope: Gradle projects only. projectRoot = directory containing gradlew.
-
-## Tool Selection — Narrowest First
-
-1. search_classes                          — unknown FQN or simple name
-2. get_class_structure scope: overview     — purpose + method names (start here)
-3. get_method_signature                    — one method's overloads
-4. get_class_structure scope: declared     — signature lines for many members
-5. find_in_class_source                    — needle in a known class
-6. get_class_source with methodNames/range — method bodies
-7. get_class_source full / full: true      — last resort only
-
-Anti-patterns:
-- Globbing **/Foo.java for external types — they live in JARs, not source trees
-- Full get_class_source to discover method names → use get_class_structure overview
-- full: true by default → compact text is enough; only use when parsing JSON
-- resolve_dependencies full: true for module names → default text summary suffices
-
-## Response Format
-
-Plain text by default. Never pass full: true unless parsing JSON programmatically.
-
-Failures and empty results include agent-directed guidance:
-- full=true: read structuredContent.message (also found, querySucceeded, errorCategory).
-- compact (default): same fields in a --- footer after the payload text.
-Happy-path successes return payload text only (no message footer); full=true JSON includes found, querySucceeded, errorCategory: null.
-
-If outputTruncated is true, use methodNames excerpts or get_class_structure —
-do not assume missing code is absent.
-
-## modulePath
-
-Pass modulePath (e.g. ":app") when scoping to one submodule — from settings.gradle
-or resolve_dependencies → resolution.modules[].name. Omit for single-module projects.
-Without it, all modules are searched and version conflicts across modules are surfaced.
-
-## sourceAvailable
-
-- true  — original source; Javadoc, parameter names, generics are ground truth
-- false — CFR decompilation; structure reliable, names may be synthetic (arg0) —
-          confirm with get_method_signature if parameter names matter
-
-Never invent signatures after a tool returned the real ones.
-
-## Session Cache
-
-Cache projectRoot and modulePath once per session. First call invokes Gradle (5–10s);
-subsequent calls reuse cache (<100ms). Use forceRefresh: true only for SNAPSHOT
-republish or manual cache wipe — not routinely.
-
-## Debugging
-
-| Symptom                                 | Action                                          |
-|-----------------------------------------|-------------------------------------------------|
-| NoSuchMethodError / AbstractMethodError | resolve_dependencies — version mismatch         |
-| ClassCastException across libs          | resolve_dependencies — duplicate coordinates    |
-| Unexpected runtime behavior             | get_class_source excerpt; check sourceAvailable |
-| Unfamiliar class in stack trace         | search_classes → get_class_structure            |
-| Stale SNAPSHOT / after cache wipe       | resolve_dependencies(forceRefresh: true)        |
-
-## Excerpt Edge Cases
-
-- methodNames: use <init> for constructors; response includes matchedMethodNames /
-  unmatchedMethodNames
-- find_in_class_source: found: false + querySucceeded: true — pattern absent, not a
-  search_classes substitute
-- EXCERPT_NOT_FOUND / EXCERPT_REQUEST_INVALID — fix methodNames or line range
-
-## Errors
-
-On failures and empty results, read message — it explains what happened and the next tool call to try.
-errorCategory transient: retry once; validation: fix inputs; permission: escalate credentials.
-found:false with querySucceeded:true is a successful scan with no match (not isError).
-`;
-
 export async function startMcpServer(): Promise<void> {
   const pkgPath = fileURLToPath(new URL('../package.json', import.meta.url));
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
@@ -758,13 +663,8 @@ export async function startMcpServer(): Promise<void> {
   server.registerTool(
     'get_class_source',
     {
-      title: 'Get Java source for a class',
-      description:
-        'Resolves the project classpath (cached), then returns Java source for a fully-qualified class name. ' +
-        'Optional excerpt: methodNames (array; use <init> for constructors), and/or startLine/endLine (1-based) to avoid full-file payloads. ' +
-        'Agent usage: last resort for bodies; use methodNames excerpt first. Default compact=text source + provenance footer; full=true for JSON envelope. ' +
-        'On failure: isError=true with errorCategory, isRetryable, message, and stable code (§7). ' +
-        'When the class is absent from a successfully resolved classpath: isError=false, found=false (do not treat as access failure).',
+      title: MCP_TOOL_COPY.get_class_source.title,
+      description: MCP_TOOL_COPY.get_class_source.description,
       inputSchema: getClassSourceInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -809,13 +709,8 @@ export async function startMcpServer(): Promise<void> {
   server.registerTool(
     'find_in_class_source',
     {
-      title: 'Find text in resolved Java source',
-      description:
-        'Resolves classpath source for a fully-qualified class (same as get_class_source), then searches for a literal ' +
-        'substring or regex. Returns hits with line/column, matched text, optional multiline block, and context lines. ' +
-        'Agent usage: when class is known and you need a needle — not workspace grep. Default compact=text hits; full=true for JSON. ' +
-        'When the class is missing from the classpath: isError=false, found=false (CLASS_NOT_FOUND). ' +
-        'When the class exists but nothing matches: isError=false, found=false, querySucceeded=true.',
+      title: MCP_TOOL_COPY.find_in_class_source.title,
+      description: MCP_TOOL_COPY.find_in_class_source.description,
       inputSchema: findInClassSourceInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -857,12 +752,8 @@ export async function startMcpServer(): Promise<void> {
   server.registerTool(
     'resolve_dependencies',
     {
-      title: 'Resolve Gradle dependencies',
-      description:
-        'Runs or loads cached Gradle dependency resolution for the project and returns ResolutionOutput (§5.5.2). ' +
-        'Agent usage: compact text module/config summary by default; full=true only for full artifact JSON. ' +
-        'Use forceRefresh to bypass the hash cache after dependency changes without build-file edits. ' +
-        'On failure: isError=true with errorCategory, isRetryable, message, and code RESOLUTION_FAILED.',
+      title: MCP_TOOL_COPY.resolve_dependencies.title,
+      description: MCP_TOOL_COPY.resolve_dependencies.description,
       inputSchema: resolveDependenciesInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -890,13 +781,8 @@ export async function startMcpServer(): Promise<void> {
   server.registerTool(
     'search_classes',
     {
-      title: 'Search classes on the resolved classpath',
-      description:
-        'Capability discovery when the FQN is unknown (SPEC §12.3): resolves or loads cached Gradle output, builds or reuses a disk index for the selected module + configuration, ' +
-        'then returns ranked FQN hits. Query is a case-insensitive substring over the index `searchText` (FQN, simple name, and when sources exist: declared method/field identifiers and Javadoc plain text), or a glob with * and ? matched against FQN or simple name only. ' +
-        'Agent usage: discovery only; follow with get_class_structure scope=overview — not full source. Default compact=text hit list; full=true for JSON. ' +
-        'Optional limit (default 50, max 200). Same projectRoot, modulePath, configuration, includeTest, and forceRefresh semantics as get_class_source. ' +
-        'On failure: isError=true with code RESOLUTION_FAILED or classpath validation codes.',
+      title: MCP_TOOL_COPY.search_classes.title,
+      description: MCP_TOOL_COPY.search_classes.description,
       inputSchema: searchClassesInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -938,12 +824,8 @@ export async function startMcpServer(): Promise<void> {
   server.registerTool(
     'get_method_signature',
     {
-      title: 'Get Java method overload signatures',
-      description:
-        'Overload listing (SPEC §7.2). Default (bytecodeOnly omitted or false): IDE-first — parse `.java` from sources JAR or inter-project src when present (sourceAvailable=true); else javap -private -verbose fallback (sourceAvailable=false). ' +
-        'Agent usage: preferred for one method — do not use get_class_source for signatures. Default compact=declaration lines per overload; full=true for JSON. ' +
-        'bytecodeOnly=true: javap only on the binary classpath element — no sources/src fallback; sourceAvailable always false (full JVM descriptors, flags, synthetic members). ' +
-        'Use methodName <init> for constructors. CLASS_NOT_FOUND: isError=false, found=false. No matching overloads: methodFound=false.',
+      title: MCP_TOOL_COPY.get_method_signature.title,
+      description: MCP_TOOL_COPY.get_method_signature.description,
       inputSchema: getMethodSignatureInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -983,12 +865,8 @@ export async function startMcpServer(): Promise<void> {
   server.registerTool(
     'get_class_structure',
     {
-      title: 'Get structured Java class API',
-      description:
-        'Returns metadata for a fully-qualified class. Default compact=text with scope=overview (class purpose + declared method names). ' +
-        'scope: overview | declared (signature lines) | effective (capped inherited API). full=true returns JSON (legacy shape). ' +
-        'Agent usage: discovery → scope=overview; many signatures → scope=declared; one method → get_method_signature instead. ' +
-        'Optional `include` for hierarchy/fields/annotations (mainly with full=true). Does not decompile (no CFR). On javap failure: SIGNATURE_EXTRACT_FAILED.',
+      title: MCP_TOOL_COPY.get_class_structure.title,
+      description: MCP_TOOL_COPY.get_class_structure.description,
       inputSchema: getClassStructureInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },

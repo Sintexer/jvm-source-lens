@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { appendGuidanceFooter, outcomeOnlySuccessFields } from './envelope.js';
-import { buildClassNotFoundMessage, buildSearchClassesEmptyMessage } from './messages.js';
+import { appendGuidanceFooter, outcomeOnlySuccessFields } from '../guided-response/envelope.js';
+import { buildClassNotFoundMessage, buildSearchClassesEmptyMessage } from './empty-messages.js';
 
 test('buildClassNotFoundMessage suggests search_classes for simple names', () => {
   const msg = buildClassNotFoundMessage({

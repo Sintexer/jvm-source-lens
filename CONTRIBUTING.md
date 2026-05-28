@@ -45,6 +45,8 @@ node dist/cli.js get com.example.Foo -p /path/to/project
 
 `jvmsrc config` via `bun run src/cli.ts` emits an MCP snippet for `bun run src/mcp.ts`. After `bun run build`, use `node dist/cli.js mcp` or link the package for a global `jvmsrc` shim.
 
+**Agent-facing copy** (MCP tool descriptions, server instructions, empty/failure messages) lives under [`src/copy/`](src/copy/) — edit there when tuning what agents see; `src/mcp.ts` wires tools only.
+
 ## Gradle smoke fixture
 
 ```bash

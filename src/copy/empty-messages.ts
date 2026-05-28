@@ -1,3 +1,4 @@
+import { CONSTRUCTOR_METHOD_NAME } from './hints.js';
 import type { ClassNotFoundContext, GuidedQueryContext } from './types.js';
 
 export function formatClasspathScope(ctx: GuidedQueryContext): string {
@@ -36,7 +37,7 @@ export function buildClassNotFoundMessage(ctx: ClassNotFoundContext): string {
     );
   } else {
     parts.push(
-      'Confirm the fully-qualified className, that the dependency is declared in Gradle, and that modulePath matches the owning module (list_modules if unsure).',
+      'Confirm the fully-qualified className, that the dependency is declared in Gradle, and that modulePath matches the owning module (resolve_dependencies → resolution.modules[].name if unsure).',
     );
   }
   if (!ctx.includeTest && /Test$|Tests$|IT$|Spec$/.test(ctx.className.split('.').pop() ?? '')) {
@@ -81,6 +82,6 @@ export function buildSearchClassesEmptyMessage(ctx: GuidedQueryContext & { query
 export function buildMethodNotFoundOnClassMessage(className: string, methodName: string): string {
   return (
     `Class ${className} is on the classpath, but no overloads matched method ${JSON.stringify(methodName)}. ` +
-    'Constructors use <init>. Call get_class_structure with scope=overview to browse declared method names.'
+    `Constructors use ${CONSTRUCTOR_METHOD_NAME}. Call get_class_structure with scope=overview to browse declared method names.`
   );
 }

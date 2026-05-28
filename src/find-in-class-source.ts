@@ -9,7 +9,7 @@ import {
   searchClassSourceText,
   type ClassSourceTextSearchHit,
 } from './class-source-text-search.js';
-import { buildFindInClassNoMatchMessage } from './guided-response/messages.js';
+import { buildFindInClassNoMatchMessage } from './copy/empty-messages.js';
 import { getClassSource, type GetClassSourceCliOptions, type GetClassSourceOptions } from './get-class-source.js';
 
 export type FindInClassSourceOptions = {

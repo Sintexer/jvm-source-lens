@@ -1,4 +1,5 @@
 import type { GetMethodSignatureResult } from '../get-method-signatures.js';
+import { METHOD_NOT_FOUND_ON_CLASS_LINES, USE_FULL_JSON_HINT } from '../copy/hints.js';
 import { formatJavapOverloadLine } from './format-method-line.js';
 import { formatProvenanceLine } from './format-provenance.js';
 
@@ -8,8 +9,7 @@ export function formatMethodSignatureText(result: Extract<GetMethodSignatureResu
     '',
   ];
   if (!result.methodFound) {
-    lines.push('No overloads matched this method name (constructors use <init>).');
-    lines.push('Use get_class_structure scope=overview to browse declared method names.');
+    lines.push(...METHOD_NOT_FOUND_ON_CLASS_LINES);
     return lines.join('\n');
   }
   for (const o of result.overloads) {
@@ -18,6 +18,6 @@ export function formatMethodSignatureText(result: Extract<GetMethodSignatureResu
   lines.push('');
   lines.push(formatProvenanceLine(result.provenance));
   lines.push('');
-  lines.push('Use full=true for structured JSON overload objects.');
+  lines.push(USE_FULL_JSON_HINT);
   return lines.join('\n');
 }
