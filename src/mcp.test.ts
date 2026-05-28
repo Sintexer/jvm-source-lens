@@ -299,7 +299,7 @@ test('mcpListModulesPayloadSchema accepts RESOLUTION_FAILED failure', () => {
   expect(parsed.success).toBe(true);
 });
 
-test('mcpSearchClassesPayloadSchema accepts success payload', () => {
+test('mcpSearchClassesPayloadSchema accepts default compact success payload', () => {
   const parsed = mcpSearchClassesPayloadSchema.safeParse({
     ok: true,
     found: true,
@@ -309,8 +309,26 @@ test('mcpSearchClassesPayloadSchema accepts success payload', () => {
     totalMatches: 2,
     hitCount: 2,
     hits: [
+      { className: 'com.example.FooRepository', libName: 'spring-data-jpa' },
+      { className: 'com.example.BarRepository', libName: ':core' },
+    ],
+  });
+  expect(parsed.success).toBe(true);
+});
+
+test('mcpSearchClassesPayloadSchema accepts include all full hit payload', () => {
+  const parsed = mcpSearchClassesPayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    ...outcomeOk,
+    query: 'Repository',
+    limit: 50,
+    totalMatches: 1,
+    hitCount: 1,
+    hits: [
       {
         className: 'com.example.FooRepository',
+        libName: 'a',
         simpleName: 'FooRepository',
         moduleName: 'root',
         configurationName: 'compileClasspath',
@@ -339,7 +357,51 @@ test('mcpSearchClassesPayloadSchema accepts success payload', () => {
   expect(parsed.success).toBe(true);
 });
 
-test('mcpToolResultFromSearchClasses success', () => {
+test('mcpToolResultFromSearchClasses compact omits jar paths', () => {
+  const r = mcpToolResultFromSearchClasses(
+    {
+      ok: true,
+      query: 'X',
+      limit: 10,
+      totalMatches: 1,
+      hits: [
+        {
+          className: 'a.b.X',
+          simpleName: 'X',
+          moduleName: 'root',
+          configurationName: 'compileClasspath',
+          origin: 'external',
+          coordinates: { group: 'g', name: 'n', version: null },
+          jarPath: '/home/user/.gradle/caches/j.jar',
+          moduleRoot: null,
+          interprojectModuleName: null,
+          score: 10_000_000,
+        },
+      ],
+      indexMeta: {
+        indexFormatVersion: 3,
+        buildInputsDigest: 'a',
+        resolutionFingerprint: 'b',
+        moduleName: 'root',
+        configurationName: 'compileClasspath',
+        includeTest: false,
+        builtAt: '2026-05-15T12:00:00Z',
+        entryCount: 1,
+        skippedArtifacts: 0,
+        sourceEnrichedEntries: 1,
+        sourceEnrichmentBytesCap: 262144,
+      },
+    },
+    { projectRoot: '/p', query: 'X' },
+  );
+  expect(r.isError).toBe(false);
+  const text = r.content[0]?.type === 'text' ? r.content[0].text : '';
+  expect(text).toContain('a.b.X');
+  expect(text).toContain('n');
+  expect(text).not.toContain('/home/user/.gradle');
+});
+
+test('mcpToolResultFromSearchClasses full json default projection', () => {
   const r = mcpToolResultFromSearchClasses(
     {
       ok: true,
@@ -374,9 +436,13 @@ test('mcpToolResultFromSearchClasses success', () => {
         sourceEnrichmentBytesCap: 262144,
       },
     },
-    { projectRoot: '/p', query: 'X' },
+    { projectRoot: '/p', query: 'X', full: true },
   );
   expect(r.isError).toBe(false);
+  const sc = r.structuredContent as Record<string, unknown>;
+  expect(sc.indexMeta).toBeUndefined();
+  const hits = sc.hits as Array<Record<string, unknown>>;
+  expect(hits[0]).toEqual({ className: 'a.b.X', libName: 'n' });
 });
 
 test('mcpToolResultFromListModules success compact text by default', () => {

@@ -396,18 +396,21 @@ const classSearchIndexMetaSchema = z.object({
   sourceEnrichmentBytesCap: z.number(),
 });
 
-const searchClassesHitSchema = z.object({
-  className: z.string(),
-  simpleName: z.string(),
-  moduleName: z.string(),
-  configurationName: z.string(),
-  origin: z.enum(['external', 'interproject', 'local-file']),
-  coordinates: artifactCoordinatesSchema,
-  jarPath: z.string().nullable(),
-  moduleRoot: z.string().nullable(),
-  interprojectModuleName: z.string().nullable(),
-  score: z.number(),
-});
+const searchClassesHitSchema = z
+  .object({
+    className: z.string(),
+    libName: z.string(),
+    simpleName: z.string().optional(),
+    score: z.number().optional(),
+    origin: z.enum(['external', 'interproject', 'local-file']).optional(),
+    coordinates: artifactCoordinatesSchema.optional(),
+    jarPath: z.string().nullable().optional(),
+    moduleRoot: z.string().nullable().optional(),
+    interprojectModuleName: z.string().nullable().optional(),
+    moduleName: z.string().optional(),
+    configurationName: z.string().optional(),
+  })
+  .passthrough();
 
 export const mcpSearchClassesPayloadSchema = z.union([
   z.object({
@@ -420,7 +423,7 @@ export const mcpSearchClassesPayloadSchema = z.union([
     totalMatches: z.number(),
     hitCount: z.number(),
     hits: z.array(searchClassesHitSchema),
-    indexMeta: classSearchIndexMetaSchema,
+    indexMeta: classSearchIndexMetaSchema.optional(),
   }),
   resolveDependenciesFailureSchema,
 ]);
@@ -433,6 +436,20 @@ const searchClassesInputSchema = z.object({
   includeTest: z.boolean().optional(),
   forceRefresh: z.boolean().optional(),
   limit: z.number().int().positive().max(200).optional(),
+  include: z
+    .array(
+      z.enum([
+        'simpleName',
+        'score',
+        'origin',
+        'coordinates',
+        'location',
+        'scope',
+        'indexMeta',
+        'all',
+      ]),
+    )
+    .optional(),
   ...fullResponseInput,
 });
 
@@ -794,6 +811,7 @@ export async function startMcpServer(): Promise<void> {
         includeTest: args.includeTest,
         query: args.query,
         full: args.full,
+        include: args.include,
       };
 
       const root = resolveProjectRoot(args.projectRoot);

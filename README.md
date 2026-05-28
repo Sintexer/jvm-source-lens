@@ -72,7 +72,7 @@ the common failure on JVM codebases: not invention, *invisibility*.
     User: Override the audit hook from AbstractTradingService — is there a
           public utility method on it we should reuse?
 
-    Agent: [search_classes("AbstractTradingService")]
+    Agent: [search_classes("AbstractTradingService")]  → FQN + lib name per hit
            [get_class_structure(scope: "overview")]
            → finds maskSensitiveFields(), protected, in 3.0.0-SNAPSHOT
            [get_method_signature("maskSensitiveFields")]
@@ -141,7 +141,7 @@ upgrade.
 
 | Tool | What it does |
 |------|--------------|
-| `search_classes` | Find a class by simple name or glob across the resolved classpath |
+| `search_classes` | Find a class by simple name or glob; default hits are FQN + lib name (compact suggestion list) |
 | `get_class_structure` | Class overview (purpose + method names) or declared signatures |
 | `get_method_signature` | Real overloads for one method, with parameter names and generics |
 | `find_in_class_source` | Search inside one resolved class |

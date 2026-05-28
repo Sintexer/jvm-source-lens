@@ -21,7 +21,15 @@ import type {
 } from './class-structure/types.js';
 import type { ListModulesPayloadData } from './list-modules-payload.js';
 import { buildListModulesPayload } from './list-modules-payload.js';
-import type { ClassSearchHit, ClassSearchIndexMeta, SearchClassesResult } from './class-search/types.js';
+import type {
+  ClassSearchIncludeSection,
+  ProjectedSearchClassesHit,
+} from './class-search/project-search-hit.js';
+import {
+  projectSearchClassesHit,
+  projectSearchClassesIndexMeta,
+} from './class-search/project-search-hit.js';
+import type { ClassSearchIndexMeta, SearchClassesResult } from './class-search/types.js';
 import type { ClassSourceTextSearchHit } from './class-source-text-search.js';
 import type { FindInClassSourceResult } from './find-in-class-source.js';
 import { resolveResponseDetailWithEnv, type ResponseDetail } from './response-detail.js';
@@ -107,7 +115,10 @@ export type McpListModulesSuccessPayload = { ok: true } & ListModulesPayloadData
 
 export type McpListModulesToolPayload = McpListModulesSuccessPayload | McpClassSourceFailurePayload;
 
-export type SearchClassesQueryContext = ClassSourceQueryContext & { query: string };
+export type SearchClassesQueryContext = ClassSourceQueryContext & {
+  query: string;
+  include?: ClassSearchIncludeSection[];
+};
 
 export type FindInClassSourceQueryContext = ClassSourceQueryContext & {
   query: string;
@@ -157,18 +168,7 @@ export type McpFindInClassSourceToolPayload =
   | McpClassSourceFailurePayload
   | McpClassSourceNotFoundPayload;
 
-export type McpSearchClassesHitPayload = {
-  className: string;
-  simpleName: string;
-  moduleName: string;
-  configurationName: string;
-  origin: 'external' | 'interproject' | 'local-file';
-  coordinates: { group: string; name: string; version: string | null };
-  jarPath: string | null;
-  moduleRoot: string | null;
-  interprojectModuleName: string | null;
-  score: number;
-};
+export type McpSearchClassesHitPayload = ProjectedSearchClassesHit;
 
 export type McpSearchClassesSuccessPayload = {
   ok: true;
@@ -179,7 +179,7 @@ export type McpSearchClassesSuccessPayload = {
   totalMatches: number;
   hitCount: number;
   hits: McpSearchClassesHitPayload[];
-  indexMeta: ClassSearchIndexMeta;
+  indexMeta?: ClassSearchIndexMeta;
 };
 
 export type McpSearchClassesToolPayload = McpSearchClassesSuccessPayload | McpClassSourceFailurePayload;
@@ -530,6 +530,7 @@ export function mcpToolResultFromSearchClasses(
         totalMatches: result.totalMatches,
         hits: result.hits,
         limit: result.limit,
+        include: query.include,
       });
       if (!found) {
         return returnCompactGuided(
@@ -539,18 +540,10 @@ export function mcpToolResultFromSearchClasses(
       }
       return returnCompactPlain(text);
     }
-    const hits: McpSearchClassesHitPayload[] = result.hits.map((h: ClassSearchHit) => ({
-      className: h.className,
-      simpleName: h.simpleName,
-      moduleName: h.moduleName,
-      configurationName: h.configurationName,
-      origin: h.origin,
-      coordinates: h.coordinates,
-      jarPath: h.jarPath,
-      moduleRoot: h.moduleRoot,
-      interprojectModuleName: h.interprojectModuleName,
-      score: h.score,
-    }));
+    const hits: McpSearchClassesHitPayload[] = result.hits.map((h) =>
+      projectSearchClassesHit(h, query.include),
+    );
+    const indexMeta = projectSearchClassesIndexMeta(result.indexMeta, query.include);
     const payload: McpSearchClassesSuccessPayload = {
       ok: true,
       found,
@@ -560,7 +553,7 @@ export function mcpToolResultFromSearchClasses(
       totalMatches: result.totalMatches,
       hitCount: hits.length,
       hits,
-      indexMeta: result.indexMeta,
+      ...(indexMeta !== undefined ? { indexMeta } : {}),
     };
     const scope = formatClasspathScope(query);
     if (!found) {

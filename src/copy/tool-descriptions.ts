@@ -6,15 +6,15 @@ export type McpToolCopy = {
 export const MCP_TOOL_COPY = {
   search_classes: {
     title: 'Search classes on the resolved classpath',
-    description: `Discovery tool for finding classes when you don't know the FQN. Returns a ranked list of fully-qualified class names that match a query.
+    description: `Discovery tool for finding classes when you don't know the FQN. Returns a ranked suggestion list: each hit is className (FQN) plus libName (artifact or Gradle module) — enough to call get_class_structure next.
 
 Use this when: the user mentions a type by simple name, you see an unknown class in a stack trace, or you need to locate which dependency provides something. Follow up with get_class_structure (scope=overview) — never jump straight to get_class_source.
 
 Query: case-insensitive substring matched against FQN, simple name, and (when sources are available) declared method/field names and Javadoc text. Globs with * and ? are matched against FQN or simple name only.
 
-Params: query (required); modulePath, configuration, includeTest, limit (default 50, max 200), forceRefresh (after dependency changes).
+Params: query (required); modulePath, configuration, includeTest, limit (default 50, max 200), forceRefresh (after dependency changes). Optional include array expands the response (same tokens in compact text and JSON): simpleName, score, origin, coordinates, location (jarPath/moduleRoot), scope (moduleName/configurationName), indexMeta (index build stats at payload root), all (full per-hit fields plus indexMeta). Default omits jar paths and Maven coordinates.
 
-Returns: compact text hit list by default; full=true returns JSON. Only set full=true if you are parsing the result programmatically.
+Returns: compact text — one FQN and libName per line by default; full=true returns JSON with the same default projection unless include expands it. Only set full=true if you are parsing the result programmatically.
 
 Errors: isError=true with RESOLUTION_FAILED if Gradle resolution fails, or a classpath validation code.`,
   },
