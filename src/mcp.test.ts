@@ -17,6 +17,7 @@ import {
 } from './mcp-tool-result.js';
 
 const outcomeOk = {
+  querySucceeded: true as const,
   errorCategory: null,
 };
 
