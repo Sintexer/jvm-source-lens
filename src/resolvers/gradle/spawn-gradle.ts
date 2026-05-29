@@ -58,6 +58,22 @@ export async function runGradleTask(
   const wrapper = resolveGradleWrapperCommand(root);
   const useWrapper = wrapper.useWrapper;
 
+  // Guard: wrapper script exists but gradle-wrapper.jar is a Git LFS pointer.
+  if (wrapper.lfsPointerJar) {
+    const jarRel = path.join('gradle', 'wrapper', 'gradle-wrapper.jar');
+    return {
+      ok: false,
+      message: [
+        `gradle/wrapper/gradle-wrapper.jar is a Git LFS pointer, not a real JAR.`,
+        `Gradle cannot start (it would throw ClassNotFoundException: org.gradle.wrapper.GradleWrapperMain).`,
+        `Fix: run \`git lfs pull\` (install git-lfs first if needed) in ${root},`,
+        `or regenerate the wrapper with \`gradle wrapper\` using a system Gradle installation.`,
+      ].join('\n'),
+      command: [path.join(root, 'gradlew'), jarRel],
+      exitCode: null,
+    };
+  }
+
   const props: Record<string, string> = {
     jvmsrcWrapper: useWrapper ? 'true' : 'false',
     ...projectProperties,

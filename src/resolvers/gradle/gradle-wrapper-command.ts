@@ -5,6 +5,12 @@ export type GradleWrapperCommand = {
   useWrapper: boolean;
   /** argv prefix: executable + fixed args before Gradle flags (-P, --init-script, task). */
   command: string[];
+  /**
+   * Set when a `gradlew` script exists but `gradle/wrapper/gradle-wrapper.jar` is a
+   * Git LFS pointer rather than a real JAR. The caller should surface an actionable error
+   * instead of spawning the wrapper (which would fail with ClassNotFoundException).
+   */
+  lfsPointerJar?: true;
 };
 
 function gradlePlatform(): NodeJS.Platform {
@@ -44,6 +50,41 @@ function wrapperLaunchArgv(wrapperPath: string): string[] {
   return ['sh', wrapperPath];
 }
 
+/** Maximum file size (bytes) that could be a Git LFS pointer — real JARs are at least 1 KB. */
+const LFS_POINTER_MAX_SIZE = 512;
+/** Git LFS pointer magic prefix (UTF-8). */
+const LFS_POINTER_PREFIX = 'version https://git-lfs.github.com/spec/';
+
+/**
+ * Returns true when the file at `jarPath` looks like a Git LFS pointer rather than a real JAR.
+ * A Git LFS pointer is a small text file whose first line is
+ * `version https://git-lfs.github.com/spec/v1`. Real JARs start with the ZIP magic `PK\x03\x04`.
+ */
+function isGitLfsPointer(jarPath: string): boolean {
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(jarPath);
+  } catch {
+    return false; // missing — not our concern here
+  }
+  if (!stat.isFile() || stat.size > LFS_POINTER_MAX_SIZE) {
+    return false;
+  }
+  try {
+    // Read only the first ~48 bytes — enough to identify the LFS magic prefix.
+    const fd = fs.openSync(jarPath, 'r');
+    const buf = Buffer.alloc(LFS_POINTER_PREFIX.length);
+    const bytesRead = fs.readSync(fd, buf, 0, buf.length, 0);
+    fs.closeSync(fd);
+    if (bytesRead < LFS_POINTER_PREFIX.length) {
+      return false;
+    }
+    return buf.toString('utf8') === LFS_POINTER_PREFIX;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Which Gradle executable to run for a project root: wrapper script or `gradle` on PATH.
  * Does not embed platform shell commands (`cmd.exe`, etc.) — spawn layer uses cross-spawn.
@@ -54,6 +95,10 @@ export function resolveGradleWrapperCommand(projectRoot: string): GradleWrapperC
   for (const name of wrapperCandidateNames()) {
     const wrapperPath = path.join(root, name);
     if (fs.existsSync(wrapperPath)) {
+      const jarPath = path.join(root, 'gradle', 'wrapper', 'gradle-wrapper.jar');
+      if (isGitLfsPointer(jarPath)) {
+        return { useWrapper: true, command: wrapperLaunchArgv(wrapperPath), lfsPointerJar: true };
+      }
       return { useWrapper: true, command: wrapperLaunchArgv(wrapperPath) };
     }
   }

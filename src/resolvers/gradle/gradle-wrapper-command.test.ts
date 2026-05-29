@@ -76,4 +76,49 @@ describe('resolveGradleWrapperCommand', () => {
     expect(r.useWrapper).toBe(true);
     expect(r.command).toEqual(['sh', unix]);
   });
+
+  test('sets lfsPointerJar when gradle-wrapper.jar is a Git LFS pointer', () => {
+    setup();
+    process.env.JVMSRC_TEST_PLATFORM = 'linux';
+    const unix = path.join(tmpDir, 'gradlew');
+    fs.writeFileSync(unix, '#!/bin/sh\n', { mode: 0o755 });
+    const jarDir = path.join(tmpDir, 'gradle', 'wrapper');
+    fs.mkdirSync(jarDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(jarDir, 'gradle-wrapper.jar'),
+      'version https://git-lfs.github.com/spec/v1\noid sha256:abc123\nsize 43453\n',
+    );
+
+    const r = resolveGradleWrapperCommand(tmpDir);
+    expect(r.useWrapper).toBe(true);
+    expect(r.lfsPointerJar).toBe(true);
+  });
+
+  test('does not set lfsPointerJar when gradle-wrapper.jar is a real JAR (ZIP magic)', () => {
+    setup();
+    process.env.JVMSRC_TEST_PLATFORM = 'linux';
+    const unix = path.join(tmpDir, 'gradlew');
+    fs.writeFileSync(unix, '#!/bin/sh\n', { mode: 0o755 });
+    const jarDir = path.join(tmpDir, 'gradle', 'wrapper');
+    fs.mkdirSync(jarDir, { recursive: true });
+    // ZIP/JAR files start with PK\x03\x04
+    const zipMagic = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00]);
+    fs.writeFileSync(path.join(jarDir, 'gradle-wrapper.jar'), zipMagic);
+
+    const r = resolveGradleWrapperCommand(tmpDir);
+    expect(r.useWrapper).toBe(true);
+    expect(r.lfsPointerJar).toBeUndefined();
+  });
+
+  test('does not set lfsPointerJar when gradle-wrapper.jar is absent', () => {
+    setup();
+    process.env.JVMSRC_TEST_PLATFORM = 'linux';
+    const unix = path.join(tmpDir, 'gradlew');
+    fs.writeFileSync(unix, '#!/bin/sh\n', { mode: 0o755 });
+    // no gradle/wrapper/ directory at all
+
+    const r = resolveGradleWrapperCommand(tmpDir);
+    expect(r.useWrapper).toBe(true);
+    expect(r.lfsPointerJar).toBeUndefined();
+  });
 });
