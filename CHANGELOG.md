@@ -19,6 +19,13 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 - MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
 - **`src/guided-response/`:** centralized agent recovery copy for CLASS_NOT_FOUND, empty search, decompiled source warnings, and related outcomes.
 
+## [1.10.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.9.0...v1.10.0) (2026-05-29)
+
+
+### Features
+
+* make tools outputs concise by default ([3bbfb40](https://github.com/Sintexer/jvm-source-lens/commit/3bbfb401f1785ef0333562feef0b9ec14abf28ac))
+
 ## [1.9.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.8.1...v1.9.0) (2026-05-29)
 
 
