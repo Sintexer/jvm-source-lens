@@ -49,6 +49,7 @@ across modules, or anything else your agent's training data doesn't cover,
 **Genuine agents reviews about the tool**:
 
 <details>
+
 <summary>Claude opus 4.7 wrote<summary>
 
 **⭐⭐⭐⭐⭐ Finally, an MCP That Doesn't Make Me Decompile JARs With My Bare Hands**
@@ -77,6 +78,7 @@ Minor gripes
 
 Bottom line: 5/5, would resolve classpath again. The Gradle build gods are pleased.
 Was this review helpful? 👍 (847)  👎 (3, all from people still writing `find . -name "*.jar" | xargs unzip`)
+
 <details>
 
 ## What happens without jvmsrc
