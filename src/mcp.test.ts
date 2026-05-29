@@ -821,14 +821,45 @@ test('mcpToolResultFromResolutionResult full=true returns resolution JSON', () =
     '/tmp/proj',
     true,
   );
+  // Default projection: summary shape (no full artifact list), no 'resolution' wrapper key
   expect(result.structuredContent).toMatchObject({
     ok: true,
     found: true,
     querySucceeded: true,
     errorCategory: null,
-    resolution: expect.objectContaining({ projectRoot: '/tmp/proj', modules: expect.any(Array) }),
+    projectRoot: '/tmp/proj',
+    moduleCount: 1,
+    modules: expect.any(Array),
   });
+  expect((result.structuredContent as Record<string, unknown>)['resolution']).toBeUndefined();
   expect((result.structuredContent as { message?: string }).message).toBeUndefined();
+});
+
+test('mcpToolResultFromResolutionResult full=true include=all returns full resolution JSON', () => {
+  const result = mcpToolResultFromResolutionResult(
+    {
+      ok: true,
+      output: {
+        schemaVersion: '1.1',
+        resolvedAt: '2026-05-15T12:00:00Z',
+        buildSystem: { type: 'gradle', version: '8.7', wrapper: true },
+        projectRoot: '/tmp/proj',
+        modules: [{ name: ':app', path: '/tmp/proj/app', configurations: [] }],
+        errors: [],
+      },
+    },
+    '/tmp/proj',
+    true,
+    ['all'],
+  );
+  // include=all returns full ResolutionOutput
+  expect(result.structuredContent).toMatchObject({
+    found: true,
+    querySucceeded: true,
+    errorCategory: null,
+    modules: expect.any(Array),
+    projectRoot: '/tmp/proj',
+  });
 });
 
 test('mcpToolResultFromResolutionResult failure sets isError true', () => {

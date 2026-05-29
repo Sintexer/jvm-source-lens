@@ -32,6 +32,11 @@ import {
 import type { ClassSearchIndexMeta, SearchClassesResult } from './class-search/types.js';
 import type { ClassSourceTextSearchHit } from './class-source-text-search.js';
 import type { FindInClassSourceResult } from './find-in-class-source.js';
+import { projectClassStructure, type ClassStructureIncludeSection } from './mcp-projection/class-structure.js';
+import { projectResolution, type ResolutionIncludeSection } from './mcp-projection/resolution.js';
+import { projectFindHit, type FindInClassIncludeSection } from './mcp-projection/find-in-class.js';
+import { projectOverload, type MethodSignatureIncludeSection } from './mcp-projection/method-signature.js';
+import { projectProvenance } from './mcp-projection/provenance.js';
 import { resolveResponseDetailWithEnv, type ResponseDetail } from './response-detail.js';
 import {
   formatClassStructureSummaryLine,
@@ -64,6 +69,7 @@ import {
 import type { GuidedEnvelopeFields, McpErrorCategory } from './guided-response/types.js';
 
 export type { McpErrorCategory };
+export type { ClassStructureIncludeSection, ResolutionIncludeSection, FindInClassIncludeSection, MethodSignatureIncludeSection };
 
 export type McpClassSourceSuccessPayload = {
   ok: true;
@@ -123,6 +129,8 @@ export type SearchClassesQueryContext = ClassSourceQueryContext & {
 export type FindInClassSourceQueryContext = ClassSourceQueryContext & {
   query: string;
   regex?: boolean;
+  /** Response projection. Default: line/column/matchedText only. */
+  include?: FindInClassIncludeSection[];
 };
 
 export type McpFindInClassSourceHitPayload = {
@@ -195,6 +203,8 @@ export type ClassSourceQueryContext = {
 
 export type ClassStructureQueryContext = ClassSourceQueryContext & {
   scope?: ClassStructureScopeType;
+  /** Response projection for JSON (full=true). */
+  include?: ClassStructureIncludeSection[];
 };
 
 function toolResponseDetail(full?: boolean): ResponseDetail {
@@ -348,7 +358,11 @@ export type McpClassStructureToolPayload =
   | McpClassStructureNotFoundPayload
   | McpClassSourceFailurePayload;
 
-export type MethodSignatureQueryContext = ClassSourceQueryContext & { methodName: string };
+export type MethodSignatureQueryContext = ClassSourceQueryContext & {
+  methodName: string;
+  /** Response projection for JSON (full=true). */
+  include?: MethodSignatureIncludeSection[];
+};
 
 function mapFindHit(h: ClassSourceTextSearchHit): McpFindInClassSourceHitPayload {
   return {
@@ -400,8 +414,9 @@ export function mcpToolResultFromFindInClassSource(
     return returnCompactPlain(formatFindInClassSourceText(result));
   }
 
-  const hits = result.hits.map(mapFindHit);
-  const payload: McpFindInClassSourceSuccessPayload = {
+  const hits = result.hits.map((h) => projectFindHit(h, query.include));
+  const wantsFullProv = query.include?.includes('all') || query.include?.includes('provenance');
+  const payload: Record<string, unknown> = {
     ok: true,
     found: true,
     querySucceeded: true,
@@ -409,7 +424,7 @@ export function mcpToolResultFromFindInClassSource(
     query: result.query,
     regex: result.regex,
     sourceAvailable: result.sourceAvailable,
-    provenance: result.provenance,
+    provenance: wantsFullProv ? result.provenance : projectProvenance(result.provenance, query.include as string[] | undefined),
     lineNumbersReliable: result.lineNumbersReliable,
     totalMatches: result.totalMatches,
     hitCount: result.hitCount,
@@ -485,6 +500,7 @@ export function mcpToolResultFromResolutionResult(
   result: ResolutionResult,
   projectRoot: string,
   full?: boolean,
+  include?: ResolutionIncludeSection[],
 ): CallToolResult {
   const detail = toolResponseDetail(full);
   if (result.ok) {
@@ -492,8 +508,8 @@ export function mcpToolResultFromResolutionResult(
     if (detail === 'compact') {
       return returnCompactPlain(formatResolutionSummaryText(output));
     }
-    const payload: McpResolveDependenciesSuccessPayload = { ok: true, resolution: output };
-    return returnFullPlain(`Resolved ${output.modules.length} module(s).`, payload);
+    const projected = projectResolution(output, include);
+    return returnFullPlain(`Resolved ${output.modules.length} module(s).`, projected as Record<string, unknown>);
   }
 
   return mcpToolResultFromResolutionFailure(result, projectRoot);
@@ -627,7 +643,9 @@ export function mcpToolResultFromMethodSignature(
             return row;
           })
         : result.overloads;
-    const payload: McpMethodSignatureSuccessPayload = {
+    const projectedOverloads = overloads.map((o) => projectOverload(o, query.include));
+    const wantsFullProv = query.include?.includes('all') || query.include?.includes('provenance');
+    const payload: Record<string, unknown> = {
       ok: true,
       found: true,
       querySucceeded: true,
@@ -635,8 +653,8 @@ export function mcpToolResultFromMethodSignature(
       methodName: result.methodName,
       methodFound: result.methodFound,
       sourceAvailable: result.sourceAvailable,
-      overloads,
-      provenance: result.provenance,
+      overloads: projectedOverloads,
+      provenance: wantsFullProv ? result.provenance : projectProvenance(result.provenance, query.include as string[] | undefined),
     };
     if (!result.methodFound) {
       return returnFullGuided(
@@ -690,23 +708,13 @@ export function mcpToolResultFromClassStructure(
         }),
       );
     }
-    const payload: McpClassStructureSuccessPayload = {
-      ok: true,
-      found: true,
-      querySucceeded: true,
-      className: result.className,
-      kind: result.kind,
-      superclass: result.superclass,
-      interfaces: result.interfaces,
-      typeParameters: result.typeParameters,
-      fields: result.fields,
-      methods: classStructureMethodsForMcpPayload(result.methods, result.sourceAvailable),
-      sourceAvailable: result.sourceAvailable,
-      provenance: result.provenance,
-      ...(result.typeHierarchy ? { typeHierarchy: result.typeHierarchy } : {}),
-      ...(result.classAnnotations ? { classAnnotations: result.classAnnotations } : {}),
-    };
-    return returnFullPlain(formatClassStructureSummaryLine(result), payload);
+    const scope: ClassStructureScopeType =
+      query.scope && query.scope !== 'full' ? query.scope : 'overview';
+    const projected = projectClassStructure(result, {
+      scope,
+      include: query.include,
+    });
+    return returnFullPlain(formatClassStructureSummaryLine(result), projected as Record<string, unknown>);
   }
 
   if (result.error.code === 'CLASS_NOT_FOUND') {

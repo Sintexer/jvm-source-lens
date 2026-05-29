@@ -285,6 +285,8 @@ const findInClassSourceInputSchema = z.object({
   contextLines: z.number().int().min(0).max(50).optional(),
   maxHits: z.number().int().min(1).max(100).optional(),
   regex: z.boolean().optional(),
+  /** Response projection for full=true JSON. Default: line/column/matchedText only. */
+  include: z.array(z.enum(['context', 'block', 'provenance', 'all'])).optional(),
   ...fullResponseInput,
 });
 
@@ -456,6 +458,8 @@ const searchClassesInputSchema = z.object({
 const resolveDependenciesInputSchema = z.object({
   projectRoot: z.string().min(1),
   forceRefresh: z.boolean().optional(),
+  /** Response projection for full=true JSON. Default: summary counts only. */
+  include: z.array(z.enum(['artifacts', 'coordinates', 'jarPaths', 'errors', 'all'])).optional(),
   ...fullResponseInput,
 });
 
@@ -522,6 +526,8 @@ const getMethodSignatureInputSchema = z.object({
   forceRefresh: z.boolean().optional(),
   /** When true: javap -private -verbose only (no sources JAR or src/ fallback). Default false = IDE-first. */
   bytecodeOnly: z.boolean().optional(),
+  /** Response projection for full=true JSON. Default: declarationLine only per overload. */
+  include: z.array(z.enum(['parameters', 'exceptions', 'jvmDescriptor', 'provenance', 'all'])).optional(),
   ...fullResponseInput,
 });
 
@@ -621,7 +627,7 @@ const getClassStructureInputSchema = z.object({
   configuration: z.string().optional(),
   includeTest: z.boolean().optional(),
   forceRefresh: z.boolean().optional(),
-  include: z.array(z.enum(['hierarchy', 'fields', 'annotations'])).optional(),
+  include: z.array(z.enum(['hierarchy', 'fields', 'annotations', 'signatures', 'inherited', 'provenance', 'all'])).optional(),
   /** Compact text detail: overview (default), declared, effective. Use full=true for JSON. */
   scope: classStructureScopeSchema.optional(),
   ...fullResponseInput,
@@ -740,6 +746,7 @@ export async function startMcpServer(): Promise<void> {
         query: args.query,
         regex: args.regex,
         full: args.full,
+        include: args.include,
       };
 
       const root = resolveProjectRoot(args.projectRoot);
@@ -785,7 +792,7 @@ export async function startMcpServer(): Promise<void> {
           forceRefresh: Boolean(args.forceRefresh),
           diagnosticOperation: 'resolve_dependencies',
         });
-        return mcpToolResultFromResolutionResult(result, args.projectRoot, args.full);
+        return mcpToolResultFromResolutionResult(result, args.projectRoot, args.full, args.include);
       } catch (e) {
         if (e instanceof UnsupportedProjectError) {
           return mcpToolResultFromProjectRootError(e.message, args.projectRoot);
@@ -855,6 +862,7 @@ export async function startMcpServer(): Promise<void> {
         includeTest: args.includeTest,
         methodName: args.methodName,
         full: args.full,
+        include: args.include,
       };
 
       const root = resolveProjectRoot(args.projectRoot);
@@ -896,6 +904,7 @@ export async function startMcpServer(): Promise<void> {
         includeTest: args.includeTest,
         full: args.full ?? (args.scope === 'full' ? true : undefined),
         scope: args.scope,
+        include: args.include,
       };
 
       const root = resolveProjectRoot(args.projectRoot);
@@ -904,13 +913,17 @@ export async function startMcpServer(): Promise<void> {
       }
 
       try {
+        const coreInclude = (args.include ?? []).filter(
+          (s): s is 'hierarchy' | 'fields' | 'annotations' =>
+            s === 'hierarchy' || s === 'fields' || s === 'annotations',
+        );
         const result = await getClassStructure(args.className, {
           projectRoot: root.path,
           modulePath: args.modulePath,
           configuration: args.configuration,
           includeTest: Boolean(args.includeTest),
           forceRefresh: Boolean(args.forceRefresh),
-          include: args.include,
+          include: coreInclude.length > 0 ? coreInclude : undefined,
           scope: args.scope === 'full' ? 'overview' : args.scope,
         });
         return mcpToolResultFromClassStructure(result, query);
