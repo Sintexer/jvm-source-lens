@@ -1,0 +1,4 @@
+[test]
+# Gradle invocations (publish, resolve) take 10-30 s each; scenario tests chain several of them.
+# Unit tests finish in <200 ms and are unaffected by this ceiling.
+timeout = 120000

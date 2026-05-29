@@ -83,12 +83,19 @@ export function isPathWithinDecompiledCache(filePath: string): boolean {
 }
 
 /**
- * Path under global cache: `decompiled/<group>/<artifact>/<version>/<SimpleName>.java`.
+ * Path under global cache:
+ *   - `decompiled/<group>/<artifact>/<version>/<jarHash8>/<SimpleName>.java` when `jarContentHash` is provided
+ *   - `decompiled/<group>/<artifact>/<version>/<SimpleName>.java` otherwise (legacy)
+ *
+ * Including a JAR content hash in the path ensures that republished SNAPSHOT/local-Maven
+ * artifacts (same coordinates, different bytes) produce a distinct cache entry.
+ *
  * Verifies the result stays confined under `decompiled/`.
  */
 export function getDecompiledCacheFilePath(
   coordinates: ArtifactCoordinates,
   className: string,
+  jarContentHash?: string,
 ): DecompiledCachePathResult {
   const decompiledRoot = getDecompiledCacheRoot();
   if (!decompiledRoot.ok) {
@@ -114,13 +121,12 @@ export function getDecompiledCacheFilePath(
     return fileName;
   }
 
-  const cachePath = path.join(
-    decompiledRoot.cachePath,
-    group.segment,
-    name.segment,
-    version.segment,
-    fileName.fileName,
-  );
+  const segments = [decompiledRoot.cachePath, group.segment, name.segment, version.segment];
+  if (jarContentHash) {
+    segments.push(jarContentHash.slice(0, 8));
+  }
+  segments.push(fileName.fileName);
+  const cachePath = path.join(...segments);
 
   if (!isPathWithinDecompiledCache(cachePath)) {
     return { ok: false, message: 'Decompile cache path escapes decompiled/ root' };

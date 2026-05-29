@@ -1,0 +1,16 @@
+plugins {
+    id 'java'
+}
+
+repositories {
+    maven {
+        url = uri(System.getenv('JVMSRC_LOCAL_MAVEN_REPO') ?: "$rootDir/../lib/build/local-repo")
+    }
+}
+
+dependencies {
+    // Direct dependency on widget-lib:2.0.0.
+    implementation 'com.example:widget-lib:2.0.0'
+    // Adapter transitively requests widget-lib:1.0.0 — Gradle's "highest version wins" picks 2.0.0.
+    implementation 'com.example:adapter:1.0.0'
+}

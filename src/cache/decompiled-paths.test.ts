@@ -68,6 +68,32 @@ describe('getDecompiledCacheFilePath', () => {
     }
   });
 
+  test('includes truncated jarContentHash segment when provided', () => {
+    const hash = 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
+    const r = getDecompiledCacheFilePath(
+      { group: 'com.example', name: 'lib', version: '1.0.0-SNAPSHOT' },
+      'com.example.Foo',
+      hash,
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.cachePath).toBe(
+        path.join(testCacheRoot, 'decompiled', 'com.example', 'lib', '1.0.0-SNAPSHOT', 'abcdef12', 'Foo.java'),
+      );
+    }
+  });
+
+  test('different jarContentHash yields different cache path', () => {
+    const coords = { group: 'g', name: 'a', version: '1.0-SNAPSHOT' };
+    const r1 = getDecompiledCacheFilePath(coords, 'com.example.Foo', 'aaaaaaaabbbbbbbb');
+    const r2 = getDecompiledCacheFilePath(coords, 'com.example.Foo', 'ccccccccdddddddd');
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    if (r1.ok && r2.ok) {
+      expect(r1.cachePath).not.toBe(r2.cachePath);
+    }
+  });
+
   test('rejects parent-segment group', () => {
     const r = getDecompiledCacheFilePath(
       { group: '..', name: 'lib', version: '1' },

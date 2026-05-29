@@ -1,0 +1,27 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+group = 'com.example'
+version = '1.0.0-SNAPSHOT'
+
+java {
+    // Publish a -sources.jar so the tool reads .java directly instead of decompiling.
+    // This also means the decompilation cache is never involved, keeping tests deterministic.
+    withSourcesJar()
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            // JVMSRC_LOCAL_MAVEN_REPO is set by the test to a temp directory.
+            url = uri(System.getenv('JVMSRC_LOCAL_MAVEN_REPO') ?: layout.buildDirectory.dir('local-repo').get().asFile)
+        }
+    }
+}

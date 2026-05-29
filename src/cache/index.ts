@@ -10,6 +10,7 @@ import {
   getProjectResolutionCacheDir,
   writeFileAtomicSameDir,
 } from './paths.js';
+import { computeLocalArtifactDigest } from './local-artifact-digest.js';
 
 const SKIP_DIR_NAMES = new Set([
   'build',
@@ -123,6 +124,7 @@ export function readCachedResolution(projectRoot: string): CachedResolutionRead 
   const bucketDir = bucketRes.dir;
   const hashPath = path.join(bucketDir, 'resolution.hash');
   const jsonPath = path.join(bucketDir, 'resolution.json');
+  const localHashPath = path.join(bucketDir, 'local-artifact.hash');
 
   const storedHash = readTextIfExists(hashPath);
   if (storedHash == null) {
@@ -161,6 +163,17 @@ export function readCachedResolution(projectRoot: string): CachedResolutionRead 
     };
   }
 
+  // Validate local (non-Gradle-managed) artifact JARs — e.g. local Maven SNAPSHOTs can be
+  // republished without any build-file change, so their content is checked separately.
+  const storedLocalHash = readTextIfExists(localHashPath);
+  if (storedLocalHash == null) {
+    return { ok: false, reason: 'No local-artifact.hash in cache bucket' };
+  }
+  const freshLocalHash = computeLocalArtifactDigest(validated.output);
+  if (storedLocalHash.trim().toLowerCase() !== freshLocalHash.toLowerCase()) {
+    return { ok: false, reason: 'local-artifact.hash does not match current local artifact content' };
+  }
+
   return { ok: true, output: validated.output };
 }
 
@@ -197,6 +210,10 @@ export function writeCachedResolution(
   try {
     writeFileAtomicSameDir(path.join(bucketDir, 'resolution.json'), `${JSON.stringify(output)}\n`);
     writeFileAtomicSameDir(path.join(bucketDir, 'resolution.hash'), `${buildInputsDigest.toLowerCase()}\n`);
+    writeFileAtomicSameDir(
+      path.join(bucketDir, 'local-artifact.hash'),
+      `${computeLocalArtifactDigest(output).toLowerCase()}\n`,
+    );
     writeFileAtomicSameDir(path.join(bucketDir, 'bucket-meta.json'), `${JSON.stringify(meta, null, 2)}\n`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

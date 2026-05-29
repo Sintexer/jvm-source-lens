@@ -1,0 +1,18 @@
+plugins {
+    id 'java'
+}
+
+repositories {
+    maven {
+        // JVMSRC_LOCAL_MAVEN_REPO is set by the test to a temp directory.
+        url = uri(System.getenv('JVMSRC_LOCAL_MAVEN_REPO') ?: "$rootDir/../producer/build/local-repo")
+    }
+}
+
+dependencies {
+    implementation 'com.example:lib:1.0.0-SNAPSHOT'
+}
+
+configurations.all {
+    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+}

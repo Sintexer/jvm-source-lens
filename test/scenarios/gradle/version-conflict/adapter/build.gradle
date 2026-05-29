@@ -1,0 +1,31 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+group = 'com.example'
+version = '1.0.0'
+
+repositories {
+    maven {
+        url = uri(System.getenv('JVMSRC_LOCAL_MAVEN_REPO') ?: "$rootDir/../lib/build/local-repo")
+    }
+}
+
+dependencies {
+    // Pulls widget-lib:1.0.0 transitively into any consumer.
+    api 'com.example:widget-lib:1.0.0'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url = uri(System.getenv('JVMSRC_LOCAL_MAVEN_REPO') ?: layout.buildDirectory.dir('local-repo').get().asFile)
+        }
+    }
+}

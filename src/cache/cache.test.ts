@@ -186,6 +186,60 @@ describe('resolution cache read/write', () => {
     const r = readCachedResolution(dir);
     expect(r.ok).toBe(false);
   });
+
+  test('read misses when a local (non-Gradle-managed) artifact jar content changes', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-localart-'));
+    const jarPath = path.join(dir, 'local-repo', 'lib-1.0.0.jar');
+    fs.mkdirSync(path.dirname(jarPath), { recursive: true });
+    fs.writeFileSync(jarPath, 'fake jar v1');
+    writeGradleStubs(dir);
+
+    const out: ResolutionOutput = {
+      ...minimalResolutionOutput(dir),
+      modules: [
+        {
+          name: ':app',
+          path: dir,
+          configurations: [
+            {
+              name: 'compileClasspath',
+              scope: 'compile',
+              artifacts: [
+                {
+                  group: 'com.example',
+                  name: 'lib',
+                  version: '1.0.0',
+                  type: 'jar',
+                  jarPath,
+                  sourcesJarPath: null,
+                  origin: 'external',
+                  direct: true,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const digest = computeBuildInputsDigest(dir);
+    const w = writeCachedResolution(dir, out, digest);
+    expect(w.ok).toBe(true);
+
+    // Cache hit — nothing changed.
+    const r1 = readCachedResolution(dir);
+    expect(r1.ok).toBe(true);
+
+    // Republish: overwrite the jar with new content (same path, different bytes).
+    fs.writeFileSync(jarPath, 'fake jar v2 with new method');
+
+    // Must miss because local-artifact.hash no longer matches.
+    const r2 = readCachedResolution(dir);
+    expect(r2.ok).toBe(false);
+    if (!r2.ok) {
+      expect(r2.reason).toContain('local-artifact');
+    }
+  });
 });
 
 describe('resolveWithResolutionCache', () => {
