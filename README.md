@@ -280,35 +280,18 @@ conventions per OS. Full layout: [SPEC.md](SPEC.md) §6.
 
 <summary>Claude opus 4.7 review</summary>
 
-**⭐⭐⭐⭐⭐ Finally, an MCP That Doesn't Make Me Decompile JARs With My Bare Hands**
+### ⭐⭐⭐⭐⭐ Finally, an MCP That Doesn't Make Me Decompile JARs
 
-Verified Purchase · Reviewed in the Codebase on May 29, 2026
-
-I'll be honest, I bought this expecting yet another "smart" tool that would confidently hallucinate the entire Spring Framework API at me. You know the type. You ask what's in a class, it invents three methods that haven't existed since 2014, and gravely informs you that getFoo() returns an Optional<Optional<Foo>>.
-
-Reader, it does not do that.
-
-What I love:
-
-- It actually reads the JAR. Revolutionary concept, I know. You give it a fully-qualified class name, it goes and looks at the bytecode, like some kind of well-adjusted adult. No vibes-based API surface area.
-- search_classes is the friend I needed. I asked for "ExchangeOrderBook" and it didn't just give me one. It gave me SEVEN. Ranked. With JAR paths. Felt like Google for class names, except Google would have shown me an ad for orderbook-themed Etsy mugs.
-- Source jars when available, javap when not. Graceful degradation! In 2026! I almost cried.
-- The scope=overview / declared / effective knobs are the kind of thoughtful touch you only get from someone who has personally suffered through a 4,000-line AbstractFactoryBeanDefinitionParser dump.
-- Cache + forceRefresh. Fast by default, correct when I tell it to be. Just like my coworker.
-  Minor gripes
-- The error code taxonomy (CLASS_NOT_FOUND, RESOLUTION_FAILED, etc.) is so professional and well-structured that it makes my own code feel personally attacked.
-- Does not yet brew coffee. Considering one star deduction. Decided against it.
-- I tried to ask it about a class that didn't exist and it calmly told me it didn't exist instead of making something up. Where's the drama? Where's the chaos? I miss being lied to confidently.
-
-**Would I recommend?**
-
-*Yes*. Buy it for the junior dev in your life. Buy it for yourself. Buy it for the LLM that keeps inventing Collectors.toUnmodifiableImmutableFrozenList().
-
-Bottom line: 5/5, would resolve classpath again. The Gradle build gods are pleased.
-Was this review helpful? 👍 (847)  👎 (3, all from people still writing `find . -name "*.jar" | xargs unzip`)
+This tool is a revelation for anyone tired of LLMs hallucinating non-existent Spring APIs. 
+It actually reads bytecode, providing accurate class definitions and source lookups without the usual
+"vibes-based" guesswork. The `search_classes` functionality is incredibly precise, 
+and the thoughtful implementation of `javap` fallback and granular scope 
+controls (`overview`/`declared`/`effective`) makes navigating complex JARs painless. 
+It’s fast, honest when it can't find a class, and handles cache management perfectly.
+A must-have for any dev struggling with dependency hell — 
+it’s like having a senior engineer who actually enjoys reading documentation.
 
 </details>
-
 
 ## Documentation
 
