@@ -13,6 +13,7 @@ import {
   mcpToolResultFromProjectRootError,
   mcpToolResultFromResolutionResult,
   mcpToolResultFromSearchClasses,
+  mcpToolResultFromSearchInArtifact,
   mcpToolResultFromUnexpectedError,
   mcpToolResultFromClassStructure,
   type ClassSourceQueryContext,
@@ -20,6 +21,7 @@ import {
   type FindInClassSourceQueryContext,
   type MethodSignatureQueryContext,
   type SearchClassesQueryContext,
+  type SearchInArtifactQueryContext,
 } from './mcp-tool-result.js';
 import { findInClassSource } from './find-in-class-source.js';
 import { resolveProjectRoot } from './project-path.js';
@@ -29,6 +31,7 @@ import { getClassStructure } from './get-class-structure.js';
 import { getMethodSignaturesBytecode } from './get-method-signatures-bytecode.js';
 import { getMethodSignatures } from './get-method-signatures.js';
 import { searchClasses } from './search-classes.js';
+import { searchInArtifact } from './search-in-artifact.js';
 import { JVMSRC_INSTRUCTIONS, MCP_TOOL_COPY } from './copy/index.js';
 
 const artifactCoordinatesSchema = z.object({
@@ -672,6 +675,32 @@ export const mcpGetClassStructurePayloadSchema = z.union([
   mcpClassStructureFailureSchema,
 ]);
 
+const searchInArtifactInputSchema = z
+  .object({
+    projectRoot: z.string().min(1),
+    coordinates: z
+      .object({
+        group: z.string().min(1),
+        name: z.string().min(1),
+        version: z.string().nullable().optional(),
+      })
+      .optional(),
+    jarPath: z.string().optional(),
+    query: z.string().min(1),
+    regex: z.boolean().optional(),
+    contextLines: z.number().int().min(0).max(50).optional(),
+    maxHits: z.number().int().min(1).max(100).optional(),
+    maxClasses: z.number().int().min(1).max(500).optional(),
+    modulePath: z.string().optional(),
+    configuration: z.string().optional(),
+    includeTest: z.boolean().optional(),
+    forceRefresh: z.boolean().optional(),
+    ...fullResponseInput,
+  })
+  .refine((v) => v.coordinates !== undefined || v.jarPath !== undefined, {
+    message: 'At least one of coordinates or jarPath must be provided.',
+  });
+
 export async function startMcpServer(): Promise<void> {
   const pkgPath = fileURLToPath(new URL('../package.json', import.meta.url));
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
@@ -928,6 +957,57 @@ export async function startMcpServer(): Promise<void> {
         });
         return mcpToolResultFromClassStructure(result, query);
       } catch (e) {
+        return mcpToolResultFromUnexpectedError(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'search_in_artifact',
+    {
+      title: MCP_TOOL_COPY.search_in_artifact.title,
+      description: MCP_TOOL_COPY.search_in_artifact.description,
+      inputSchema: searchInArtifactInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async (args) => {
+      const query: SearchInArtifactQueryContext = {
+        projectRoot: args.projectRoot,
+        modulePath: args.modulePath,
+        configuration: args.configuration,
+        includeTest: args.includeTest,
+        full: args.full,
+      };
+
+      const root = resolveProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
+      }
+
+      try {
+        const result = await searchInArtifact({
+          projectRoot: root.path,
+          selector: {
+            coordinates: args.coordinates
+              ? { group: args.coordinates.group, name: args.coordinates.name, version: args.coordinates.version }
+              : undefined,
+            jarPath: args.jarPath,
+          },
+          query: args.query,
+          regex: Boolean(args.regex),
+          contextLines: args.contextLines,
+          maxHits: args.maxHits,
+          maxClasses: args.maxClasses,
+          modulePath: args.modulePath,
+          configuration: args.configuration,
+          includeTest: Boolean(args.includeTest),
+          forceRefresh: Boolean(args.forceRefresh),
+        });
+        return mcpToolResultFromSearchInArtifact(result, query);
+      } catch (e) {
+        if (e instanceof UnsupportedProjectError) {
+          return mcpToolResultFromProjectRootError(e.message, args.projectRoot);
+        }
         return mcpToolResultFromUnexpectedError(e);
       }
     },

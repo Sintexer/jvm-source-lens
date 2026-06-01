@@ -100,6 +100,23 @@ export function classifyClassSourceError(
         'Compilation unit too large for find-in-source.',
         `${error.message} (${error.byteLength} bytes). Narrow with get_class_source excerpt (methodNames) first.`,
       );
+    case 'ARTIFACT_NOT_FOUND':
+      return envelope(
+        error,
+        'validation',
+        true,
+        'Artifact not found on classpath.',
+        `${error.message} Verify coordinates or jarPath match an artifact in resolve_dependencies output. ` +
+          `Use forceRefresh if dependencies were recently changed.`,
+      );
+    case 'ARTIFACT_AMBIGUOUS':
+      return envelope(
+        error,
+        'validation',
+        true,
+        'Ambiguous artifact selector.',
+        `${error.message} Add a version to coordinates or use jarPath (from resolve_dependencies) to target exactly one artifact.`,
+      );
     case 'CLASS_NOT_FOUND':
       throw new Error('CLASS_NOT_FOUND must be handled via mcpNotFoundResult (valid empty result, not MCP error)');
   }

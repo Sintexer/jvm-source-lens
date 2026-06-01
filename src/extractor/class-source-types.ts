@@ -100,7 +100,18 @@ export type ClassSourceError =
       unmatchedMethodNames: string[];
     }
   | { code: 'FIND_QUERY_INVALID'; message: string }
-  | { code: 'FIND_SOURCE_TOO_LARGE'; message: string; byteLength: number };
+  | { code: 'FIND_SOURCE_TOO_LARGE'; message: string; byteLength: number }
+  | {
+      code: 'ARTIFACT_NOT_FOUND';
+      message: string;
+      modulePath?: string;
+      configuration?: string;
+    }
+  | {
+      code: 'ARTIFACT_AMBIGUOUS';
+      message: string;
+      candidates: Array<{ group: string; name: string; version: string | null; jarPath: string | null }>;
+    };
 
 export type ClassSourceLookupResult =
   | {

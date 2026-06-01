@@ -28,4 +28,26 @@ describe('buildCfrSpawnEnv', () => {
     buildCfrSpawnEnv(base);
     expect(base.JAVA_TOOL_OPTIONS).toBe('x');
   });
+
+  test('JVMSRC_JAVA_HOME overrides JAVA_HOME in child env', () => {
+    const base: NodeJS.ProcessEnv = {
+      PATH: '/usr/bin',
+      JAVA_HOME: '/usr/lib/jvm/java-25',
+      JVMSRC_JAVA_HOME: '/usr/lib/jvm/java-17',
+    };
+    const env = buildCfrSpawnEnv(base);
+    expect(env['JAVA_HOME']).toBe('/usr/lib/jvm/java-17');
+  });
+
+  test('JAVA_HOME is preserved unchanged when JVMSRC_JAVA_HOME is absent', () => {
+    const base: NodeJS.ProcessEnv = { PATH: '/usr/bin', JAVA_HOME: '/usr/lib/jvm/java-25' };
+    const env = buildCfrSpawnEnv(base);
+    expect(env['JAVA_HOME']).toBe('/usr/lib/jvm/java-25');
+  });
+
+  test('JVMSRC_JAVA_HOME whitespace-only is ignored', () => {
+    const base: NodeJS.ProcessEnv = { JAVA_HOME: '/usr/lib/jvm/java-25', JVMSRC_JAVA_HOME: '   ' };
+    const env = buildCfrSpawnEnv(base);
+    expect(env['JAVA_HOME']).toBe('/usr/lib/jvm/java-25');
+  });
 });

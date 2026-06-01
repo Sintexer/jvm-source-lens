@@ -106,6 +106,25 @@ Returns: compact text module/configuration summary by default; full=true returns
 
 Errors: isError=true with RESOLUTION_FAILED, plus errorCategory, isRetryable, and message.`,
   },
+  search_in_artifact: {
+    title: 'Search text across all classes in one resolved dependency JAR',
+    description: `Grep-like search across every class in one artifact (by Maven coordinates or absolute jarPath). Fetches source for each class (sources JAR preferred; CFR decompilation fallback) and runs the query, returning hits grouped by className.
+
+Use this when: you know which library contains a log message, exception string, or API literal — but not which class. Use find_in_class_source when the class is already known; use search_classes when you need to discover which library provides a class by name.
+
+Artifact selector (one required):
+  • coordinates — { group, name, version? }. Omitting version does a loose match; if multiple JAR paths match, ARTIFACT_AMBIGUOUS is returned with a candidates list.
+  • jarPath — absolute path from a prior resolve_dependencies result. Always unambiguous.
+
+Search params: query (required, literal by default); regex=true for JS RegExp; contextLines (default 3, max 50); maxHits (total across all classes, default 20, max 100); maxClasses (FQN scan cap, default 500).
+
+Returns: compact text — hits grouped by className with line:col and context; full=true for JSON. truncated=true when maxHits or maxClasses was reached.
+
+Result semantics:
+  • ARTIFACT_NOT_FOUND / ARTIFACT_AMBIGUOUS: isError=false, found=false — not an access failure.
+  • FIND_QUERY_INVALID: bad regex — fix and retry.
+  • Line numbers are reliable only when sourceAvailable=true (original sources JAR).`,
+  },
 } as const satisfies Record<string, McpToolCopy>;
 
 export type McpToolName = keyof typeof MCP_TOOL_COPY;

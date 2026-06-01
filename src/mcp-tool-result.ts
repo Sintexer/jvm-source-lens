@@ -51,6 +51,12 @@ import { formatMethodSignatureText } from './text-format/format-method-signature
 import { formatResolutionSummaryText } from './text-format/format-resolve.js';
 import { formatListModulesText } from './text-format/format-list-modules.js';
 import { formatSearchClassesText } from './text-format/format-search.js';
+import {
+  formatSearchInArtifactText,
+  formatSearchInArtifactNoHitsText,
+  formatSearchInArtifactNotFoundText,
+} from './text-format/format-search-in-artifact.js';
+import type { SearchInArtifactResult, ArtifactInfo } from './search-in-artifact.js';
 import type { ClassStructureScope as ClassStructureScopeType } from './class-structure/types.js';
 import {
   appendGuidanceFooter,
@@ -797,4 +803,80 @@ function buildMcpErrorCallResult(summary: string, payload: McpClassSourceFailure
     isRetryable: payload.isRetryable,
     message: payload.message,
   } as CallToolResult;
+}
+
+export type SearchInArtifactQueryContext = ClassSourceQueryContext & {
+  full?: boolean;
+};
+
+export function mcpToolResultFromSearchInArtifact(
+  result: SearchInArtifactResult,
+  query: SearchInArtifactQueryContext,
+): CallToolResult {
+  const detail = toolResponseDetail(query.full);
+
+  if (!result.ok) {
+    return mcpFailureResult(result.error, query);
+  }
+
+  if (!result.found) {
+    const text = formatSearchInArtifactNotFoundText(result);
+    if (detail === 'compact') {
+      return returnCompactGuided(text, guidedEnvelope(result.message, false));
+    }
+    const payload: Record<string, unknown> = {
+      ok: true,
+      found: false,
+      querySucceeded: true,
+      code: result.code,
+      message: result.message,
+      ...(result.candidates !== undefined ? { candidates: result.candidates } : {}),
+    };
+    return returnFullGuided(text, payload, guidedEnvelope(result.message, false));
+  }
+
+  if (result.hitCount === 0) {
+    const text = formatSearchInArtifactNoHitsText(result);
+    const msg = `No matches for ${JSON.stringify(result.query)} in ${result.artifact.group}:${result.artifact.name} (${result.classesScanned} class(es) scanned).`;
+    if (detail === 'compact') {
+      return returnCompactGuided(text, guidedEnvelope(msg, false));
+    }
+    const payload: Record<string, unknown> = {
+      ok: true,
+      found: true,
+      querySucceeded: true,
+      artifact: result.artifact,
+      query: result.query,
+      regex: result.regex,
+      classesScanned: result.classesScanned,
+      totalMatches: 0,
+      hitCount: 0,
+      truncated: result.truncated,
+      hits: [],
+      message: msg,
+    };
+    return returnFullGuided(text, payload, guidedEnvelope(msg, false));
+  }
+
+  if (detail === 'compact') {
+    return returnCompactPlain(formatSearchInArtifactText(result));
+  }
+
+  const payload: Record<string, unknown> = {
+    ok: true,
+    found: true,
+    querySucceeded: true,
+    artifact: result.artifact,
+    query: result.query,
+    regex: result.regex,
+    classesScanned: result.classesScanned,
+    totalMatches: result.totalMatches,
+    hitCount: result.hitCount,
+    truncated: result.truncated,
+    hits: result.hits,
+  };
+  return returnFullPlain(
+    `search_in_artifact: ${result.totalMatches} match(es) for ${JSON.stringify(result.query)} across ${result.hits.length} class(es) in ${result.artifact.group}:${result.artifact.name}.`,
+    payload,
+  );
 }

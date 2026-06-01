@@ -48,7 +48,7 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 - [x] MCP / CLI `get_class_source` optional excerpt (`methodNames` / `methodName` and/or `startLine` / `endLine`) — avoid dumping very large compilation units into agent context
 - [x] MCP / CLI `find_in_class_source` — pattern match inside one resolved compilation unit; return hit line(s) or block + optional ±N context lines (**relevance: high · priority: P2**)
-- [ ] MCP / CLI `search_in_artifact` — grep-like search across all classes in one resolved dependency JAR (sources + CFR fallback); hits grouped by `className` + provenance (**vital gap · priority: P2**)
+- [x] MCP / CLI `search_in_artifact` — grep-like search across all classes in one resolved dependency JAR (sources + CFR fallback); hits grouped by `className` + provenance (**vital gap · priority: P2**)
 - [ ] Auto-infer `modulePath` when the FQN resolves in exactly one module (keep explicit `modulePath` for conflicts; discovery via `resolve_dependencies` / `settings.gradle`)
 - [x] Compact (plain text) / full (JSON) response modes — default compact; `--full` / MCP `full: true`; `get_class_structure` scopes
 - [x] Compact / summary response modes for discovery tools (`get_class_structure`, `resolve_dependencies`, others) — agent-sized JSON without losing "what to call next" (**priority: P2**)
@@ -101,11 +101,11 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **Output:** `ok`, `found`, `artifact` (coordinates + `jarPath`), `classesScanned`, `totalMatches`, `hitCount`, `truncated`, `hits[]` grouped by `className` (same hit shape as `find_in_class_source`). Ambiguous coordinates → structured conflict listing candidates, never silent pick.
 
-- [ ] MCP tool + CLI; artifact selector + search params as above
-- [ ] FQN enumeration from resolved `ResolutionOutput` + jar FQN cache
-- [ ] Per-class source load + `searchClassSourceText`; aggregate hits with provenance
-- [ ] Ambiguity and not-found errors; caps (`maxHits`, `maxClasses`, byte budget)
-- [ ] Tests: fixture JAR with known string in one class; decompiled path; ambiguous coordinates
+- [x] MCP tool + CLI; artifact selector + search params as above
+- [x] FQN enumeration from resolved `ResolutionOutput` + jar FQN cache
+- [x] Per-class source load + `searchClassSourceText`; aggregate hits with provenance
+- [x] Ambiguity and not-found errors; caps (`maxHits`, `maxClasses`, byte budget)
+- [x] Tests: fixture JAR with known string in one class; decompiled path; ambiguous coordinates
 
 ---
 

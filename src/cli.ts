@@ -8,6 +8,7 @@ import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import { writeCliFindInClassResult } from './cli-find-in-class-output.js';
 import { writeCliGetResult } from './cli-get-output.js';
 import { findInClassSource } from './find-in-class-source.js';
+import { searchInArtifact } from './search-in-artifact.js';
 import { createCliProgressReporter } from './cli-progress.js';
 import { getClassSource } from './get-class-source.js';
 import { mergeSourceExcerptInputs } from './source-excerpt.js';
@@ -20,6 +21,7 @@ function injectImplicitGetSubcommand(): void {
   const subcommands = new Set([
     'get',
     'find-in-class',
+    'search-in-artifact',
     'mcp',
     'config',
     'resolve',
@@ -264,6 +266,130 @@ program
         cli,
       });
       writeCliFindInClassResult(result, { json: Boolean(options.json) });
+    },
+  );
+
+program
+  .command('search-in-artifact')
+  .description(
+    'Search for a literal or regex query across all classes in one resolved dependency JAR',
+  )
+  .argument('<query>', 'substring or regex to find')
+  .option('-p, --project <path>', 'Path to the project root', process.cwd())
+  .option('-g, --group <group>', 'Maven group ID (required with --name)')
+  .option('-n, --name <name>', 'Maven artifact name (required with --group)')
+  .option('--version <version>', 'Maven version (optional with coordinates)')
+  .option('--jar-path <path>', 'Absolute JAR path from resolve output (alternative to coordinates)')
+  .option('-m, --module <module>', 'Gradle module path (e.g. :core:utils)')
+  .option('-c, --configuration <name>', 'Resolved configuration name')
+  .option('--include-test', 'Use testCompileClasspath when configuration omitted', false)
+  .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle', false)
+  .option('--regex', 'Treat query as a JavaScript RegExp pattern', false)
+  .option('--context-lines <n>', 'Context lines above/below each hit (default 3)', (v) => parseInt(v, 10))
+  .option('--max-hits <n>', 'Maximum total hits across all classes (default 20, max 100)', (v) => parseInt(v, 10))
+  .option('--max-classes <n>', 'Maximum classes to scan (default 500)', (v) => parseInt(v, 10))
+  .option('--json', 'Print one JSON object on stdout', false)
+  .action(
+    async (
+      query: string,
+      options: {
+        project: string;
+        group?: string;
+        name?: string;
+        version?: string;
+        jarPath?: string;
+        module?: string;
+        configuration?: string;
+        includeTest?: boolean;
+        forceRefresh?: boolean;
+        regex?: boolean;
+        contextLines?: number;
+        maxHits?: number;
+        maxClasses?: number;
+        json?: boolean;
+      },
+    ) => {
+      const useJson = Boolean(options.json);
+      const root = resolveProjectRoot(options.project);
+      if (!root.ok) {
+        if (useJson) {
+          console.log(
+            JSON.stringify({ error: true, code: 'INVALID_PROJECT_ROOT', message: root.message }),
+          );
+        } else {
+          console.error(root.message);
+        }
+        process.exitCode = 1;
+        return;
+      }
+
+      const hasCoordinates = Boolean(options.group) && Boolean(options.name);
+      const hasJarPath = Boolean(options.jarPath);
+
+      if (!hasCoordinates && !hasJarPath) {
+        const msg = 'Provide either --group and --name (Maven coordinates) or --jar-path.';
+        if (useJson) {
+          console.log(JSON.stringify({ error: true, code: 'INVALID_SELECTOR', message: msg }));
+        } else {
+          console.error(msg);
+        }
+        process.exitCode = 1;
+        return;
+      }
+
+      const result = await searchInArtifact({
+        projectRoot: root.path,
+        selector: {
+          coordinates: hasCoordinates
+            ? { group: options.group!, name: options.name!, version: options.version }
+            : undefined,
+          jarPath: options.jarPath,
+        },
+        query,
+        regex: Boolean(options.regex),
+        contextLines: options.contextLines,
+        maxHits: options.maxHits,
+        maxClasses: options.maxClasses,
+        modulePath: options.module,
+        configuration: options.configuration,
+        includeTest: Boolean(options.includeTest),
+        forceRefresh: Boolean(options.forceRefresh),
+      });
+
+      if (useJson) {
+        console.log(JSON.stringify(result, null, 2));
+        if (!result.ok || (result.found && result.hitCount === 0)) {
+          process.exitCode = 1;
+        }
+        return;
+      }
+
+      if (!result.ok) {
+        console.error(`search-in-artifact: ${result.error.message}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      if (!result.found) {
+        console.log(`search-in-artifact: ${result.message}`);
+        if (result.candidates && result.candidates.length > 0) {
+          console.log('Candidates:');
+          for (const c of result.candidates) {
+            console.log(`  ${[c.group, c.name, c.version].filter(Boolean).join(':')}  (${c.jarPath ?? 'no jar'})`);
+          }
+        }
+        process.exitCode = 1;
+        return;
+      }
+
+      if (result.hitCount === 0) {
+        const { formatSearchInArtifactNoHitsText } = await import('./text-format/format-search-in-artifact.js');
+        console.log(formatSearchInArtifactNoHitsText(result));
+        return;
+      }
+
+      const { formatSearchInArtifactText } = await import('./text-format/format-search-in-artifact.js');
+      console.log(formatSearchInArtifactText(result));
     },
   );
 

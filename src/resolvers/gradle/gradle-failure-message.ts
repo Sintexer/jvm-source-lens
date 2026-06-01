@@ -49,7 +49,7 @@ function javaHint(blob: string): string {
     /invalid source release/i.test(lower) ||
     /toolchain/i.test(lower) && /jdk|java\b/i.test(blob)
   ) {
-    return 'Hint: fix JDK installation or JAVA_HOME so it matches the Gradle/Java version this project expects.';
+    return 'Hint: set JVMSRC_JAVA_HOME to the JDK this project expects (e.g. Java 17) so jvmsrc passes the right JAVA_HOME to Gradle, regardless of your system JAVA_HOME.';
   }
   return '';
 }
