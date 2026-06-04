@@ -115,7 +115,7 @@ export function readGradleProperties(
     if (key === 'org.gradle.jvmargs') {
       // e.g. --release 17  or  -source 17  or  -target 17
       const releaseMatch = value.match(/--release\s+(\d+)/);
-      if (releaseMatch) {
+      if (releaseMatch && releaseMatch[1]) {
         return { kind: 'version', value: parseInt(releaseMatch[1], 10) };
       }
     }
@@ -139,7 +139,7 @@ export function readSdkmanrc(projectRoot: string): number | null {
     return null;
   }
   const match = text.match(/^\s*java\s*=\s*([^\s#]+)/m);
-  if (!match) {
+  if (!match || !match[1]) {
     return null;
   }
   return parseSdkmanJavaVersion(match[1]);
@@ -160,15 +160,22 @@ export function parseSdkmanJavaVersion(raw: string): number | null {
   const withoutDist = raw.replace(/-[a-z][a-z0-9]*$/i, '');
   // Now parse first numeric segment
   const parts = withoutDist.split('.');
-  const first = parseInt(parts[0], 10);
+  const firstPart = parts[0];
+  if (!firstPart) {
+    return null;
+  }
+  const first = parseInt(firstPart, 10);
   if (!Number.isInteger(first) || first < 0) {
     return null;
   }
   // Legacy 1.x
   if (first === 1 && parts.length >= 2) {
-    const second = parseInt(parts[1], 10);
-    if (Number.isInteger(second) && second > 0) {
-      return second;
+    const secondPart = parts[1];
+    if (secondPart) {
+      const second = parseInt(secondPart, 10);
+      if (Number.isInteger(second) && second > 0) {
+        return second;
+      }
     }
   }
   return first || null;
@@ -189,21 +196,32 @@ export function readJavaVersionFile(projectRoot: string): number | null {
   if (!text) {
     return null;
   }
-  const line = text.trim().split('\n')[0].trim();
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const line = trimmed.split('\n')[0];
   if (!line) {
     return null;
   }
   // Strip any prefix like "temurin-", "openjdk64-", etc.
-  const numeric = line.replace(/^[a-z][a-z0-9_-]*-/i, '');
+  const numeric = line.trim().replace(/^[a-z][a-z0-9_-]*-/i, '');
   const parts = numeric.split('.');
-  const first = parseInt(parts[0], 10);
+  const firstPart = parts[0];
+  if (!firstPart) {
+    return null;
+  }
+  const first = parseInt(firstPart, 10);
   if (!Number.isInteger(first) || first < 0) {
     return null;
   }
   if (first === 1 && parts.length >= 2) {
-    const second = parseInt(parts[1], 10);
-    if (Number.isInteger(second) && second > 0) {
-      return second;
+    const secondPart = parts[1];
+    if (secondPart) {
+      const second = parseInt(secondPart, 10);
+      if (Number.isInteger(second) && second > 0) {
+        return second;
+      }
     }
   }
   return first || null;
@@ -223,7 +241,7 @@ export function readToolchainFromBuildScript(projectRoot: string): number | null
     }
     // Matches: JavaLanguageVersion.of(17)  or  JavaLanguageVersion.of( 21 )
     const match = text.match(/JavaLanguageVersion\.of\(\s*(\d+)\s*\)/);
-    if (match) {
+    if (match && match[1]) {
       const version = parseInt(match[1], 10);
       if (Number.isInteger(version) && version > 0) {
         return version;
@@ -248,7 +266,7 @@ export function readGradleWrapperMinJava(projectRoot: string): number | null {
   }
   // distributionUrl=https\://services.gradle.org/distributions/gradle-8.8-bin.zip
   const match = text.match(/distributionUrl\s*=\s*.*gradle-(\d+\.\d+(?:\.\d+)?)/);
-  if (!match) {
+  if (!match || !match[1]) {
     return null;
   }
   return gradleVersionToMinJava(match[1]);

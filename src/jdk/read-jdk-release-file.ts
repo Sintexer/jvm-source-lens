@@ -36,7 +36,7 @@ export function readJdkReleaseFile(jdkHome: string): JdkReleaseInfo | null {
 export function parseReleaseFileText(text: string): JdkReleaseInfo | null {
   // The JAVA_VERSION line looks like: JAVA_VERSION="17.0.11"  or  JAVA_VERSION="1.8.0_392"
   const match = text.match(/^JAVA_VERSION="([^"]+)"/m);
-  if (!match) {
+  if (!match || !match[1]) {
     return null;
   }
   const fullVersion = match[1];
@@ -60,15 +60,22 @@ export function parseMajorVersion(version: string): number | null {
   if (parts.length === 0) {
     return null;
   }
-  const first = parseInt(parts[0], 10);
+  const firstPart = parts[0];
+  if (!firstPart) {
+    return null;
+  }
+  const first = parseInt(firstPart, 10);
   if (!Number.isInteger(first) || first < 0) {
     return null;
   }
   // Legacy scheme: "1.X" → X (Java ≤ 8)
   if (first === 1 && parts.length >= 2) {
-    const second = parseInt(parts[1], 10);
-    if (Number.isInteger(second) && second > 0) {
-      return second;
+    const secondPart = parts[1];
+    if (secondPart) {
+      const second = parseInt(secondPart, 10);
+      if (Number.isInteger(second) && second > 0) {
+        return second;
+      }
     }
   }
   return first;

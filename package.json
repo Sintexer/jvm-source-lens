@@ -51,6 +51,7 @@
     "dev:cli": "bun run src/cli.ts",
     "dev:mcp": "bun run src/mcp.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "check": "bun run typecheck && bun test",
     "test": "bun test",
     "build": "esbuild ./src/cli.ts ./src/mcp.ts ./src/public-api.ts --bundle --platform=node --outdir=./dist --target=node20 --format=esm --packages=external",
     "setup:cfr": "tsx scripts/fetch-cfr.ts",

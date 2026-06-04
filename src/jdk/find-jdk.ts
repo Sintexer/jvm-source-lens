@@ -147,16 +147,15 @@ function homebrewCandidates(): JdkCandidate[] {
 
 function macosSystemCandidates(): JdkCandidate[] {
   const base = '/Library/Java/JavaVirtualMachines';
-  return listDirEntries(base)
-    .map((name) => {
-      // Standard macOS layout: <name>.jdk/Contents/Home
-      const contentsHome = path.join(base, name, 'Contents', 'Home');
-      if (isDir(contentsHome)) {
-        return { jdkHome: contentsHome, source: 'macos-system' as const };
-      }
-      return null;
-    })
-    .filter((c): c is JdkCandidate => c !== null);
+  const candidates: JdkCandidate[] = [];
+  for (const name of listDirEntries(base)) {
+    // Standard macOS layout: <name>.jdk/Contents/Home
+    const contentsHome = path.join(base, name, 'Contents', 'Home');
+    if (isDir(contentsHome)) {
+      candidates.push({ jdkHome: contentsHome, source: 'macos-system' });
+    }
+  }
+  return candidates;
 }
 
 function linuxSystemCandidates(): JdkCandidate[] {
@@ -185,14 +184,18 @@ function validateCandidate(candidate: JdkCandidate): FoundJdk | null {
       isDir(path.join(candidate.jdkHome, n)),
     );
     if (children.length === 1) {
-      info = readJdkReleaseFile(path.join(candidate.jdkHome, children[0]));
-      if (info) {
-        return {
-          jdkHome: path.join(candidate.jdkHome, children[0]),
-          fullVersion: info.fullVersion,
-          majorVersion: info.majorVersion,
-          source: candidate.source,
-        };
+      const child = children[0];
+      if (child) {
+        const nestedPath = path.join(candidate.jdkHome, child);
+        info = readJdkReleaseFile(nestedPath);
+        if (info) {
+          return {
+            jdkHome: nestedPath,
+            fullVersion: info.fullVersion,
+            majorVersion: info.majorVersion,
+            source: candidate.source,
+          };
+        }
       }
     }
   }

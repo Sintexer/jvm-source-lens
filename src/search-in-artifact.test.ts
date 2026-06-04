@@ -138,7 +138,7 @@ describe('selectArtifact', () => {
     const selector: ArtifactSelector = { coordinates: { group: 'com.example', name: 'lib' } };
     const result = selectArtifact([base, v2], selector);
     expect(result).toMatchObject({ ok: true, found: false, code: 'ARTIFACT_AMBIGUOUS' });
-    if (result.ok && !result.found && result.code === 'ARTIFACT_AMBIGUOUS') {
+    if ('ok' in result && result.ok && !result.found && result.code === 'ARTIFACT_AMBIGUOUS') {
       expect(result.candidates?.length).toBe(2);
     }
   });
