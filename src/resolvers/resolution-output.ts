@@ -1,4 +1,4 @@
-export const SUPPORTED_RESOLUTION_SCHEMA_VERSIONS = ['1.0', '1.1'] as const;
+export const SUPPORTED_RESOLUTION_SCHEMA_VERSIONS = ['1.0', '1.1', '1.2'] as const;
 
 export type ResolutionSchemaVersion = (typeof SUPPORTED_RESOLUTION_SCHEMA_VERSIONS)[number];
 
@@ -52,6 +52,13 @@ export interface ResolutionOutput {
   projectRoot: string;
   modules: ResolvedModule[];
   errors: ResolutionError[];
+  /**
+   * Java major version required by the project's Gradle toolchain configuration, if any.
+   * Emitted by the init script (schema 1.2+) when `java { toolchain { languageVersion } }` is set.
+   * Used by jvmsrc on the next invocation to select the right JDK without re-running Gradle.
+   * Absent (undefined) when no toolchain is configured or on older schema versions.
+   */
+  javaToolchainVersion?: number;
 }
 
 export type ResolutionParseResult =

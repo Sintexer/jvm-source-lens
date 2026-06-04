@@ -16,11 +16,22 @@ export type CfrStrippedEnvKey = (typeof CFR_STRIPPED_ENV_KEYS)[number];
 
 /**
  * Builds a minimal env for Gradle/CFR subprocesses (PATH, JAVA_HOME, LANG, etc. minus injection
- * vectors). If `JVMSRC_JAVA_HOME` is set in the base env it overrides `JAVA_HOME` in the child,
- * letting users point Gradle at a different JDK than the one running jvmsrc (e.g. a project that
- * requires Java 17 while the host JAVA_HOME is Java 25).
+ * vectors).
+ *
+ * JAVA_HOME resolution priority (highest → lowest):
+ *   1. `resolvedJavaHome` parameter — set by the JDK resolver after scanning the machine.
+ *   2. `JVMSRC_JAVA_HOME` env var   — explicit user override (also consumed by the resolver,
+ *      but kept here as a safety net for callers that bypass resolution).
+ *   3. `JAVA_HOME` from the base env — passed through unchanged when neither override is set.
+ *
+ * An empty string for `resolvedJavaHome` means "no override" (resolver found no hint and there
+ * is no JAVA_HOME to use as default), which leaves JAVA_HOME absent from the child env so
+ * Gradle falls back to its own JVM discovery.
  */
-export function buildCfrSpawnEnv(base: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function buildCfrSpawnEnv(
+  base: NodeJS.ProcessEnv = process.env,
+  resolvedJavaHome?: string,
+): Record<string, string> {
   const stripped = new Set<string>(CFR_STRIPPED_ENV_KEYS);
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(base)) {
@@ -32,9 +43,18 @@ export function buildCfrSpawnEnv(base: NodeJS.ProcessEnv = process.env): Record<
     }
     env[key] = value;
   }
+
+  // Priority 1: resolved JDK path from the JDK resolver
+  if (resolvedJavaHome && resolvedJavaHome.length > 0) {
+    env['JAVA_HOME'] = resolvedJavaHome;
+    return env;
+  }
+
+  // Priority 2: explicit user env override (safety net)
   const jvmsrcJavaHome = base['JVMSRC_JAVA_HOME']?.trim();
   if (jvmsrcJavaHome) {
     env['JAVA_HOME'] = jvmsrcJavaHome;
   }
+
   return env;
 }

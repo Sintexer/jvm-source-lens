@@ -66,7 +66,7 @@ gradle.projectsLoaded { g ->
             }
 
             def result = [
-                schemaVersion: "1.1",
+                schemaVersion: "1.2",
                 resolvedAt   : Instant.now().toString(),
                 buildSystem  : [
                     type   : "gradle",
@@ -77,6 +77,29 @@ gradle.projectsLoaded { g ->
                 modules    : modules,
                 errors     : errors,
             ]
+
+            // Best-effort: detect the Java toolchain version required by the root project.
+            // This is emitted as javaToolchainVersion (integer major) so that jvmsrc can cache
+            // it and use it for JDK selection on the next invocation without re-running Gradle.
+            def toolchainVersion = null
+            try {
+                def javaExtension = root.extensions.findByName("java")
+                if (javaExtension != null) {
+                    def toolchain = javaExtension.hasProperty("toolchain") ? javaExtension.toolchain : null
+                    if (toolchain != null) {
+                        def langVersion = toolchain.hasProperty("languageVersion") ? toolchain.languageVersion : null
+                        if (langVersion != null && langVersion.isPresent()) {
+                            toolchainVersion = langVersion.get().asInt()
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+                // Toolchain API not available in this Gradle version — leave null
+            }
+            if (toolchainVersion != null) {
+                result["javaToolchainVersion"] = toolchainVersion
+            }
+
             println new JsonBuilder(result).toPrettyString()
         }
     }

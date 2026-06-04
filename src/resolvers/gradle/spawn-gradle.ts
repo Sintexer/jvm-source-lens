@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { getBundledResource } from '../../bundled-resources.js';
 import { buildCfrSpawnEnv } from '../../decompiler/cfr-spawn-env.js';
+import { resolveJdkForProject } from '../../jdk/resolve-jdk-for-project.js';
 import { awaitChildExit, readProcessStreamToText, spawnChild } from '../../spawn-child.js';
 import { formatGradleUserMessage } from './gradle-failure-message.js';
 import { resolveGradleWrapperCommand } from './gradle-wrapper-command.js';
@@ -42,6 +43,11 @@ export type RunGradleSpawnOptions = {
   inheritStderr?: boolean;
   /** Wall-clock limit (ms). Defaults to `gradleTimeoutMs()`; tests may pass a small value. */
   timeoutMs?: number;
+  /**
+   * `javaToolchainVersion` from a previously cached `ResolutionOutput`.
+   * Passed to the JDK resolver as a low-priority version hint when no other hint is present.
+   */
+  cachedToolchainVersion?: number;
 };
 
 /**
@@ -74,6 +80,20 @@ export async function runGradleTask(
     };
   }
 
+  // Resolve the JDK to use before spawning Gradle.
+  // A failed resolution (no matching JDK found) is a hard stop — no point spawning Gradle
+  // with the wrong JDK and getting a cryptic error from it.
+  const jdkResult = resolveJdkForProject(root, spawnOptions?.cachedToolchainVersion);
+  if (!jdkResult.ok) {
+    return {
+      ok: false,
+      message: jdkResult.message,
+      command: [],
+      exitCode: null,
+    };
+  }
+  const resolvedJavaHome = jdkResult.jdkHome;
+
   const props: Record<string, string> = {
     jvmsrcWrapper: useWrapper ? 'true' : 'false',
     ...projectProperties,
@@ -94,7 +114,7 @@ export async function runGradleTask(
       stdout: 'pipe',
       stderr: spawnOptions?.inheritStderr ? 'inherit' : 'pipe',
       stdin: 'ignore',
-      env: buildCfrSpawnEnv(),
+      env: buildCfrSpawnEnv(process.env, resolvedJavaHome),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

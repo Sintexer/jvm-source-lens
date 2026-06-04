@@ -43,15 +43,42 @@ function authHint(blob: string): string {
 
 function javaHint(blob: string): string {
   const lower = blob.toLowerCase();
-  if (
+  const isJdkRelated =
     /\bJAVA_HOME\b/.test(blob) ||
     /unsupported class file/i.test(blob) ||
     /invalid source release/i.test(lower) ||
-    /toolchain/i.test(lower) && /jdk|java\b/i.test(blob)
-  ) {
-    return 'Hint: set JVMSRC_JAVA_HOME to the JDK this project expects (e.g. Java 17) so jvmsrc passes the right JAVA_HOME to Gradle, regardless of your system JAVA_HOME.';
+    (/toolchain/i.test(lower) && /jdk|java\b/i.test(blob)) ||
+    /could not resolve.*jdk/i.test(blob) ||
+    /no compatible toolchain/i.test(lower);
+
+  if (!isJdkRelated) {
+    return '';
   }
-  return '';
+
+  // Try to extract the required Java version from the error message so we can give
+  // a more specific hint (e.g. "Java 17 is required" rather than a generic suggestion).
+  const versionMatch =
+    blob.match(/[Jj]ava\s+(\d+)/) ??
+    blob.match(/[Ll]anguage[Vv]ersion[.\s(]*(\d+)/) ??
+    blob.match(/[Rr]elease\s+(\d+)/) ??
+    blob.match(/--release\s+(\d+)/);
+  const requiredVersion = versionMatch ? versionMatch[1] : null;
+
+  if (requiredVersion) {
+    return [
+      `Hint: this project requires Java ${requiredVersion}.`,
+      `Install it and set JVMSRC_JAVA_HOME to the JDK ${requiredVersion} home, or add`,
+      `  org.gradle.java.home=/path/to/jdk-${requiredVersion}`,
+      `to the project's gradle.properties.`,
+      `Re-running without a matching JDK will produce the same error.`,
+    ].join('\n');
+  }
+
+  return [
+    `Hint: set JVMSRC_JAVA_HOME to the JDK this project expects (e.g. Java 17) so`,
+    `jvmsrc passes the right JAVA_HOME to Gradle, regardless of your system JAVA_HOME.`,
+    `Re-running without a matching JDK will produce the same error.`,
+  ].join('\n');
 }
 
 function wrapperHint(usedWrapper: boolean, command: string[]): boolean {
