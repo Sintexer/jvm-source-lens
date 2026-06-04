@@ -19,6 +19,19 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 - MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
 - **`src/guided-response/`:** centralized agent recovery copy for CLASS_NOT_FOUND, empty search, decompiled source warnings, and related outcomes.
 
+## [1.11.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.10.0...v1.11.0) (2026-06-04)
+
+
+### Features
+
+* implement search in artifact tool and add new env var ([bbc4386](https://github.com/Sintexer/jvm-source-lens/commit/bbc438633d4670410493dec548fdcdcb28c76659))
+* smartly resolve appropriate jdk version per project ([b77f461](https://github.com/Sintexer/jvm-source-lens/commit/b77f461b9847b372a2f2e93be1da7a18c8bfec9f))
+
+
+### Bug Fixes
+
+* fix tsc errors ([cbeaf9d](https://github.com/Sintexer/jvm-source-lens/commit/cbeaf9d4596907ce5920c7db5ce652ff4c201ce6))
+
 ## [1.10.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.9.0...v1.10.0) (2026-05-29)
 
 
