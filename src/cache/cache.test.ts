@@ -58,8 +58,11 @@ function bucketDirFor(projectRoot: string): string {
 
 function writeGradleStubs(projectDir: string): void {
   fs.mkdirSync(path.join(projectDir, 'gradle', 'dependency-locks'), { recursive: true });
+  fs.mkdirSync(path.join(projectDir, 'gradle', 'wrapper'), { recursive: true });
   fs.writeFileSync(path.join(projectDir, 'settings.gradle'), 'rootProject.name = "t"\n', 'utf8');
   fs.writeFileSync(path.join(projectDir, 'build.gradle'), 'plugins { id("java") }\n', 'utf8');
+  fs.writeFileSync(path.join(projectDir, 'gradle', 'wrapper', 'gradle-wrapper.properties'),
+    'distributionUrl=https://services.gradle.org/distributions/gradle-8.0-bin.zip\n', 'utf8');
 }
 
 function minimalResolutionOutput(projectRoot: string): ResolutionOutput {
@@ -110,6 +113,59 @@ describe('computeBuildInputsDigest', () => {
     expect(d1).not.toBe(d2);
     expect(d1.length).toBe(64);
     expect(d2.length).toBe(64);
+  });
+
+  test('gradle.properties is tracked and digest changes when it changes', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-gp-'));
+    writeGradleStubs(dir);
+    fs.writeFileSync(path.join(dir, 'gradle.properties'), 'myLibVersion=1.0.0\n', 'utf8');
+
+    const rels = listBuildInputRelativePaths(dir);
+    expect(rels).toContain('gradle.properties');
+
+    const d1 = computeBuildInputsDigest(dir);
+    fs.writeFileSync(path.join(dir, 'gradle.properties'), 'myLibVersion=2.0.0\n', 'utf8');
+    const d2 = computeBuildInputsDigest(dir);
+    expect(d1).not.toBe(d2);
+  });
+
+  test('gradle/wrapper/gradle-wrapper.properties is tracked and digest changes when Gradle version changes', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-gwp-'));
+    writeGradleStubs(dir);
+
+    const rels = listBuildInputRelativePaths(dir);
+    expect(rels).toContain('gradle/wrapper/gradle-wrapper.properties');
+
+    const d1 = computeBuildInputsDigest(dir);
+    fs.writeFileSync(
+      path.join(dir, 'gradle', 'wrapper', 'gradle-wrapper.properties'),
+      'distributionUrl=https://services.gradle.org/distributions/gradle-9.0-bin.zip\n',
+      'utf8',
+    );
+    const d2 = computeBuildInputsDigest(dir);
+    expect(d1).not.toBe(d2);
+  });
+
+  test('digest changes when GRADLE_USER_HOME env var changes', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-guh-'));
+    writeGradleStubs(dir);
+
+    const savedGuh = process.env.GRADLE_USER_HOME;
+    try {
+      process.env.GRADLE_USER_HOME = '/tmp/fake-gradle-home-a';
+      const d1 = computeBuildInputsDigest(dir);
+
+      process.env.GRADLE_USER_HOME = '/tmp/fake-gradle-home-b';
+      const d2 = computeBuildInputsDigest(dir);
+
+      expect(d1).not.toBe(d2);
+    } finally {
+      if (savedGuh === undefined) {
+        delete process.env.GRADLE_USER_HOME;
+      } else {
+        process.env.GRADLE_USER_HOME = savedGuh;
+      }
+    }
   });
 });
 
@@ -185,6 +241,44 @@ describe('resolution cache read/write', () => {
     fs.appendFileSync(path.join(dir, 'build.gradle'), '\n', 'utf8');
     const r = readCachedResolution(dir);
     expect(r.ok).toBe(false);
+  });
+
+  test('read misses after gradle.properties changes (hash mismatch)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-gp-inv-'));
+    writeGradleStubs(dir);
+    fs.writeFileSync(path.join(dir, 'gradle.properties'), 'myLibVersion=1.0.0\n', 'utf8');
+    const digest = computeBuildInputsDigest(dir);
+    const w = writeCachedResolution(dir, minimalResolutionOutput(dir), digest);
+    expect(w.ok).toBe(true);
+    // Bump the version — cache must miss even without touching build.gradle.
+    fs.writeFileSync(path.join(dir, 'gradle.properties'), 'myLibVersion=2.0.0\n', 'utf8');
+    const r = readCachedResolution(dir);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toContain('build inputs');
+    }
+  });
+
+  test('read misses when GRADLE_USER_HOME changes between write and read', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-guh-inv-'));
+    writeGradleStubs(dir);
+    const savedGuh = process.env.GRADLE_USER_HOME;
+    try {
+      process.env.GRADLE_USER_HOME = '/tmp/fake-gradle-home-write';
+      const digest = computeBuildInputsDigest(dir);
+      const w = writeCachedResolution(dir, minimalResolutionOutput(dir), digest);
+      expect(w.ok).toBe(true);
+
+      process.env.GRADLE_USER_HOME = '/tmp/fake-gradle-home-read';
+      const r = readCachedResolution(dir);
+      expect(r.ok).toBe(false);
+    } finally {
+      if (savedGuh === undefined) {
+        delete process.env.GRADLE_USER_HOME;
+      } else {
+        process.env.GRADLE_USER_HOME = savedGuh;
+      }
+    }
   });
 
   test('read misses when a local (non-Gradle-managed) artifact jar content changes', () => {

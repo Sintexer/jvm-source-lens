@@ -10,7 +10,7 @@ import {
   getProjectResolutionCacheDir,
   writeFileAtomicSameDir,
 } from './paths.js';
-import { computeLocalArtifactDigest } from './local-artifact-digest.js';
+import { computeLocalArtifactDigest, gradleUserHome } from './local-artifact-digest.js';
 
 const SKIP_DIR_NAMES = new Set([
   'build',
@@ -53,7 +53,11 @@ export function listBuildInputRelativePaths(projectRoot: string): string[] {
         }
         walk(joined);
       } else if (ent.isFile()) {
-        if (ent.name === 'build.gradle' || ent.name === 'build.gradle.kts') {
+        if (
+          ent.name === 'build.gradle' ||
+          ent.name === 'build.gradle.kts' ||
+          ent.name === 'gradle.properties'
+        ) {
           const rel = path.relative(rootAbs, joined);
           files.push(rel.split(path.sep).join('/'));
         }
@@ -66,6 +70,11 @@ export function listBuildInputRelativePaths(projectRoot: string): string[] {
   const toml = path.join(rootAbs, 'gradle', 'libs.versions.toml');
   if (fs.existsSync(toml) && fs.statSync(toml).isFile()) {
     files.push('gradle/libs.versions.toml');
+  }
+
+  const wrapperProps = path.join(rootAbs, 'gradle', 'wrapper', 'gradle-wrapper.properties');
+  if (fs.existsSync(wrapperProps) && fs.statSync(wrapperProps).isFile()) {
+    files.push('gradle/wrapper/gradle-wrapper.properties');
   }
 
   const lockDir = path.join(rootAbs, 'gradle', 'dependency-locks');
@@ -91,6 +100,9 @@ export function computeBuildInputsDigest(projectRoot: string): string {
     const fileHex = createHash('sha256').update(buf).digest('hex');
     lines.push(`${rel}:${fileHex}`);
   }
+  // Synthetic input: GRADLE_USER_HOME determines where Gradle stores artifacts.
+  // A change means previously-stored jarPath values in resolution.json may be wrong.
+  lines.push(`env:GRADLE_USER_HOME:${gradleUserHome()}`);
   return createHash('sha256').update(lines.join('\n'), 'utf8').digest('hex');
 }
 

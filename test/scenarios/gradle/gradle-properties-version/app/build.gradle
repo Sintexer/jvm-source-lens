@@ -1,0 +1,13 @@
+plugins {
+    id 'java'
+}
+
+repositories {
+    maven {
+        url = uri(System.getenv('JVMSRC_LOCAL_MAVEN_REPO') ?: "$rootDir/../lib/build/local-repo")
+    }
+}
+
+dependencies {
+    implementation "com.example:greeter-lib:${greeterLibVersion}"
+}

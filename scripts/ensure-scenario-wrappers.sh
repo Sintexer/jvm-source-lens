@@ -23,6 +23,8 @@ projects=(
   "version-conflict/lib"
   "version-conflict/adapter"
   "version-conflict/app"
+  "gradle-properties-version/lib"
+  "gradle-properties-version/app"
 )
 
 if ! command -v gradle >/dev/null 2>&1; then

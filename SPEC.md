@@ -546,9 +546,12 @@ Gradle invocation is expensive (often ~5–10 seconds; less when the Gradle daem
 **Cache key:** SHA-256 digest over the content of all build-relevant files in the project (sorted paths, stable manifest — see implementation `computeBuildInputsDigest`):
 
 - `build.gradle` / `build.gradle.kts` (all submodules; common output directories such as `build/`, `.gradle/`, and `node_modules/` are excluded from the walk)
+- `gradle.properties` (root and per-submodule; commonly holds dependency version variables)
 - `settings.gradle` / `settings.gradle.kts` (project root)
 - `gradle/libs.versions.toml` (version catalog, if present)
+- `gradle/wrapper/gradle-wrapper.properties` (Gradle distribution version; different Gradle releases may resolve conflicts differently)
 - `gradle/dependency-locks/*.lockfile` (if present)
+- `GRADLE_USER_HOME` environment variable (normalized path; changes where Gradle stores artifacts, making cached JAR paths stale)
 
 **Cache location (nothing under the scanned project tree):** resolution data lives under the OS cache directory from [`env-paths`](https://github.com/sindresorhus/env-paths) with app name **`jvmsrc`** (same as the CLI binary) and **no** `nodejs` suffix (`suffix: ''`), so typical roots are:
 
@@ -576,7 +579,7 @@ The top-level `decompiled/` directory under the same cache root is reserved for 
 
 When the build-input digest matches `resolution.hash`, the cached document is used immediately (no Gradle). When it differs, Gradle is re-invoked and the bucket is overwritten. **`jar-fqn-cache.json`** (see table above) stores per-JAR FQN lists with stat-based reuse so **`class-search-index.json`** rebuilds avoid re-scanning unchanged dependency JARs after small resolution graph changes.
 
-**Escape hatch — `forceRefresh`:** Hash keys only cover tracked build inputs (`build.gradle*`, `settings.gradle*`, version catalogs, lockfiles). They do **not** detect SNAPSHOT bumps in a remote repo, a teammate clearing `~/.gradle`, or CI using a fresh dependency cache while build files are unchanged. **`resolve_dependencies`** (MCP), **`jvmsrc resolve --force-refresh`**, and **`jvmsrc get --force-refresh`** bypass the resolution cache and **always** re-invoke Gradle so the agent or developer can re-resolve without manually deleting cache files.
+**Escape hatch — `forceRefresh`:** Hash keys cover `build.gradle*`, `gradle.properties`, `settings.gradle*`, `gradle/wrapper/gradle-wrapper.properties`, version catalogs, lockfiles, and `GRADLE_USER_HOME`. They do **not** detect: arbitrary `System.getenv()` calls in build scripts (env-var-driven versions), `buildSrc/src/**` source file changes, composite/included build file changes, or remote SNAPSHOT bumps. **`resolve_dependencies`** (MCP), **`jvmsrc resolve --force-refresh`**, and **`jvmsrc get --force-refresh`** bypass the resolution cache and **always** re-invoke Gradle so the agent or developer can re-resolve without manually deleting cache files.
 
 ### 6.2 Decompilation Cache
 

@@ -132,6 +132,31 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 ---
 
+## Cache reliability — future
+
+### Configuration Cache-compatible init script redesign
+
+**Goal:** Enable Gradle's own `--configuration-cache` (CC) to replace the hand-rolled input-side hash entirely. Gradle's CC tracks **all** task inputs — file content, `System.getenv()` calls, system properties, `buildSrc/src/**` source, composite/included builds — making our file-list hash obsolete for that category of changes.
+
+**Why not now:** The current init script registers a single root task (`jvmsrcResolve`) that walks `allprojects {}` at **execution time** inside a `projectsLoaded {}` hook. This pattern is fundamentally incompatible with CC (SPEC §4, also `SPEC.md` note at "Configuration cache"). Enabling CC while using this design causes a Gradle error.
+
+**Required redesign:**
+- Replace the root task + `allprojects {}` execution-time walk with per-project tasks declared during project **configuration** (compatible with CC).
+- Run with `--configuration-cache` instead of `--no-configuration-cache`.
+
+**Trade-offs vs. current model:**
+| | Current (input-side hash) | CC-redesign |
+|---|---|---|
+| Gradle invoked when unchanged? | No (skipped entirely) | Yes — but CC hit is ~1–2 s |
+| Detects `gradle.properties`? | Yes (after this fix) | Yes |
+| Detects `System.getenv()` versions? | No — `forceRefresh` needed | Yes |
+| Detects `buildSrc/src/**` changes? | No — `forceRefresh` needed | Yes |
+| Detects composite build changes? | No — `forceRefresh` needed | Yes |
+
+**References:** [resources/analyzer-init.gradle](resources/analyzer-init.gradle), [src/resolvers/gradle/spawn-gradle.ts](src/resolvers/gradle/spawn-gradle.ts), [src/cache/index.ts](src/cache/index.ts)
+
+---
+
 ## P3 — Future / post–v2
 
 ### MCP hierarchy discovery (`get_implementors` / `get_subclasses`)
