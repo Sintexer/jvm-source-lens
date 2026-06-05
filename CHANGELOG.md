@@ -19,6 +19,13 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 - MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
 - **`src/guided-response/`:** centralized agent recovery copy for CLASS_NOT_FOUND, empty search, decompiled source warnings, and related outcomes.
 
+## [1.11.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.11.0...v1.11.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* fix cache not updated on gradle.properties change ([a125ef0](https://github.com/Sintexer/jvm-source-lens/commit/a125ef01bdd1ee4407d8f77fe8184c56e6a87ef8))
+
 ## [1.11.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.10.0...v1.11.0) (2026-06-04)
 
 
