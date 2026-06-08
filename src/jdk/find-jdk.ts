@@ -16,12 +16,14 @@ export interface FoundJdk {
 
 export type JdkSearchSource =
   | 'java-home-env'          // $JAVA_HOME env var
+  | 'intellij-jdks'          // ~/.jdks/ (IntelliJ-managed JDKs)
   | 'gradle-jdks'            // ~/.gradle/jdks/ (Gradle auto-provisioned toolchain JDKs)
   | 'sdkman'                 // ~/.sdkman/candidates/java/
   | 'jenv'                   // ~/.jenv/versions/
   | 'asdf'                   // ~/.asdf/installs/java/
   | 'homebrew'               // /opt/homebrew/opt/openjdk* or /usr/local/opt/openjdk*
   | 'linux-system'           // /usr/lib/jvm/
+  | 'windows-system'         // Program Files Java vendor directories
   | 'macos-system'           // /Library/Java/JavaVirtualMachines/
   | 'jabba';                 // ~/.jabba/jdk/
 
@@ -67,10 +69,16 @@ function javaHomeCandidates(env: NodeJS.ProcessEnv): JdkCandidate[] {
   return [];
 }
 
-function gradleJdksCandidates(): JdkCandidate[] {
+function intellijJdksCandidates(homeDir: string): JdkCandidate[] {
+  // IntelliJ-managed JDKs are typically stored under ~/.jdks
+  const base = path.join(homeDir, '.jdks');
+  return subdirCandidates(base, 'intellij-jdks');
+}
+
+function gradleJdksCandidates(homeDir: string): JdkCandidate[] {
   // ~/.gradle/jdks/ contains entries like "openjdk-17.0.6+10/"
   // Each entry may itself contain the JDK home or a subdirectory with it.
-  const base = path.join(os.homedir(), '.gradle', 'jdks');
+  const base = path.join(homeDir, '.gradle', 'jdks');
   const top = subdirCandidates(base, 'gradle-jdks');
   // Gradle 8.8+ nests: ~/.gradle/jdks/<dist>/<version>/<platform>/
   const nested: JdkCandidate[] = [];
@@ -83,8 +91,8 @@ function gradleJdksCandidates(): JdkCandidate[] {
   return [...top, ...nested];
 }
 
-function sdkmanCandidates(): JdkCandidate[] {
-  const base = path.join(os.homedir(), '.sdkman', 'candidates', 'java');
+function sdkmanCandidates(homeDir: string): JdkCandidate[] {
+  const base = path.join(homeDir, '.sdkman', 'candidates', 'java');
   // ~/.sdkman/candidates/java/<version>/ — skip the "current" symlink
   return listDirEntries(base)
     .filter((name) => name !== 'current')
@@ -93,9 +101,9 @@ function sdkmanCandidates(): JdkCandidate[] {
     .map((jdkHome) => ({ jdkHome, source: 'sdkman' as const }));
 }
 
-function jenvCandidates(): JdkCandidate[] {
+function jenvCandidates(homeDir: string): JdkCandidate[] {
   // ~/.jenv/versions/ contains symlinks to actual JDK homes
-  const base = path.join(os.homedir(), '.jenv', 'versions');
+  const base = path.join(homeDir, '.jenv', 'versions');
   return listDirEntries(base)
     .map((name) => {
       const p = path.join(base, name);
@@ -109,9 +117,39 @@ function jenvCandidates(): JdkCandidate[] {
     .filter((c) => isDir(c.jdkHome));
 }
 
-function asdfCandidates(): JdkCandidate[] {
-  const base = path.join(os.homedir(), '.asdf', 'installs', 'java');
+function asdfCandidates(homeDir: string): JdkCandidate[] {
+  const base = path.join(homeDir, '.asdf', 'installs', 'java');
   return subdirCandidates(base, 'asdf');
+}
+
+function windowsSystemCandidates(env: NodeJS.ProcessEnv): JdkCandidate[] {
+  const bases = [
+    env['ProgramFiles'],
+    env['ProgramW6432'],
+    env['ProgramFiles(x86)'],
+  ].filter((v): v is string => Boolean(v && v.trim().length > 0));
+  const seen = new Set<string>();
+  const candidates: JdkCandidate[] = [];
+
+  const vendorSubdirs = [
+    path.join('Java'),
+    path.join('Eclipse Adoptium'),
+    path.join('Microsoft'),
+  ];
+
+  for (const base of bases) {
+    for (const vendor of vendorSubdirs) {
+      const parent = path.join(base, vendor);
+      for (const candidate of subdirCandidates(parent, 'windows-system')) {
+        if (!seen.has(candidate.jdkHome)) {
+          seen.add(candidate.jdkHome);
+          candidates.push(candidate);
+        }
+      }
+    }
+  }
+
+  return candidates;
 }
 
 function homebrewCandidates(): JdkCandidate[] {
@@ -162,8 +200,8 @@ function linuxSystemCandidates(): JdkCandidate[] {
   return subdirCandidates('/usr/lib/jvm', 'linux-system');
 }
 
-function jabbaCandidates(): JdkCandidate[] {
-  const base = path.join(os.homedir(), '.jabba', 'jdk');
+function jabbaCandidates(homeDir: string): JdkCandidate[] {
+  const base = path.join(homeDir, '.jabba', 'jdk');
   return subdirCandidates(base, 'jabba');
 }
 
@@ -177,6 +215,21 @@ function jabbaCandidates(): JdkCandidate[] {
  */
 function validateCandidate(candidate: JdkCandidate): FoundJdk | null {
   let info: JdkReleaseInfo | null = readJdkReleaseFile(candidate.jdkHome);
+
+  // macOS bundle layout sometimes appears as <name>.jdk/Contents/Home
+  // (for example under ~/.jdks or /Library/Java/JavaVirtualMachines).
+  if (!info) {
+    const macContentsHome = path.join(candidate.jdkHome, 'Contents', 'Home');
+    info = readJdkReleaseFile(macContentsHome);
+    if (info) {
+      return {
+        jdkHome: macContentsHome,
+        fullVersion: info.fullVersion,
+        majorVersion: info.majorVersion,
+        source: candidate.source,
+      };
+    }
+  }
 
   // Some Gradle JDK installs keep the JDK one level deeper (e.g. containing a single subdir)
   if (!info) {
@@ -232,20 +285,24 @@ function validateCandidate(candidate: JdkCandidate): FoundJdk | null {
 export function findJdk(
   requiredMajor: number | undefined,
   env: NodeJS.ProcessEnv = process.env,
+  ctx?: { homeDir?: string; platform?: NodeJS.Platform },
 ): FoundJdk | null {
-  const platform = process.platform;
+  const platform = ctx?.platform ?? process.platform;
+  const homeDir = ctx?.homeDir ?? os.homedir();
 
   // Build the ordered list of candidate sources
   const allCandidates: JdkCandidate[] = [
     ...javaHomeCandidates(env),
-    ...gradleJdksCandidates(),
-    ...sdkmanCandidates(),
-    ...jenvCandidates(),
-    ...asdfCandidates(),
+    ...intellijJdksCandidates(homeDir),
+    ...gradleJdksCandidates(homeDir),
+    ...sdkmanCandidates(homeDir),
+    ...jenvCandidates(homeDir),
+    ...asdfCandidates(homeDir),
     ...(platform === 'darwin' ? homebrewCandidates() : []),
     ...(platform === 'darwin' ? macosSystemCandidates() : []),
     ...(platform === 'linux' ? linuxSystemCandidates() : []),
-    ...jabbaCandidates(),
+    ...(platform === 'win32' ? windowsSystemCandidates(env) : []),
+    ...jabbaCandidates(homeDir),
   ];
 
   // Validate and filter
@@ -299,6 +356,7 @@ export function jdkSearchLocations(): string[] {
   const platform = process.platform;
   const locations = [
     '$JAVA_HOME (environment variable)',
+    path.join(home, '.jdks') + '  (IntelliJ-managed JDKs)',
     path.join(home, '.gradle', 'jdks') + '  (Gradle auto-provisioned toolchain JDKs)',
     path.join(home, '.sdkman', 'candidates', 'java') + '  (SDKMan)',
     path.join(home, '.jenv', 'versions') + '  (jenv)',
@@ -313,6 +371,13 @@ export function jdkSearchLocations(): string[] {
   }
   if (platform === 'linux') {
     locations.push('/usr/lib/jvm  (Linux system JDKs)');
+  }
+  if (platform === 'win32') {
+    locations.push(
+      '%ProgramFiles%\\Java  (Windows system JDKs)',
+      '%ProgramFiles%\\Eclipse Adoptium  (Windows system JDKs)',
+      '%ProgramFiles%\\Microsoft  (Windows system JDKs)',
+    );
   }
   locations.push(path.join(home, '.jabba', 'jdk') + '  (jabba)');
   return locations;

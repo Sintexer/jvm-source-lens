@@ -227,6 +227,7 @@ jvmsrc mcp                                                     # run as MCP serv
 
 | Variable | Purpose |
 |---|---|
+| `JVMSRC_JAVA_HOME` | Force JDK home for Gradle/CFR child processes |
 | `JVMSRC_CACHE_ROOT` | Cache root (absolute) |
 | `JVMSRC_LOG_DIR` | Diagnostic logs (absolute) |
 | `JVMSRC_ALLOWED_ROOTS` | Allowed `projectRoot` prefixes |
@@ -235,6 +236,8 @@ jvmsrc mcp                                                     # run as MCP serv
 | `JVMSRC_CFR_PATH` | Custom CFR JAR |
 
 Defaults follow [`env-paths`](https://www.npmjs.com/package/env-paths) conventions per OS. Full layout: [SPEC.md](SPEC.md) §6.
+
+When `JVMSRC_JAVA_HOME` is not set, jvmsrc auto-discovers local JDKs from common paths such as `~/.jdks` (IntelliJ), `~/.gradle/jdks`, SDKMan, jenv, asdf, and OS-specific system install directories.
 
 </details>
 

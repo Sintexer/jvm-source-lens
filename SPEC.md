@@ -596,7 +596,7 @@ This means sequential agent calls for classes within the same dependency pay the
 
 - **Untrusted bytecode:** CFR executes JVM bytecode from dependency JARs. Treat decompilation as running third-party code in a local JDK process (same trust boundary as Gradle). Use only on projects and dependencies you trust.
 - **Cache confinement:** Cache file paths are built only from sanitized Maven coordinates and a validated simple class name; writes are refused unless the resolved path stays under `decompiled/`. Segments `.`, `..`, and `..` substrings in coordinates are rejected.
-- **Subprocess env:** Both Gradle and CFR spawns use a stripped environment (no `JAVA_TOOL_OPTIONS`, `_JAVA_OPTIONS`, `JDK_JAVA_OPTIONS`, `CLASSPATH`, `LD_PRELOAD`, etc.) so parent-process JVM injection does not apply to the child. **`JVMSRC_JAVA_HOME`** overrides `JAVA_HOME` in the child env when set, allowing the host `JAVA_HOME` to differ from the JDK required by the target project (e.g. host is Java 25, project requires Java 17).
+- **Subprocess env:** Both Gradle and CFR spawns use a stripped environment (no `JAVA_TOOL_OPTIONS`, `_JAVA_OPTIONS`, `JDK_JAVA_OPTIONS`, `CLASSPATH`, `LD_PRELOAD`, etc.) so parent-process JVM injection does not apply to the child. **`JVMSRC_JAVA_HOME`** overrides `JAVA_HOME` in the child env when set, allowing the host `JAVA_HOME` to differ from the JDK required by the target project (e.g. host is Java 25, project requires Java 17). Without `JVMSRC_JAVA_HOME`, JDK auto-discovery checks common local installs including `~/.jdks` (IntelliJ-managed), `~/.gradle/jdks`, SDK managers (`~/.sdkman`, `~/.jenv`, `~/.asdf`, `~/.jabba`), and OS-specific system locations.
 - **Limits:** CFR runs with a wall-clock timeout (default 120s, `JVMSRC_CFR_TIMEOUT_MS`) and stdout cap (default 10 MiB, `JVMSRC_CFR_MAX_OUTPUT_BYTES`).
 - **Shared cache:** The `decompiled/` tree is machine-local and shared across projects. Another user or process with access to the same cache directory could read cached `.java` files; keep `JVMSRC_CACHE_ROOT` private on multi-user hosts.
 - **Agent trust:** Decompiled stdout is structurally useful but not authoritative (see §7.1 `sourceAvailable: false`). Agents must not treat decompiled text as ground truth for security-sensitive decisions (secrets, auth checks, crypto).
@@ -1250,4 +1250,3 @@ parse class (once, cached)
 ### 12.4 Failure diagnostics (operator UX)
 
 **Implemented:** structured diagnostic logging (**§6.3**) plus **`jvmsrc diagnostics`** (**§8.1.3**) so operators can inspect Gradle/CFR/environment issues from retained subprocess tails and context without burdening agents. See **[ROADMAP.md](ROADMAP.md)** P1 — failure diagnostics.
-
