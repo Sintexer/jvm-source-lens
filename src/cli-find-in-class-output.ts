@@ -10,6 +10,10 @@ export type CliFindInClassOutputOptions = {
   full?: boolean;
 };
 
+function flattenMultiline(text: string): string {
+  return text.replace(/\r?\n+/g, ' | ');
+}
+
 export function writeCliFindInClassResult(
   result: FindInClassSourceResult,
   options?: CliFindInClassOutputOptions,
@@ -34,7 +38,12 @@ export function writeCliFindInClassResult(
   }
 
   if (!result.ok) {
-    console.error(JSON.stringify({ error: true, ...result.error, ...failureExtras }));
+    const printable = { error: true, ...result.error, ...failureExtras } as Record<string, unknown>;
+    if (typeof printable.message === 'string') {
+      printable.message = flattenMultiline(printable.message);
+    }
+    delete printable.stderr;
+    console.error(JSON.stringify(printable));
     process.exitCode = 1;
     return;
   }

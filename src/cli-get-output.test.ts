@@ -87,6 +87,21 @@ describe('writeCliGetResult', () => {
     expect(stderrMessages[0]).toContain('"error":true');
   });
 
+  test('default stderr error flattens multiline message and omits stderr blob', () => {
+    captureConsoleError();
+    writeCliGetResult({
+      ok: false,
+      error: {
+        code: 'RESOLUTION_FAILED',
+        message: 'line one\nline two',
+        stderr: 'gradle stderr text',
+      },
+    });
+    expect(stderrMessages.length).toBe(1);
+    expect(stderrMessages[0]).toContain('line one | line two');
+    expect(stderrMessages[0]).not.toContain('gradle stderr text');
+  });
+
   test('json mode writes one JSON object to stdout on success; nothing to stderr', () => {
     captureConsoleError();
     captureConsoleLog();

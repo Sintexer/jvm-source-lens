@@ -14,6 +14,11 @@ export interface FoundJdk {
   source: JdkSearchSource;
 }
 
+type JdkSearchContext = {
+  homeDir?: string;
+  platform?: NodeJS.Platform;
+};
+
 export type JdkSearchSource =
   | 'java-home-env'          // $JAVA_HOME env var
   | 'intellij-jdks'          // ~/.jdks/ (IntelliJ-managed JDKs)
@@ -285,7 +290,31 @@ function validateCandidate(candidate: JdkCandidate): FoundJdk | null {
 export function findJdk(
   requiredMajor: number | undefined,
   env: NodeJS.ProcessEnv = process.env,
-  ctx?: { homeDir?: string; platform?: NodeJS.Platform },
+  ctx?: JdkSearchContext,
+): FoundJdk | null {
+  return findJdkMatching(requiredMajor, undefined, env, ctx);
+}
+
+/**
+ * Searches all known JDK installation locations for a JDK within the inclusive
+ * major-version range `[minMajor, maxMajor]`.
+ *
+ * Returns the highest matching patch/minor version.
+ */
+export function findJdkInRange(
+  minMajor: number,
+  maxMajor: number,
+  env: NodeJS.ProcessEnv = process.env,
+  ctx?: JdkSearchContext,
+): FoundJdk | null {
+  return findJdkMatching(undefined, { minMajor, maxMajor }, env, ctx);
+}
+
+function findJdkMatching(
+  requiredMajor: number | undefined,
+  range: { minMajor: number; maxMajor: number } | undefined,
+  env: NodeJS.ProcessEnv,
+  ctx?: JdkSearchContext,
 ): FoundJdk | null {
   const platform = ctx?.platform ?? process.platform;
   const homeDir = ctx?.homeDir ?? os.homedir();
@@ -326,7 +355,11 @@ export function findJdk(
     if (!found) {
       continue;
     }
-    if (requiredMajor === undefined || found.majorVersion === requiredMajor) {
+    const matchesExact = requiredMajor === undefined || found.majorVersion === requiredMajor;
+    const matchesRange =
+      range === undefined ||
+      (found.majorVersion >= range.minMajor && found.majorVersion <= range.maxMajor);
+    if (matchesExact && matchesRange) {
       matching.push(found);
     }
   }

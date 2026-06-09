@@ -45,16 +45,30 @@ const GRADLE_MIN_JAVA: Array<{ gradleMajor: number; gradleMinor?: number; minJav
 ];
 
 /**
+ * Conservative Gradle runtime compatibility upper bounds by wrapper version.
+ *
+ * These bounds are intentionally cautious and are only used for the
+ * `gradle-wrapper-inferred` fallback path to avoid selecting a too-new JVM that
+ * fails before project scripts are evaluated.
+ */
+const GRADLE_MAX_JAVA: Array<{ gradleMajor: number; gradleMinor?: number; maxJava: number }> = [
+  { gradleMajor: 9, maxJava: 25 },
+  { gradleMajor: 8, gradleMinor: 8, maxJava: 22 },
+  { gradleMajor: 8, gradleMinor: 5, maxJava: 21 },
+  { gradleMajor: 8, maxJava: 20 },
+  { gradleMajor: 7, maxJava: 17 },
+];
+
+/**
  * Returns the minimum Java major version required by a given Gradle version string.
  * Falls back to 8 when the version cannot be parsed.
  */
 export function gradleVersionToMinJava(gradleVersion: string): number {
-  const parts = gradleVersion.split('.').map((p) => parseInt(p, 10));
-  const major = parts[0];
-  const minor = parts[1] ?? 0;
-  if (!Number.isInteger(major)) {
+  const parsed = parseGradleVersion(gradleVersion);
+  if (!parsed) {
     return 8;
   }
+  const { major, minor } = parsed;
   for (const entry of GRADLE_MIN_JAVA) {
     if (major === entry.gradleMajor) {
       if (entry.gradleMinor === undefined) {
@@ -66,6 +80,39 @@ export function gradleVersionToMinJava(gradleVersion: string): number {
     }
   }
   return 8;
+}
+
+/**
+ * Returns the highest Java major we should use to run the given Gradle wrapper,
+ * or `null` when unknown.
+ */
+export function gradleVersionToMaxJava(gradleVersion: string): number | null {
+  const parsed = parseGradleVersion(gradleVersion);
+  if (!parsed) {
+    return null;
+  }
+  const { major, minor } = parsed;
+  for (const entry of GRADLE_MAX_JAVA) {
+    if (major === entry.gradleMajor) {
+      if (entry.gradleMinor === undefined) {
+        return entry.maxJava;
+      }
+      if (minor >= entry.gradleMinor) {
+        return entry.maxJava;
+      }
+    }
+  }
+  return null;
+}
+
+function parseGradleVersion(gradleVersion: string): { major: number; minor: number } | null {
+  const parts = gradleVersion.split('.').map((p) => parseInt(p, 10));
+  const major = parts[0];
+  const minor = parts[1] ?? 0;
+  if (major === undefined || !Number.isInteger(major)) {
+    return null;
+  }
+  return { major, minor };
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +305,18 @@ export function readToolchainFromBuildScript(projectRoot: string): number | null
  * from `distributionUrl`, then maps it to the minimum Java version.
  */
 export function readGradleWrapperMinJava(projectRoot: string): number | null {
+  const wrapperVersion = readGradleWrapperVersion(projectRoot);
+  if (!wrapperVersion) {
+    return null;
+  }
+  return gradleVersionToMinJava(wrapperVersion);
+}
+
+/**
+ * Reads `gradle/wrapper/gradle-wrapper.properties` and extracts the wrapper
+ * distribution version (e.g. `8.8` from `gradle-8.8-bin.zip`).
+ */
+export function readGradleWrapperVersion(projectRoot: string): string | null {
   const text = readFileSafe(
     path.join(projectRoot, 'gradle', 'wrapper', 'gradle-wrapper.properties'),
   );
@@ -269,7 +328,19 @@ export function readGradleWrapperMinJava(projectRoot: string): number | null {
   if (!match || !match[1]) {
     return null;
   }
-  return gradleVersionToMinJava(match[1]);
+  return match[1];
+}
+
+/**
+ * Reads Gradle wrapper version and returns the conservative maximum Java major
+ * to run this wrapper with. Returns `null` when unknown.
+ */
+export function readGradleWrapperMaxJava(projectRoot: string): number | null {
+  const wrapperVersion = readGradleWrapperVersion(projectRoot);
+  if (!wrapperVersion) {
+    return null;
+  }
+  return gradleVersionToMaxJava(wrapperVersion);
 }
 
 // ---------------------------------------------------------------------------

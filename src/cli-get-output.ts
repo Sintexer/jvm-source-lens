@@ -9,6 +9,10 @@ export type CliGetOutputOptions = {
   json?: boolean;
 };
 
+function flattenMultiline(text: string): string {
+  return text.replace(/\r?\n+/g, ' | ');
+}
+
 export function writeCliGetResult(result: CliGetResult, options?: CliGetOutputOptions): void {
   const quiet = options?.quiet ?? false;
   const json = options?.json ?? false;
@@ -56,6 +60,12 @@ export function writeCliGetResult(result: CliGetResult, options?: CliGetOutputOp
     }
     return;
   }
-  console.error(JSON.stringify({ error: true, ...result.error, ...failureExtras }));
+  const printable = { error: true, ...result.error, ...failureExtras } as Record<string, unknown>;
+  if (typeof printable.message === 'string') {
+    printable.message = flattenMultiline(printable.message);
+  }
+  // Keep default stderr output compact and readable in terminal mode.
+  delete printable.stderr;
+  console.error(JSON.stringify(printable));
   process.exitCode = 1;
 }
