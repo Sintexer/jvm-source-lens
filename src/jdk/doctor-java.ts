@@ -26,9 +26,9 @@ function describeHint(hint: ReturnType<typeof detectRequiredJavaVersion>): strin
       return `gradle wrapper inferred minimum (Java ${hint.majorVersion})`;
     case 'none':
       return 'no project-specific hint';
-    default:
-      return hint.source;
   }
+
+  return 'unknown hint source';
 }
 
 function describeRequirement(
