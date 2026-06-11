@@ -19,6 +19,13 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 - MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
 - **`src/guided-response/`:** centralized agent recovery copy for CLASS_NOT_FOUND, empty search, decompiled source warnings, and related outcomes.
 
+## [1.13.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.12.1...v1.13.0) (2026-06-11)
+
+
+### Features
+
+* implement jdk-dirs config ([dc4f12c](https://github.com/Sintexer/jvm-source-lens/commit/dc4f12c807e5c1c278a8c7e68e6f292a49f77332))
+
 ## [1.12.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.12.0...v1.12.1) (2026-06-09)
 
 
