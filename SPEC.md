@@ -597,6 +597,7 @@ This means sequential agent calls for classes within the same dependency pay the
 - **Untrusted bytecode:** CFR executes JVM bytecode from dependency JARs. Treat decompilation as running third-party code in a local JDK process (same trust boundary as Gradle). Use only on projects and dependencies you trust.
 - **Cache confinement:** Cache file paths are built only from sanitized Maven coordinates and a validated simple class name; writes are refused unless the resolved path stays under `decompiled/`. Segments `.`, `..`, and `..` substrings in coordinates are rejected.
 - **Subprocess env:** Both Gradle and CFR spawns use a stripped environment (no `JAVA_TOOL_OPTIONS`, `_JAVA_OPTIONS`, `JDK_JAVA_OPTIONS`, `CLASSPATH`, `LD_PRELOAD`, etc.) so parent-process JVM injection does not apply to the child. **`JVMSRC_JAVA_HOME`** overrides `JAVA_HOME` in the child env when set, allowing the host `JAVA_HOME` to differ from the JDK required by the target project (e.g. host is Java 25, project requires Java 17). Without `JVMSRC_JAVA_HOME`, JDK auto-discovery checks common local installs including `~/.jdks` (IntelliJ-managed), `~/.gradle/jdks`, SDK managers (`~/.sdkman`, `~/.jenv`, `~/.asdf`, `~/.jabba`), and OS-specific system locations. For wrapper-inferred hints, JDK choice is compatibility-bounded: use a locally installed JDK within the wrapper's safe runtime range (minimum + conservative maximum) so very new host JDKs do not break older wrappers before project evaluation.
+- **Persistent JDK roots config:** In addition to built-in discovery paths, users can define global parent directories that contain multiple JDK subdirectories via CLI: `jvmsrc config jdk-roots add <abs-dir>`, `... list`, `... remove`. This global config is stored under the OS config root (`env-paths('jvmsrc', { suffix: '' }).config/config.json`) and supports absolute override **`JVMSRC_CONFIG_DIR`** (same absolute-only policy as cache/log overrides).
 - **Limits:** CFR runs with a wall-clock timeout (default 120s, `JVMSRC_CFR_TIMEOUT_MS`) and stdout cap (default 10 MiB, `JVMSRC_CFR_MAX_OUTPUT_BYTES`).
 - **Shared cache:** The `decompiled/` tree is machine-local and shared across projects. Another user or process with access to the same cache directory could read cached `.java` files; keep `JVMSRC_CACHE_ROOT` private on multi-user hosts.
 - **Agent trust:** Decompiled stdout is structurally useful but not authoritative (see §7.1 `sourceAvailable: false`). Agents must not treat decompiled text as ground truth for security-sensitive decisions (secrets, auth checks, crypto).
@@ -777,7 +778,7 @@ Agents should treat `sourceAvailable: false` as “trust types and control flow;
 
 ### 8.1 CLI
 
-The published executable is **`jvmsrc`**. Class lookup may be written as **`jvmsrc get <className>`** or the shorthand **`jvmsrc <className>`** — when the first argument is not `get`, `mcp`, `config`, **`resolve`**, or **`diagnostics`** (§8.1.3), the CLI treats it as a class name and runs the `get` command (same flags: `--project`, `--module`, etc.).
+The published executable is **`jvmsrc`**. Class lookup may be written as **`jvmsrc get <className>`** or the shorthand **`jvmsrc <className>`** — when the first argument is not `get`, `mcp`, `config`, **`resolve`**, **`diagnostics`** (§8.1.3), or **`doctor`** (§8.1.5), the CLI treats it as a class name and runs the `get` command (same flags: `--project`, `--module`, etc.).
 
 ```bash
 # Install globally
@@ -881,6 +882,10 @@ Developer-facing commands over structured logs (**§6.3**) — list recent failu
 # Recent failures, newest first
 jvmsrc diagnostics list
 
+# Latest failure message (default 1), or last N
+jvmsrc diagnostics last
+jvmsrc diagnostics last 5
+
 # Full JSON record for one id (matches diagnostics/<id>.json when written)
 jvmsrc diagnostics show a3f5c8d2
 
@@ -892,6 +897,24 @@ jvmsrc diagnostics clear --older-than 7d
 ```
 
 Example **`list`** line shape (illustrative): timestamp, **`severity`**, **`errorCode`**, short **`id`**, **`operation`**.
+
+#### 8.1.5 `doctor` subcommand
+
+Developer-facing environment checks for common setup issues.
+
+```bash
+# Diagnose JDK requirement, selected JDK, and discovered candidates for one project
+jvmsrc doctor java --project /path/to/project
+```
+
+`doctor java` prints:
+- detected requirement hint source (for example wrapper-inferred, toolchain script, explicit path)
+- effective requirement (exact major or range)
+- current `JAVA_HOME` and whether it is a valid JDK
+- selected JDK and status (`OK` / `FAIL`)
+- candidate scan with source labels and rejection reasons (`outside-required-major`, `outside-required-range`, `invalid-jdk-home`)
+
+On failure, output includes the same actionable guidance as runtime resolution errors, including `jvmsrc config jdk-roots add ...` and explicit warning that further operations for the project will fail until a compatible JDK is discoverable.
 
 ### 8.2 MCP Server
 

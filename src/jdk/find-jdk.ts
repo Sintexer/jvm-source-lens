@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { readJdkReleaseFile, type JdkReleaseInfo } from './read-jdk-release-file.js';
+import { readGlobalJdkSearchRootsSafe } from '../config/global-config.js';
 
 export interface FoundJdk {
   /** Absolute path to the JDK home directory (value to use as `JAVA_HOME`). */
@@ -12,6 +13,20 @@ export interface FoundJdk {
   majorVersion: number;
   /** How this JDK was found. */
   source: JdkSearchSource;
+}
+
+export interface JdkCandidateInspection {
+  jdkHome: string;
+  source: JdkSearchSource;
+  valid: boolean;
+  fullVersion: string | null;
+  majorVersion: number | null;
+  matchesRequirement: boolean;
+  decision:
+    | 'match'
+    | 'outside-required-major'
+    | 'outside-required-range'
+    | 'invalid-jdk-home';
 }
 
 type JdkSearchContext = {
@@ -30,6 +45,7 @@ export type JdkSearchSource =
   | 'linux-system'           // /usr/lib/jvm/
   | 'windows-system'         // Program Files Java vendor directories
   | 'macos-system'           // /Library/Java/JavaVirtualMachines/
+  | 'configured-jdk-root'    // user-configured parent dirs (global config)
   | 'jabba';                 // ~/.jabba/jdk/
 
 /** A candidate JDK path discovered during search, before version validation. */
@@ -210,6 +226,15 @@ function jabbaCandidates(homeDir: string): JdkCandidate[] {
   return subdirCandidates(base, 'jabba');
 }
 
+function configuredRootCandidates(): JdkCandidate[] {
+  const roots = readGlobalJdkSearchRootsSafe();
+  const out: JdkCandidate[] = [];
+  for (const root of roots) {
+    out.push(...subdirCandidates(root, 'configured-jdk-root'));
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Validation helpers
 // ---------------------------------------------------------------------------
@@ -269,6 +294,39 @@ function validateCandidate(candidate: JdkCandidate): FoundJdk | null {
   };
 }
 
+function inspectValidatedCandidate(candidate: JdkCandidate): {
+  valid: boolean;
+  found: FoundJdk | null;
+} {
+  const found = validateCandidate(candidate);
+  if (!found) {
+    return { valid: false, found: null };
+  }
+  return { valid: true, found };
+}
+
+function gatherAllCandidates(
+  env: NodeJS.ProcessEnv,
+  ctx?: JdkSearchContext,
+): JdkCandidate[] {
+  const platform = ctx?.platform ?? process.platform;
+  const homeDir = ctx?.homeDir ?? os.homedir();
+  return [
+    ...javaHomeCandidates(env),
+    ...intellijJdksCandidates(homeDir),
+    ...gradleJdksCandidates(homeDir),
+    ...sdkmanCandidates(homeDir),
+    ...jenvCandidates(homeDir),
+    ...asdfCandidates(homeDir),
+    ...(platform === 'darwin' ? homebrewCandidates() : []),
+    ...(platform === 'darwin' ? macosSystemCandidates() : []),
+    ...(platform === 'linux' ? linuxSystemCandidates() : []),
+    ...(platform === 'win32' ? windowsSystemCandidates(env) : []),
+    ...jabbaCandidates(homeDir),
+    ...configuredRootCandidates(),
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -316,23 +374,7 @@ function findJdkMatching(
   env: NodeJS.ProcessEnv,
   ctx?: JdkSearchContext,
 ): FoundJdk | null {
-  const platform = ctx?.platform ?? process.platform;
-  const homeDir = ctx?.homeDir ?? os.homedir();
-
-  // Build the ordered list of candidate sources
-  const allCandidates: JdkCandidate[] = [
-    ...javaHomeCandidates(env),
-    ...intellijJdksCandidates(homeDir),
-    ...gradleJdksCandidates(homeDir),
-    ...sdkmanCandidates(homeDir),
-    ...jenvCandidates(homeDir),
-    ...asdfCandidates(homeDir),
-    ...(platform === 'darwin' ? homebrewCandidates() : []),
-    ...(platform === 'darwin' ? macosSystemCandidates() : []),
-    ...(platform === 'linux' ? linuxSystemCandidates() : []),
-    ...(platform === 'win32' ? windowsSystemCandidates(env) : []),
-    ...jabbaCandidates(homeDir),
-  ];
+  const allCandidates = gatherAllCandidates(env, ctx);
 
   // Validate and filter
   const matching: FoundJdk[] = [];
@@ -351,10 +393,11 @@ function findJdkMatching(
     }
     seen.add(real);
 
-    const found = validateCandidate(candidate);
-    if (!found) {
+    const inspected = inspectValidatedCandidate(candidate);
+    if (!inspected.valid || !inspected.found) {
       continue;
     }
+    const found = inspected.found;
     const matchesExact = requiredMajor === undefined || found.majorVersion === requiredMajor;
     const matchesRange =
       range === undefined ||
@@ -378,6 +421,69 @@ function findJdkMatching(
     }
     return best;
   });
+}
+
+export function inspectJdkCandidates(
+  requiredMajor: number | undefined,
+  range: { minMajor: number; maxMajor: number } | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+  ctx?: JdkSearchContext,
+): JdkCandidateInspection[] {
+  const allCandidates = gatherAllCandidates(env, ctx);
+  const inspections: JdkCandidateInspection[] = [];
+  const seen = new Set<string>();
+
+  for (const candidate of allCandidates) {
+    const real = (() => {
+      try {
+        return fs.realpathSync(candidate.jdkHome);
+      } catch {
+        return candidate.jdkHome;
+      }
+    })();
+    if (seen.has(real)) {
+      continue;
+    }
+    seen.add(real);
+
+    const inspected = inspectValidatedCandidate(candidate);
+    if (!inspected.valid || !inspected.found) {
+      inspections.push({
+        jdkHome: candidate.jdkHome,
+        source: candidate.source,
+        valid: false,
+        fullVersion: null,
+        majorVersion: null,
+        matchesRequirement: false,
+        decision: 'invalid-jdk-home',
+      });
+      continue;
+    }
+
+    const found = inspected.found;
+    const matchesExact = requiredMajor === undefined || found.majorVersion === requiredMajor;
+    const matchesRange =
+      range === undefined ||
+      (found.majorVersion >= range.minMajor && found.majorVersion <= range.maxMajor);
+    const matchesRequirement = matchesExact && matchesRange;
+    const decision: JdkCandidateInspection['decision'] = matchesRequirement
+      ? 'match'
+      : range !== undefined
+        ? 'outside-required-range'
+        : 'outside-required-major';
+
+    inspections.push({
+      jdkHome: found.jdkHome,
+      source: found.source,
+      valid: true,
+      fullVersion: found.fullVersion,
+      majorVersion: found.majorVersion,
+      matchesRequirement,
+      decision,
+    });
+  }
+
+  return inspections;
 }
 
 /**
@@ -413,5 +519,8 @@ export function jdkSearchLocations(): string[] {
     );
   }
   locations.push(path.join(home, '.jabba', 'jdk') + '  (jabba)');
+  for (const root of readGlobalJdkSearchRootsSafe()) {
+    locations.push(root + '  (configured jdk-root)');
+  }
   return locations;
 }

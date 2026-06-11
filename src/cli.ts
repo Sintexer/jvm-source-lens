@@ -3,6 +3,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { buildJvmsrcMcpConfigPayload } from './cli-config-command.js';
+import {
+  addGlobalJdkSearchRoot,
+  readGlobalConfig,
+  removeGlobalJdkSearchRoot,
+} from './config/global-config.js';
 import { registerDiagnosticsCli } from './diagnostics/cli-diagnostics-command.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import { writeCliFindInClassResult } from './cli-find-in-class-output.js';
@@ -15,6 +20,7 @@ import { mergeSourceExcerptInputs } from './source-excerpt.js';
 import { resolveProjectRoot } from './project-path.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 import { formatResolutionSummaryText } from './text-format/format-resolve.js';
+import { runJavaDoctor } from './jdk/doctor-java.js';
 
 /** `jvmsrc com.example.Foo` → same as `jvmsrc get com.example.Foo` */
 function injectImplicitGetSubcommand(): void {
@@ -26,6 +32,7 @@ function injectImplicitGetSubcommand(): void {
     'config',
     'resolve',
     'diagnostics',
+    'doctor',
   ]);
   const raw = process.argv.slice(2);
   if (raw.length === 0) {
@@ -395,9 +402,30 @@ program
 
 registerDiagnosticsCli(program);
 
-program
-  .command('config')
-  .description('Print paste-ready MCP server JSON (Cursor / Claude Desktop / Windsurf) plus environment hints')
+const doctorCmd = new Command('doctor').description('Run environment diagnostics');
+
+doctorCmd
+  .command('java')
+  .description('Diagnose project JDK requirement, selection, and candidate scan')
+  .option('-p, --project <path>', 'Path to the project root', process.cwd())
+  .action((options: { project: string }) => {
+    const root = resolveProjectRoot(options.project);
+    if (!root.ok) {
+      console.error(root.message);
+      process.exitCode = 1;
+      return;
+    }
+    const report = runJavaDoctor(root.path);
+    console.log(report.text);
+    if (!report.ok) {
+      process.exitCode = 1;
+    }
+  });
+
+program.addCommand(doctorCmd);
+
+const configCmd = new Command('config')
+  .description('Print MCP setup JSON and manage global jvmsrc configuration')
   .option('-p, --project <path>', 'Project root for hints (Gradle wrapper detection)', process.cwd())
   .action((options: { project: string }) => {
     const root = resolveProjectRoot(options.project);
@@ -409,6 +437,69 @@ program
     const payload = buildJvmsrcMcpConfigPayload(root.path);
     console.log(JSON.stringify(payload, null, 2));
   });
+
+const configJdkRootsCmd = new Command('jdk-roots').description(
+  'Manage global JDK roots directories used for JDK auto-discovery',
+);
+
+configJdkRootsCmd
+  .command('list')
+  .description('List global JDK roots directories used for JDK discovery')
+  .action(() => {
+    const cfg = readGlobalConfig();
+    if (!cfg.ok) {
+      console.error(cfg.message);
+      process.exitCode = 1;
+      return;
+    }
+    if (cfg.value.jdkSearchRoots.length === 0) {
+      console.log('No JDK roots configured.');
+      console.log('Add one with: jvmsrc config jdk-roots add /path/to/jdks');
+      return;
+    }
+    for (const root of cfg.value.jdkSearchRoots) {
+      console.log(root);
+    }
+  });
+
+configJdkRootsCmd
+  .command('add')
+  .description('Add a global JDK roots directory (contains multiple JDK subdirectories)')
+  .argument('<dir>', 'Absolute path to a directory containing JDK subdirectories')
+  .action((dir: string) => {
+    const saved = addGlobalJdkSearchRoot(dir);
+    if (!saved.ok) {
+      console.error(saved.message);
+      process.exitCode = 1;
+      return;
+    }
+    if (saved.value.added) {
+      console.log(`Added JDK root: ${saved.value.root}`);
+    } else {
+      console.log(`JDK root already present: ${saved.value.root}`);
+    }
+  });
+
+configJdkRootsCmd
+  .command('remove')
+  .description('Remove a global JDK roots directory from JDK discovery')
+  .argument('<dir>', 'Absolute path to a previously added JDK roots directory')
+  .action((dir: string) => {
+    const saved = removeGlobalJdkSearchRoot(dir);
+    if (!saved.ok) {
+      console.error(saved.message);
+      process.exitCode = 1;
+      return;
+    }
+    if (saved.value.removed) {
+      console.log(`Removed JDK root: ${saved.value.root}`);
+    } else {
+      console.log(`JDK root was not configured: ${saved.value.root}`);
+    }
+  });
+
+configCmd.addCommand(configJdkRootsCmd);
+program.addCommand(configCmd);
 
 program
   .command('mcp')

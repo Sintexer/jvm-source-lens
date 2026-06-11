@@ -49,6 +49,10 @@ function readAllNdjsonRecords(logRoot: string): DiagnosticRecord[] {
   return out;
 }
 
+function sortNewestFirst(records: DiagnosticRecord[]): DiagnosticRecord[] {
+  return [...records].sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0));
+}
+
 function parseOlderThanMs(spec: string): number | null {
   const s = spec.trim();
   const m = /^(\d+)(d|h|m|s)$/i.exec(s);
@@ -74,6 +78,7 @@ export function registerDiagnosticsCli(program: Command): void {
     .command('list')
     .description('Recent diagnostic entries from rolling NDJSON log(s)')
     .option('--severity <name>', 'Filter by FailureSeverity (e.g. resolver_fail)')
+    .option('--last <n>', 'Print only the most recent N entries', (v) => parseInt(v, 10))
     .action((opts: { severity?: string }) => {
       const logRoot = logRootOrExit();
       let records = readAllNdjsonRecords(logRoot);
@@ -81,10 +86,37 @@ export function registerDiagnosticsCli(program: Command): void {
         const sev = opts.severity as FailureSeverity;
         records = records.filter((r) => r.severity === sev);
       }
-      records.sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0));
+      records = sortNewestFirst(records);
+      const requestedLast = (opts as { last?: number }).last;
+      if (requestedLast !== undefined && Number.isFinite(requestedLast) && requestedLast > 0) {
+        records = records.slice(0, Math.floor(requestedLast));
+      }
       const short = (id: string) => id.replace(/-/g, '').slice(0, 8);
       for (const r of records) {
         console.log(`${r.timestamp}\t${r.severity}\t${r.errorCode}\t${short(r.id)}\t${r.operation}`);
+      }
+    });
+
+  diag
+    .command('last')
+    .description('Print the latest failure message(s); default is 1')
+    .argument('[count]', 'How many most recent failure records to print', '1')
+    .action((countArg: string) => {
+      const n = Number.parseInt(countArg, 10);
+      if (!Number.isFinite(n) || n <= 0) {
+        console.error('Count must be a positive integer.');
+        process.exitCode = 1;
+        return;
+      }
+      const logRoot = logRootOrExit();
+      const records = sortNewestFirst(readAllNdjsonRecords(logRoot)).slice(0, Math.floor(n));
+      if (records.length === 0) {
+        console.log('No diagnostic records found.');
+        return;
+      }
+      for (const r of records) {
+        const short = r.id.replace(/-/g, '').slice(0, 8);
+        console.log(`${r.timestamp}\t${r.severity}\t${r.errorCode}\t${short}\t${r.message}`);
       }
     });
 

@@ -202,6 +202,9 @@ Composite builds, Android-only layouts, and exotic configurations are not fully 
 jvmsrc com.example.MyClass -p /path/to/gradle-project          # shorthand for get
 jvmsrc get com.example.MyClass -p /path/to/project -q > MyClass.java
 jvmsrc resolve -p /path/to/project --force-refresh
+jvmsrc config jdk-roots add /path/to/jdks                      # one-time JDK roots setup
+jvmsrc doctor java -p /path/to/project                         # check JDK requirement + selection
+jvmsrc diagnostics last                                         # latest failure message
 jvmsrc mcp                                                     # run as MCP server
 ```
 
@@ -216,7 +219,9 @@ jvmsrc mcp                                                     # run as MCP serv
 <details>
 <summary>Troubleshooting</summary>
 
-* **Resolution failures:** Run `jvmsrc diagnostics list` then `jvmsrc diagnostics show <id>`
+* **Resolution failures:** Run `jvmsrc diagnostics last` (or `jvmsrc diagnostics last 5`)
+* **Custom JDK install roots:** Add once with `jvmsrc config jdk-roots add /path/to/jdks`
+* **JDK mismatch debugging:** Run `jvmsrc doctor java -p /path/to/project`
 * **After upgrading jvmsrc:** Restart your MCP host
 * **Stale classpath:** Run `jvmsrc resolve --force-refresh`
 
@@ -228,6 +233,7 @@ jvmsrc mcp                                                     # run as MCP serv
 | Variable | Purpose |
 |---|---|
 | `JVMSRC_JAVA_HOME` | Force JDK home for Gradle/CFR child processes |
+| `JVMSRC_CONFIG_DIR` | Global jvmsrc config directory (absolute) |
 | `JVMSRC_CACHE_ROOT` | Cache root (absolute) |
 | `JVMSRC_LOG_DIR` | Diagnostic logs (absolute) |
 | `JVMSRC_ALLOWED_ROOTS` | Allowed `projectRoot` prefixes |
@@ -237,7 +243,7 @@ jvmsrc mcp                                                     # run as MCP serv
 
 Defaults follow [`env-paths`](https://www.npmjs.com/package/env-paths) conventions per OS. Full layout: [SPEC.md](SPEC.md) §6.
 
-When `JVMSRC_JAVA_HOME` is not set, jvmsrc auto-discovers local JDKs from common paths such as `~/.jdks` (IntelliJ), `~/.gradle/jdks`, SDKMan, jenv, asdf, and OS-specific system install directories.
+When `JVMSRC_JAVA_HOME` is not set, jvmsrc auto-discovers local JDKs from common paths such as `~/.jdks` (IntelliJ), `~/.gradle/jdks`, SDKMan, jenv, asdf, and OS-specific system install directories, plus your global configured JDK roots from `jvmsrc config jdk-roots ...`.
 
 </details>
 

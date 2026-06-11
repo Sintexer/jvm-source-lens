@@ -77,4 +77,23 @@ describe('resolveJdkForProject', () => {
     expect(result.jdkHome).toBe(jdk17);
     expect(result.majorVersion).toBe(17);
   });
+
+  test('jdk not found message advises jdk-roots and states future operations fail', () => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-resolve-jdk-'));
+
+    fs.mkdirSync(path.join(tmpRoot, 'gradle', 'wrapper'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpRoot, 'gradle', 'wrapper', 'gradle-wrapper.properties'),
+      'distributionUrl=https://services.gradle.org/distributions/gradle-8.8-bin.zip\n',
+      'utf8',
+    );
+
+    const result = resolveJdkForProject(tmpRoot, undefined, {}, { homeDir: tmpRoot, platform: 'linux' });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.message).toContain('jvmsrc config jdk-roots add /path/to/jdks');
+    expect(result.message).toContain('Further operations for this project will fail');
+  });
 });
