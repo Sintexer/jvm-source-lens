@@ -53,14 +53,14 @@ jobs:
         run: bun run verify:publish
 
       - name: Smoke test CLI on Node 20 (minimum supported runtime)
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
 
       - run: node dist/cli.js --version
 
       - name: Smoke test CLI on Node 24 (CI / latest)
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
 
