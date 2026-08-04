@@ -109,11 +109,17 @@ The MCP server runs over stdio via `jvmsrc mcp`. Add this to your host config:
   "mcpServers": {
     "jvmsrc": {
       "command": "jvmsrc",
-      "args": ["mcp"]
+      "args": ["mcp"],
+      "env": {
+        "REPO_USER": "your-username",
+        "REPO_PASS": "your-password"
+      }
     }
   }
 }
 ```
+
+Gradle runs inside this MCP process and only sees **that** process’s environment — hosts often do **not** inherit your interactive shell. If the project’s Gradle scripts need private-repo credentials, set those vars in `env` (names vary by project; `REPO_USER` / `REPO_PASS` are placeholders — use whatever your build documents), then restart the server. Omit `env` when the project does not require them.
 
 ### Tools your agent gets
 

@@ -162,9 +162,10 @@ function classifyResolutionFailed(
       error,
       'permission',
       false,
-      'Gradle resolution denied (authentication or authorization).',
-      `Dependency resolution for project ${JSON.stringify(query.projectRoot)} failed because credentials or repository access were denied. ` +
-        `${error.message} Do not retry with the same credentials — fix repository auth, VPN, or escalate for access. ` +
+      'Gradle resolution failed: repository authentication / credentials missing.',
+      `Dependency resolution for project ${JSON.stringify(query.projectRoot)} failed because Gradle could not authenticate ` +
+        `or required repository credential env/properties were missing. ${error.message} ` +
+        authEnvGuidance() +
         diagnosticSuffix(error.stderr),
     );
   }
@@ -211,9 +212,10 @@ function classifySourcesResolveFailed(
       error,
       'permission',
       false,
-      `Sources download denied for ${coords}.`,
-      `Gradle could not download the sources artifact for ${coords} due to authentication or authorization. ` +
-        `${error.message} Escalate repository access; do not retry blindly.` +
+      `Sources resolution failed: repository authentication / credentials missing for ${coords}.`,
+      `On-demand sources resolution for ${coords} failed because Gradle could not authenticate ` +
+        `or required repository credential env/properties were missing. ${error.message} ` +
+        authEnvGuidance() +
         diagnosticSuffix(error.stderr),
     );
   }
@@ -324,13 +326,27 @@ function diagnosticSuffix(stderr?: string): string {
   return stderr ? ` Gradle stderr: ${stderr.trim().slice(0, 500)}` : '';
 }
 
+/** Shared next-step copy for repository auth / missing credential env. */
+function authEnvGuidance(): string {
+  return (
+    `Do not retry blindly. If the project's Gradle scripts require repository credential environment variables ` +
+    `(for example REPO_USER / REPO_PASS, or names documented by the project), set them in the jvmsrc process environment. ` +
+    `MCP hosts often do not inherit interactive shell env — add those vars to the MCP server env config (or launch the host from a shell that exports them), ` +
+    `restart the jvmsrc MCP server, then retry. Otherwise fix repository auth, VPN, or escalate for access.`
+  );
+}
+
 function isProjectPathMessage(message: string): boolean {
   return /project path does not exist|not a directory/i.test(message);
 }
 
 function matchesPermission(blob: string): boolean {
-  return /\b(401|403|unauthorized|forbidden|authentication failed|not authorized|access denied|credentials required|permission denied)\b/i.test(
-    blob,
+  return (
+    /\b(401|403|unauthorized|forbidden|authentication failed|authentication required|not authenticated|not authorized|access denied|credentials required|credential(?:s)? required|permission denied|www-authenticate)\b/i.test(
+      blob,
+    ) ||
+    /credentials?\b[\s\S]{0,80}\b(not defined|are not defined|missing|not set|undefined)\b/i.test(blob) ||
+    /\b(status code|http)\s*40[13]\b/i.test(blob)
   );
 }
 

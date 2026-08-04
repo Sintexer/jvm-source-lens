@@ -144,9 +144,37 @@ test('RESOLUTION_FAILED with 401 is permission', () => {
     },
     query,
   );
-  const sc = r.structuredContent as { errorCategory: string; isRetryable: boolean };
+  const sc = r.structuredContent as { errorCategory: string; isRetryable: boolean; message: string };
   expect(sc.errorCategory).toBe('permission');
   expect(sc.isRetryable).toBe(false);
+  expect(r.content[0]?.type === 'text' ? r.content[0].text : '').toContain('credentials missing');
+  expect(sc.message).toMatch(/jvmsrc process environment|MCP/i);
+});
+
+test('SOURCES_RESOLVE_FAILED with credentials not defined is permission', () => {
+  const r = mcpToolResultFromClassSource(
+    {
+      ok: false,
+      error: {
+        code: 'SOURCES_RESOLVE_FAILED',
+        message: 'Gradle exited with code 1',
+        coordinates: { group: 'deltix', name: 'deltix-ember-algo-api', version: '1.14.254' },
+        stderr:
+          'ERROR: Credentials to access nexus.deltixhub.com repo are NOT defined!\n' +
+          'See https://gitlab.deltixhub.com/Deltix/Common/MultilingualPackage/wikis/ProGetCredentials',
+      },
+    },
+    query,
+  );
+  const sc = r.structuredContent as { errorCategory: string; isRetryable: boolean; message: string };
+  expect(sc.errorCategory).toBe('permission');
+  expect(sc.isRetryable).toBe(false);
+  const summary = r.content[0]?.type === 'text' ? r.content[0].text : '';
+  expect(summary).toContain('repository authentication / credentials missing');
+  expect(summary).toContain('deltix:deltix-ember-algo-api:1.14.254');
+  expect(sc.message).toMatch(/REPO_USER|credential/i);
+  expect(sc.message).toMatch(/MCP/i);
+  expect(sc.message).not.toMatch(/Sources artifact unavailable/i);
 });
 
 test('SOURCES_RESOLVE_FAILED without network hints is business', () => {
@@ -164,6 +192,8 @@ test('SOURCES_RESOLVE_FAILED without network hints is business', () => {
   const sc = r.structuredContent as { errorCategory: string; isRetryable: boolean };
   expect(sc.errorCategory).toBe('business');
   expect(sc.isRetryable).toBe(false);
+  const summary = r.content[0]?.type === 'text' ? r.content[0].text : '';
+  expect(summary).toContain('Sources artifact unavailable');
 });
 
 test('DECOMPILE_FAILED timeout is transient', () => {
