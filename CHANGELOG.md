@@ -19,6 +19,13 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 - MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
 - **`src/guided-response/`:** centralized agent recovery copy for CLASS_NOT_FOUND, empty search, decompiled source warnings, and related outcomes.
 
+## [1.14.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.13.1...v1.14.0) (2026-08-04)
+
+
+### Features
+
+* add meaningful error message on failed gradle deps repo access ([1acdc1b](https://github.com/Sintexer/jvm-source-lens/commit/1acdc1bcde32263e1cb60b5e1662c414ccdd94b8))
+
 ## [1.13.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.13.0...v1.13.1) (2026-06-11)
 
 
