@@ -29,9 +29,22 @@ export interface JdkCandidateInspection {
     | 'invalid-jdk-home';
 }
 
-type JdkSearchContext = {
+export type JdkSearchContext = {
   homeDir?: string;
   platform?: NodeJS.Platform;
+  /**
+   * When false, skip OS-wide install roots (`/usr/lib/jvm`, Homebrew,
+   * `/Library/Java/JavaVirtualMachines`, Windows Program Files vendors).
+   * Default true. Unit tests with a fake `homeDir` should set false so CI
+   * system JDKs cannot shadow fixture installs.
+   */
+  includeSystemLocations?: boolean;
+  /**
+   * When false, skip roots from global `config.json` (`jdkSearchRoots`).
+   * Default true. Pair with `includeSystemLocations: false` for hermetic
+   * “JDK not found” assertions.
+   */
+  includeConfiguredRoots?: boolean;
 };
 
 export type JdkSearchSource =
@@ -311,6 +324,8 @@ function gatherAllCandidates(
 ): JdkCandidate[] {
   const platform = ctx?.platform ?? process.platform;
   const homeDir = ctx?.homeDir ?? os.homedir();
+  const includeSystem = ctx?.includeSystemLocations !== false;
+  const includeConfigured = ctx?.includeConfiguredRoots !== false;
   return [
     ...javaHomeCandidates(env),
     ...intellijJdksCandidates(homeDir),
@@ -318,12 +333,12 @@ function gatherAllCandidates(
     ...sdkmanCandidates(homeDir),
     ...jenvCandidates(homeDir),
     ...asdfCandidates(homeDir),
-    ...(platform === 'darwin' ? homebrewCandidates() : []),
-    ...(platform === 'darwin' ? macosSystemCandidates() : []),
-    ...(platform === 'linux' ? linuxSystemCandidates() : []),
-    ...(platform === 'win32' ? windowsSystemCandidates(env) : []),
+    ...(includeSystem && platform === 'darwin' ? homebrewCandidates() : []),
+    ...(includeSystem && platform === 'darwin' ? macosSystemCandidates() : []),
+    ...(includeSystem && platform === 'linux' ? linuxSystemCandidates() : []),
+    ...(includeSystem && platform === 'win32' ? windowsSystemCandidates(env) : []),
     ...jabbaCandidates(homeDir),
-    ...configuredRootCandidates(),
+    ...(includeConfigured ? configuredRootCandidates() : []),
   ];
 }
 

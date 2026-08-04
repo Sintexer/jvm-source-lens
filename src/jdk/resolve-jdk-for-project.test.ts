@@ -9,6 +9,15 @@ function writeReleaseFile(jdkHome: string, javaVersion: string): void {
   fs.writeFileSync(path.join(jdkHome, 'release'), `JAVA_VERSION="${javaVersion}"\n`);
 }
 
+/** Hermetic search: fake home only — ignore CI /usr/lib/jvm and host jdk-roots. */
+const hermeticLinux = (homeDir: string) =>
+  ({
+    homeDir,
+    platform: 'linux' as const,
+    includeSystemLocations: false,
+    includeConfiguredRoots: false,
+  }) as const;
+
 describe('resolveJdkForProject', () => {
   let tmpRoot = '';
 
@@ -38,7 +47,7 @@ describe('resolveJdkForProject', () => {
       tmpRoot,
       undefined,
       { JAVA_HOME: jdk25 },
-      { homeDir: tmpRoot, platform: 'linux' },
+      hermeticLinux(tmpRoot),
     );
 
     expect(result.ok).toBe(true);
@@ -67,7 +76,7 @@ describe('resolveJdkForProject', () => {
       tmpRoot,
       undefined,
       { JAVA_HOME: jdk17 },
-      { homeDir: tmpRoot, platform: 'linux' },
+      hermeticLinux(tmpRoot),
     );
 
     expect(result.ok).toBe(true);
@@ -88,7 +97,7 @@ describe('resolveJdkForProject', () => {
       'utf8',
     );
 
-    const result = resolveJdkForProject(tmpRoot, undefined, {}, { homeDir: tmpRoot, platform: 'linux' });
+    const result = resolveJdkForProject(tmpRoot, undefined, {}, hermeticLinux(tmpRoot));
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;

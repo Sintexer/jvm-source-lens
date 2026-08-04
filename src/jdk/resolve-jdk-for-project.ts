@@ -3,7 +3,7 @@ import {
   readGradleWrapperMaxJava,
   type JavaVersionHint,
 } from './detect-required-version.js';
-import { findJdk, findJdkInRange, jdkSearchLocations } from './find-jdk.js';
+import { findJdk, findJdkInRange, jdkSearchLocations, type JdkSearchContext } from './find-jdk.js';
 import { readJdkReleaseFile } from './read-jdk-release-file.js';
 
 /**
@@ -79,7 +79,7 @@ export function resolveJdkForProject(
   projectRoot: string,
   cachedToolchainVersion?: number,
   env: NodeJS.ProcessEnv = process.env,
-  ctx?: { homeDir?: string; platform?: NodeJS.Platform },
+  ctx?: JdkSearchContext,
 ): JdkResolutionResult {
   const hint = detectRequiredJavaVersion(projectRoot, { env, cachedToolchainVersion });
 
@@ -167,7 +167,7 @@ function findAndOverride(
   required: number,
   hint: JavaVersionHint,
   env: NodeJS.ProcessEnv,
-  ctx?: { homeDir?: string; platform?: NodeJS.Platform },
+  ctx?: JdkSearchContext,
 ): JdkResolutionResult {
   const found = findJdk(required, env, ctx);
   if (found) {

@@ -1,5 +1,5 @@
 import { detectRequiredJavaVersion, readGradleWrapperMaxJava } from './detect-required-version.js';
-import { inspectJdkCandidates } from './find-jdk.js';
+import { inspectJdkCandidates, type JdkSearchContext } from './find-jdk.js';
 import { readJdkReleaseFile } from './read-jdk-release-file.js';
 import { resolveJdkForProject } from './resolve-jdk-for-project.js';
 
@@ -78,7 +78,7 @@ export function runJavaDoctor(
   opts: {
     cachedToolchainVersion?: number;
     env?: NodeJS.ProcessEnv;
-    ctx?: { homeDir?: string; platform?: NodeJS.Platform };
+    ctx?: JdkSearchContext;
   } = {},
 ): JavaDoctorReport {
   const env = opts.env ?? process.env;

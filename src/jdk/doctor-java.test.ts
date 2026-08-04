@@ -9,6 +9,14 @@ function writeReleaseFile(jdkHome: string, javaVersion: string): void {
   fs.writeFileSync(path.join(jdkHome, 'release'), `JAVA_VERSION="${javaVersion}"\n`);
 }
 
+const hermeticLinux = (homeDir: string) =>
+  ({
+    homeDir,
+    platform: 'linux' as const,
+    includeSystemLocations: false,
+    includeConfiguredRoots: false,
+  }) as const;
+
 describe('runJavaDoctor', () => {
   let tmpRoot = '';
 
@@ -35,7 +43,7 @@ describe('runJavaDoctor', () => {
 
     const report = runJavaDoctor(tmpRoot, {
       env: { JAVA_HOME: jdk25 },
-      ctx: { homeDir: tmpRoot, platform: 'linux' },
+      ctx: hermeticLinux(tmpRoot),
     });
 
     expect(report.ok).toBe(true);
@@ -55,7 +63,7 @@ describe('runJavaDoctor', () => {
 
     const report = runJavaDoctor(tmpRoot, {
       env: {},
-      ctx: { homeDir: tmpRoot, platform: 'linux' },
+      ctx: hermeticLinux(tmpRoot),
     });
 
     expect(report.ok).toBe(false);

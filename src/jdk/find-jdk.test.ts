@@ -31,7 +31,12 @@ describe('findJdk', () => {
     const jdkHome = path.join(tmpHome, '.jdks', 'temurin-25');
     writeReleaseFile(jdkHome, '25.0.1');
 
-    const found = findJdk(25, {}, { homeDir: tmpHome, platform: 'linux' });
+    const found = findJdk(25, {}, {
+      homeDir: tmpHome,
+      platform: 'linux',
+      includeSystemLocations: false,
+      includeConfiguredRoots: false,
+    });
     expect(found).not.toBeNull();
     expect(found?.jdkHome).toBe(jdkHome);
     expect(found?.majorVersion).toBe(25);
@@ -43,7 +48,12 @@ describe('findJdk', () => {
     const bundleHome = path.join(tmpHome, '.jdks', 'temurin-21.jdk', 'Contents', 'Home');
     writeReleaseFile(bundleHome, '21.0.7');
 
-    const found = findJdk(21, {}, { homeDir: tmpHome, platform: 'darwin' });
+    const found = findJdk(21, {}, {
+      homeDir: tmpHome,
+      platform: 'darwin',
+      includeSystemLocations: false,
+      includeConfiguredRoots: false,
+    });
     expect(found).not.toBeNull();
     expect(found?.jdkHome).toBe(bundleHome);
     expect(found?.source).toBe('intellij-jdks');
@@ -58,7 +68,13 @@ describe('findJdk', () => {
     const found = findJdk(
       21,
       { ProgramFiles: programFiles },
-      { homeDir: tmpHome, platform: 'win32' },
+      {
+        homeDir: tmpHome,
+        platform: 'win32',
+        // Windows vendor roots come from env ProgramFiles (fixture), not real FS.
+        includeSystemLocations: true,
+        includeConfiguredRoots: false,
+      },
     );
 
     expect(found).not.toBeNull();
@@ -83,7 +99,12 @@ describe('findJdk', () => {
       'utf8',
     );
 
-    const found = findJdk(21, {}, { homeDir: tmpHome, platform: 'linux' });
+    const found = findJdk(21, {}, {
+      homeDir: tmpHome,
+      platform: 'linux',
+      includeSystemLocations: false,
+      includeConfiguredRoots: true,
+    });
     expect(found).not.toBeNull();
     expect(found?.jdkHome).toBe(jdkHome);
     expect(found?.source).toBe('configured-jdk-root');
