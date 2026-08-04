@@ -13,10 +13,13 @@ import type {
   SourcesJarProvenance,
 } from './extractor/class-source-types.js';
 import { findClasspathOwningClass } from './extractor/find-external-class-jar.js';
+import { resolveModuleScopeOrError } from './extractor/infer-module-path.js';
 import { tryReadJavaSourceFromClasspath } from './extractor/read-java-source-from-classpath.js';
+import { enrichIfClassNotFound } from './enrich-class-not-found.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import type { GradleProcessCapture } from './resolvers/base.js';
 import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
+import type { ResolutionOutput } from './resolvers/resolution-output.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 
 export type GetMethodSignatureOptions = {
@@ -89,6 +92,18 @@ function coordinatesKey(c: ArtifactCoordinates): string {
   return `${c.group}:${c.name}:${c.version ?? ''}`;
 }
 
+function enrichScopeError(
+  opts: GetMethodSignatureOptions,
+  output: ResolutionOutput,
+  error: ClassSourceError,
+): ClassSourceError {
+  return enrichIfClassNotFound(opts.projectRoot, output, error, {
+    modulePath: opts.modulePath,
+    configuration: opts.configuration,
+    includeTest: opts.includeTest,
+  });
+}
+
 function overloadFromParsedMethod(m: JavapMethodWithName): JavapMethodOverload {
   return {
     declarationLine: m.declarationLine,
@@ -156,9 +171,20 @@ export async function getMethodSignatures(
     };
   }
 
-  const lookupOpts: ClassSourceLookupOptions = {
+  const moduleScope = resolveModuleScopeOrError(resolved.output, {
     className,
     modulePath: opts.modulePath,
+    configuration: opts.configuration,
+    includeTest: opts.includeTest,
+  });
+  if (!moduleScope.ok) {
+    return methodSignatureFail(opts, className, mn, enrichScopeError(opts, resolved.output, moduleScope.error));
+  }
+  const effectiveModulePath = moduleScope.modulePath;
+
+  const lookupOpts: ClassSourceLookupOptions = {
+    className,
+    modulePath: effectiveModulePath,
     configuration: opts.configuration,
     includeTest: opts.includeTest,
   };
@@ -215,7 +241,7 @@ export async function getMethodSignatures(
   }
 
   if (!sourceRead.ok) {
-    return methodSignatureFail(opts, className, mn, sourceRead.error);
+    return methodSignatureFail(opts, className, mn, enrichScopeError(opts, resolved.output, sourceRead.error));
   }
 
   if (sourceRead.hit) {
@@ -238,12 +264,12 @@ export async function getMethodSignatures(
 
   const ownerHit = findClasspathOwningClass(resolved.output, {
     className,
-    modulePath: opts.modulePath,
+    modulePath: effectiveModulePath,
     configuration: opts.configuration,
     includeTest: opts.includeTest,
   });
   if (!ownerHit.ok) {
-    return methodSignatureFail(opts, className, mn, ownerHit.error);
+    return methodSignatureFail(opts, className, mn, enrichScopeError(opts, resolved.output, ownerHit.error));
   }
 
   const { hit } = ownerHit;

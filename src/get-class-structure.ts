@@ -27,13 +27,16 @@ import type {
 } from './class-structure/types.js';
 import type { ArtifactCoordinates, ClassSourceError, ClassSourceLookupOptions } from './extractor/class-source-types.js';
 import { findClasspathOwningClass } from './extractor/find-external-class-jar.js';
+import { resolveModuleScopeOrError } from './extractor/infer-module-path.js';
 import {
   tryReadJavaSourceFromClasspath,
   type TryReadJavaSourceFromClasspathResult,
 } from './extractor/read-java-source-from-classpath.js';
+import { enrichIfClassNotFound } from './enrich-class-not-found.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import type { GradleProcessCapture } from './resolvers/base.js';
 import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
+import type { ResolutionOutput } from './resolvers/resolution-output.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 
 const MAX_GRAPH_VISITS = 64;
@@ -71,6 +74,18 @@ function subprocessFromGradle(g: GradleProcessCapture | undefined) {
     stdout: g.stdout,
     stderr: g.stderr,
   };
+}
+
+function enrichClassStructureError(
+  opts: GetClassStructureOptions,
+  output: ResolutionOutput,
+  error: ClassSourceError,
+): ClassSourceError {
+  return enrichIfClassNotFound(opts.projectRoot, output, error, {
+    modulePath: opts.modulePath,
+    configuration: opts.configuration,
+    includeTest: opts.includeTest,
+  });
 }
 
 function classStructureFail(
@@ -274,9 +289,20 @@ export async function getClassStructure(
     };
   }
 
-  const lookupOpts: ClassSourceLookupOptions = {
+  const moduleScope = resolveModuleScopeOrError(resolved.output, {
     className,
     modulePath: opts.modulePath,
+    configuration: opts.configuration,
+    includeTest: opts.includeTest,
+  });
+  if (!moduleScope.ok) {
+    return classStructureFail(opts, className, enrichClassStructureError(opts, resolved.output, moduleScope.error));
+  }
+  const effectiveModulePath = moduleScope.modulePath;
+
+  const lookupOpts: ClassSourceLookupOptions = {
+    className,
+    modulePath: effectiveModulePath,
     configuration: opts.configuration,
     includeTest: opts.includeTest,
   };
@@ -332,18 +358,18 @@ export async function getClassStructure(
   }
 
   if (!sourceRead.ok) {
-    return classStructureFail(opts, className, sourceRead.error);
+    return classStructureFail(opts, className, enrichClassStructureError(opts, resolved.output, sourceRead.error));
   }
 
   const ownerHit = findClasspathOwningClass(resolved.output, {
     className,
-    modulePath: opts.modulePath,
+    modulePath: effectiveModulePath,
     configuration: opts.configuration,
     includeTest: opts.includeTest,
   });
 
   if (!ownerHit.ok && !sourceRead.hit) {
-    return classStructureFail(opts, className, ownerHit.error);
+    return classStructureFail(opts, className, enrichClassStructureError(opts, resolved.output, ownerHit.error));
   }
 
   let parsedPrimary: ParsedJavaTypeMetadata | null = null;
@@ -429,7 +455,7 @@ export async function getClassStructure(
     visitsStarted++;
     const superOwner = findClasspathOwningClass(resolved.output, {
       className: fqn,
-      modulePath: opts.modulePath,
+      modulePath: effectiveModulePath,
       configuration: opts.configuration,
       includeTest: opts.includeTest,
     });

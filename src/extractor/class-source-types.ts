@@ -58,10 +58,20 @@ export type ClassSourceError =
       configuration: string;
     }
   | {
+      code: 'MODULE_AMBIGUOUS';
+      message: string;
+      modulePaths: string[];
+      className: string;
+    }
+  | {
       code: 'CLASS_NOT_FOUND';
       message: string;
       className: string;
       searchedArtifactCount: number;
+      /** Exact simple-name alternate FQNs (did-you-mean), from the class-search index when available. */
+      suggestions?: string[];
+      /** Concrete module names to retry with when `modulePath` was omitted on a multimodule project. */
+      suggestedModulePaths?: string[];
     }
   | {
       code: 'DECOMPILE_FAILED';

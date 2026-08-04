@@ -3,13 +3,17 @@ import { formatProvenanceLine } from './format-provenance.js';
 
 /** Compact MCP: source body + plain provenance footer (CLI get already prints .java on stdout). */
 export function formatClassSourceCompactText(result: Extract<ClassSourceLookupResult, { ok: true }>): string {
+  const inherited = result.excerpt?.inheritedExcerpts;
   const excerpt =
     result.excerpt !== undefined
       ? `\nExcerpt: matched ${result.excerpt.matchedMethodNames.join(', ')}` +
         (result.excerpt.unmatchedMethodNames.length > 0
           ? `; unmatched: ${result.excerpt.unmatchedMethodNames.join(', ')}`
           : '') +
-        (result.excerpt.lineNumbersReliable ? '' : '; line numbers approximate')
+        (result.excerpt.lineNumbersReliable ? '' : '; line numbers approximate') +
+        (inherited !== undefined && inherited.length > 0
+          ? `; inherited from: ${inherited.map((h) => `${h.methodName} (${h.declaringClass})`).join(', ')}`
+          : '')
       : '';
   const trunc = result.outputTruncated
     ? `\n(source truncated from ${result.sourceLength} chars; use methodNames excerpt or full=true)`

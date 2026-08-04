@@ -50,6 +50,72 @@ test('CLASS_NOT_FOUND is not an MCP error (valid empty result)', () => {
   expect(sc.message).toContain('12');
 });
 
+test('CLASS_NOT_FOUND with suggestions/suggestedModulePaths surfaces them in message and full JSON', () => {
+  const r = mcpToolResultFromClassSource(
+    {
+      ok: false,
+      error: {
+        code: 'CLASS_NOT_FOUND',
+        message: 'Class not found in external JARs',
+        className: 'com.example.Fooo',
+        searchedArtifactCount: 12,
+        suggestions: ['com.example.Foo', 'com.other.Foo'],
+        suggestedModulePaths: [':app', ':core'],
+      },
+    },
+    { ...query, full: true },
+  );
+  expect(r.isError).toBe(false);
+  const sc = r.structuredContent as {
+    message: string;
+    suggestions?: string[];
+    suggestedModulePaths?: string[];
+  };
+  expect(sc.message).toContain('Did you mean: com.example.Foo, com.other.Foo');
+  expect(sc.message).toContain(':app');
+  expect(sc.suggestions).toEqual(['com.example.Foo', 'com.other.Foo']);
+  expect(sc.suggestedModulePaths).toEqual([':app', ':core']);
+});
+
+test('CLASS_NOT_FOUND without suggestions omits them from full JSON', () => {
+  const r = mcpToolResultFromClassSource(
+    {
+      ok: false,
+      error: {
+        code: 'CLASS_NOT_FOUND',
+        message: 'Class not found in external JARs',
+        className: 'com.example.Missing',
+        searchedArtifactCount: 3,
+      },
+    },
+    { ...query, full: true },
+  );
+  const sc = r.structuredContent as { suggestions?: string[]; suggestedModulePaths?: string[] };
+  expect(sc.suggestions).toBeUndefined();
+  expect(sc.suggestedModulePaths).toBeUndefined();
+});
+
+test('MODULE_AMBIGUOUS is validation and retryable, listing candidates', () => {
+  const r = mcpToolResultFromClassSource(
+    {
+      ok: false,
+      error: {
+        code: 'MODULE_AMBIGUOUS',
+        message: 'Class found in multiple modules',
+        className: 'com.example.Foo',
+        modulePaths: [':app', ':core'],
+      },
+    },
+    query,
+  );
+  expect(r.isError).toBe(true);
+  const sc = r.structuredContent as { errorCategory: string; isRetryable: boolean; message: string };
+  expect(sc.errorCategory).toBe('validation');
+  expect(sc.isRetryable).toBe(true);
+  expect(sc.message).toContain(':app');
+  expect(sc.message).toContain(':core');
+});
+
 test('mcpToolResultFromClassStructure CLASS_NOT_FOUND is not MCP error (compact text)', () => {
   const r = mcpToolResultFromClassStructure(
     {

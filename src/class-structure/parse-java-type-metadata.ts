@@ -425,26 +425,68 @@ export type ParseJavaTypeMetadataOptions = {
   methodSpans?: MethodSourceSpan[];
 };
 
+function findMatchingAngleClose(s: string, openIdx: number): number {
+  let depth = 0;
+  let i = openIdx;
+  for (; i < s.length; i++) {
+    const c = s[i];
+    if (c === '<') {
+      depth++;
+    } else if (c === '>') {
+      depth--;
+      if (depth === 0) {
+        return i;
+      }
+    }
+  }
+  return -1;
+}
+
+/**
+ * Splits off the type's own `<T, U extends V>` clause (right after the type name) from the
+ * rest of the header. Without this, a bounded type parameter like `<V extends Comparable<K>>`
+ * would leak its own `extends`/`implements` keywords into the superclass/interface search below,
+ * truncating or replacing the real `extends Foo` / `implements Bar` clause.
+ */
+function splitOwnTypeParamsAndRest(headerSlice: string, kind: ClassStructureKind): { typeParameterNames: string[]; rest: string } {
+  const m = headerSlice.match(/^(?:class|interface|enum|record)\s+[\w$]+/);
+  if (!m) {
+    return { typeParameterNames: [], rest: headerSlice };
+  }
+  let i = m[0].length;
+  while (i < headerSlice.length && /\s/.test(headerSlice[i]!)) {
+    i++;
+  }
+  if (headerSlice[i] !== '<') {
+    return { typeParameterNames: [], rest: headerSlice };
+  }
+  const closeIdx = findMatchingAngleClose(headerSlice, i);
+  if (closeIdx < 0) {
+    return { typeParameterNames: [], rest: headerSlice };
+  }
+  const inner = headerSlice.slice(i + 1, closeIdx);
+  const typeParameterNames: string[] = [];
+  for (const chunk of splitJavaParameters(inner)) {
+    const name = chunk.split(/\s+/)[0]?.trim();
+    if (name && /^[A-Z]\w*$/i.test(name)) {
+      typeParameterNames.push(name);
+    }
+  }
+  const rest = headerSlice.slice(0, i) + headerSlice.slice(closeIdx + 1);
+  return { typeParameterNames, rest };
+}
+
 function parseExtendsImplements(headerSlice: string, kind: ClassStructureKind, ctx: ImportCtx): ParsedJavaTypeHeader {
   let superClass: string | null = null;
   const directInterfaces: string[] = [];
+  const { typeParameterNames, rest } = splitOwnTypeParamsAndRest(headerSlice, kind);
 
   if (kind === 'interface') {
-    const ext = headerSlice.match(/\bextends\s+([\s\S]+?)(?=\s*\{|\s*$)/);
+    const ext = rest.match(/\bextends\s+([\s\S]+?)(?=\s*\{|\s*$)/);
     if (ext?.[1]) {
       const parts = splitJavaParameters(ext[1].trim());
       for (const p of parts) {
         directInterfaces.push(resolveTypeRef(stripAnnotationsPrefix(p).split(/\s+/)[0] ?? p, ctx));
-      }
-    }
-    const tp = headerSlice.match(/interface\s+\w+\s*<([^>]+)>/);
-    const typeParameterNames: string[] = [];
-    if (tp?.[1]) {
-      for (const chunk of splitJavaParameters(tp[1])) {
-        const name = chunk.split(/\s+/)[0]?.trim();
-        if (name && /^[A-Z]\w*$/i.test(name)) {
-          typeParameterNames.push(name);
-        }
       }
     }
     return { kind, superClass: null, directInterfaces, typeParameterNames };
@@ -458,31 +500,20 @@ function parseExtendsImplements(headerSlice: string, kind: ClassStructureKind, c
     return { kind, superClass: null, directInterfaces: [], typeParameterNames: [] };
   }
 
-  const ext = headerSlice.match(/\bextends\s+([\w.<>,?\s]+)/);
+  const ext = rest.match(/\bextends\s+([\w.<>,?\s]+)/);
   if (ext?.[1]) {
     superClass = resolveTypeRef(ext[1].trim(), ctx);
   } else if (kind === 'class') {
     superClass = 'java.lang.Object';
   }
 
-  const impl = headerSlice.match(/\bimplements\s+([\s\S]+?)(?=\s*\{|\s*$)/);
+  const impl = rest.match(/\bimplements\s+([\s\S]+?)(?=\s*\{|\s*$)/);
   if (impl?.[1]) {
     const tail = impl[1];
     const parts = splitJavaParameters(tail.trim());
     for (const p of parts) {
       const rt = stripAnnotationsPrefix(p).split(/\s+/)[0] ?? p;
       directInterfaces.push(resolveTypeRef(rt, ctx));
-    }
-  }
-
-  const tp = headerSlice.match(/<([^>]+)>/);
-  const typeParameterNames: string[] = [];
-  if (tp?.[1]) {
-    for (const chunk of splitJavaParameters(tp[1])) {
-      const name = chunk.split(/\s+/)[0]?.trim();
-      if (name && /^[A-Z]\w*$/i.test(name)) {
-        typeParameterNames.push(name);
-      }
     }
   }
 

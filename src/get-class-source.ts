@@ -1,13 +1,18 @@
 import { createCliProgressReporter } from './cli-progress.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
+import { enrichIfClassNotFound } from './enrich-class-not-found.js';
 import type { ArtifactCoordinates, ClassSourceLookupResult } from './extractor/class-source-types.js';
 import { extractExternalClassSource } from './extractor/extract-external-class-source.js';
+import { resolveModuleScopeOrError } from './extractor/infer-module-path.js';
 import type { GradleProcessCapture, ResolveOptions } from './resolvers/base.js';
 import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 import { capSourceText } from './output-limits.js';
 import {
-  applySourceExcerpt,
+  createClasspathSupertypeResolver,
+  applySourceExcerptWithInheritance,
+} from './inherited-method-excerpt.js';
+import {
   mergeSourceExcerptInputs,
   type SourceExcerptRequest,
 } from './source-excerpt.js';
@@ -56,10 +61,11 @@ function commonInput(opts: GetClassSourceOptions, className: string): Record<str
   };
 }
 
-function applyExcerptToSuccess(
+async function applyExcerptToSuccess(
   extracted: Extract<ClassSourceLookupResult, { ok: true }>,
   excerptRequest: SourceExcerptRequest | undefined,
-): ClassSourceLookupResult {
+  supertypeResolver: ReturnType<typeof createClasspathSupertypeResolver> | undefined,
+): Promise<ClassSourceLookupResult> {
   const merged = excerptRequest
     ? {
         methodNames: mergeSourceExcerptInputs(excerptRequest.methodNames),
@@ -73,11 +79,12 @@ function applyExcerptToSuccess(
       ? merged
       : null;
 
-  const applied = applySourceExcerpt(
+  const applied = await applySourceExcerptWithInheritance(
     extracted.source,
     extracted.className,
     extracted.sourceAvailable,
     normalized,
+    supertypeResolver,
   );
   if (!applied.ok) {
     return { ok: false, error: applied.error };
@@ -153,6 +160,30 @@ export async function getClassSource(
       };
     }
 
+    const moduleScope = resolveModuleScopeOrError(resolved.output, {
+      className,
+      modulePath: opts.modulePath,
+      configuration: opts.configuration,
+      includeTest: opts.includeTest,
+    });
+    if (!moduleScope.ok) {
+      const error = enrichIfClassNotFound(opts.projectRoot, resolved.output, moduleScope.error, {
+        modulePath: opts.modulePath,
+        configuration: opts.configuration,
+        includeTest: opts.includeTest,
+      });
+      const diag = recordFailureDiagnostic({
+        operation: 'get_class_source',
+        publicCode: error.code,
+        message: error.message,
+        projectRoot: opts.projectRoot,
+        buildSystem: 'gradle',
+        input: commonInput(opts, className),
+      });
+      return { ok: false, error, ...diag };
+    }
+    const effectiveModulePath = moduleScope.modulePath;
+
     const sourcesJarCache = new Map<string, string | null>();
 
     const resolveSourcesJarFn = async (coordinates: ArtifactCoordinates): Promise<string | null> => {
@@ -187,7 +218,7 @@ export async function getClassSource(
     try {
       extracted = await extractExternalClassSource(resolved.output, {
         className,
-        modulePath: opts.modulePath,
+        modulePath: effectiveModulePath,
         configuration: opts.configuration,
         includeTest: opts.includeTest,
         resolveSourcesJar: resolveSourcesJarFn,
@@ -226,7 +257,11 @@ export async function getClassSource(
     }
 
     if (!extracted.ok) {
-      const e = extracted.error;
+      const e = enrichIfClassNotFound(opts.projectRoot, resolved.output, extracted.error, {
+        modulePath: opts.modulePath,
+        configuration: opts.configuration,
+        includeTest: opts.includeTest,
+      });
       const subprocess =
         e.code === 'DECOMPILE_FAILED' && e.command && e.command.length > 0
           ? {
@@ -245,10 +280,16 @@ export async function getClassSource(
         input: commonInput(opts, className),
         subprocess,
       });
-      return { ...extracted, ...diag };
+      return { ok: false, error: e, ...diag };
     }
 
-    const withExcerpt = applyExcerptToSuccess(extracted, opts.excerpt);
+    const supertypeResolver = createClasspathSupertypeResolver(resolved.output, {
+      modulePath: effectiveModulePath,
+      configuration: opts.configuration,
+      includeTest: opts.includeTest,
+      resolveSourcesJar: resolveSourcesJarFn,
+    });
+    const withExcerpt = await applyExcerptToSuccess(extracted, opts.excerpt, supertypeResolver);
     if (!withExcerpt.ok) {
       const diag = recordFailureDiagnostic({
         operation: 'get_class_source',

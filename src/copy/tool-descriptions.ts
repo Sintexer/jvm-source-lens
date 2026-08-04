@@ -10,7 +10,7 @@ export const MCP_TOOL_COPY = {
 
 Use this when: the user mentions a type by simple name, you see an unknown class in a stack trace, or you need to locate which dependency provides something. Follow up with get_class_structure (scope=overview) — never jump straight to get_class_source.
 
-Query: case-insensitive substring matched against FQN, simple name, and (when sources are available) declared method/field names and Javadoc text. Globs with * and ? are matched against FQN or simple name only.
+Query: case-insensitive substring matched against FQN, simple name, and (when sources were available at index time) declared method/field names and Javadoc text. This is type-oriented discovery — not a full method-body grep. For literals/strings inside a known dependency JAR, use search_in_artifact. Globs with * and ? are matched against FQN or simple name only.
 
 Params: query (required); modulePath, configuration, includeTest, limit (default 50, max 200), forceRefresh (after dependency changes). Optional include array expands the response (same tokens in compact text and JSON): simpleName, score, origin, coordinates, location (jarPath/moduleRoot), scope (moduleName/configurationName), indexMeta (index build stats at payload root), all (full per-hit fields plus indexMeta). Default omits jar paths and Maven coordinates.
 
@@ -43,6 +43,8 @@ Errors: SIGNATURE_EXTRACT_FAILED if javap cannot read the class. CLASS_NOT_FOUND
 
 Use this when: verifying a method exists, checking parameter types, picking the right overload, or confirming a return type. For constructors, pass methodName = "<init>".
 
+Params: className; methodName (required singular) OR methodNames with exactly one element (alias — do not pass multiple names; call once per method or use get_class_structure). Standard project params.
+
 Resolution strategy (default, bytecodeOnly=false):
   1. Parse .java from the sources JAR or inter-project src if available — keeps real parameter names and generics (sourceAvailable=true).
   2. Otherwise fall back to javap -private -verbose on bytecode — parameter names may be synthetic like arg0 (sourceAvailable=false).
@@ -53,14 +55,14 @@ Returns: compact text — one declaration line per overload — by default; full
 
 Result semantics:
   • Class missing from classpath: isError=false, found=false (CLASS_NOT_FOUND).
-  • Class found but no matching overloads: isError=false, methodFound=false.`,
+  • Class found but no matching overloads: isError=false, methodFound=false — try get_class_structure scope=effective; bodies may live on a superclass.`,
   },
 
   find_in_class_source: {
     title: 'Find text in resolved Java source',
-    description: `Searches the source of one resolved class for a literal substring or regex. Like grep, but scoped to a single classpath-resolved class — not the workspace.
+    description: `Default query is a literal substring; set regex: true only for a JavaScript RegExp. Searches the source of one resolved class — like grep, scoped to a single classpath-resolved class, not the workspace.
 
-Use this when: the class is known and you need to locate a specific string, identifier, or pattern inside it. For discovering classes by content, use search_classes instead.
+Use this when: the class is known and you need to locate a specific string, identifier, or pattern inside it. For discovering classes by name, use search_classes; for grepping a whole dependency JAR, use search_in_artifact.
 
 Resolves source the same way as get_class_source (sources JAR preferred; CFR decompilation if absent).
 
@@ -68,7 +70,7 @@ Returns hits with line/column, matched text, optional multiline block, and surro
 
 Result semantics:
   • Class missing from classpath: isError=false, found=false (CLASS_NOT_FOUND).
-  • Class found, pattern not present: isError=false, found=false, querySucceeded=true — a successful scan with no match, not an error.`,
+  • Class found, pattern not present: isError=false, found=false, querySucceeded=true — a successful scan with no match, not an error. Empty regex results state that regex mode was used.`,
   },
 
   get_class_source: {
@@ -78,7 +80,7 @@ Result semantics:
 Use this when: reading implementation details, understanding control flow, or confirming behavior the signature alone can't reveal. Do NOT use it to discover method names (use get_class_structure) or to check signatures (use get_method_signature).
 
 Always prefer an excerpt over full source:
-  • methodNames — array of method names to extract. Use "<init>" for constructors. Response echoes matchedMethodNames and unmatchedMethodNames.
+  • methodNames — array of method names to extract. Use "<init>" for constructors. Response echoes matchedMethodNames and unmatchedMethodNames. Unmatched names are also sought on superclasses/interfaces on the classpath; inherited bodies include declaringClass metadata.
   • startLine/endLine — 1-based line range.
 
 If neither excerpt param is given, the full file is returned — keep this as a last resort.

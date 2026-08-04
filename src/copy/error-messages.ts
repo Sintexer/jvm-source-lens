@@ -49,6 +49,15 @@ export function classifyClassSourceError(
           ` Use a configuration present in resolution output (e.g. compileClasspath, testCompileClasspath) ` +
           `or omit configuration and set includeTest for test scope.`,
       );
+    case 'MODULE_AMBIGUOUS':
+      return envelope(
+        error,
+        'validation',
+        true,
+        `Class ${JSON.stringify(error.className)} is ambiguous across ${error.modulePaths.length} modules.`,
+        `${error.message} Candidates: ${error.modulePaths.map((m) => JSON.stringify(m)).join(', ')}. ` +
+          `Retry with modulePath set to exactly one of these.`,
+      );
     case 'RESOLUTION_FAILED':
       return classifyResolutionFailed(error, query);
     case 'SOURCES_RESOLVE_FAILED':

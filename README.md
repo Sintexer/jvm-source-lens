@@ -90,19 +90,45 @@ npm install -g jvmsrc
 > [!IMPORTANT]  
 > Requires **Node ≥ 20** and **Java on `PATH`** (for CFR decompiler + `javap`).
 
-### 2. Configure for your Workspace (MCP)
-Generate a paste-ready MCP configuration for your project:
-```bash
-jvmsrc config --project /path/to/gradle-project
+### 2. Add the MCP server
+
+Paste this into your AI assistant config (Cursor, Claude Code, Windsurf, etc.), then restart the host:
+
+```json
+{
+  "mcpServers": {
+    "jvmsrc": {
+      "command": "jvmsrc",
+      "args": ["mcp"]
+    }
+  }
+}
 ```
 
-Paste this configuration into your AI assistant config (Claude Code, Cursor, Windsurf, etc.), restart the host, and you are ready to go!
+Optional: `jvmsrc config` (or `jvmsrc config --project /path/to/gradle-project`) prints a paste-ready block plus environment hints. Most users can skip it and copy the snippet above.
 
 ---
 
 ## MCP Server Reference
 
-The MCP server runs over stdio via `jvmsrc mcp`. Add this to your host config:
+The MCP server runs over stdio via `jvmsrc mcp`. The default config needs no environment variables:
+
+```json
+{
+  "mcpServers": {
+    "jvmsrc": {
+      "command": "jvmsrc",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+### Private repository credentials (optional)
+
+Only needed when your Gradle build requires credential env vars for a private Maven/Artifactory/Nexus-style repo. MCP hosts often do **not** inherit your interactive shell, so those vars must be set on the **jvmsrc MCP process** (then restart the server).
+
+`REPO_USER` / `REPO_PASS` below are **sample names only** — they are not required by jvmsrc. Use whatever variable names your project’s Gradle scripts document:
 
 ```json
 {
@@ -119,7 +145,7 @@ The MCP server runs over stdio via `jvmsrc mcp`. Add this to your host config:
 }
 ```
 
-Gradle runs inside this MCP process and only sees **that** process’s environment — hosts often do **not** inherit your interactive shell. If the project’s Gradle scripts need private-repo credentials, set those vars in `env` (names vary by project; `REPO_USER` / `REPO_PASS` are placeholders — use whatever your build documents), then restart the server. Omit `env` when the project does not require them.
+Omit the `env` block entirely when the project does not need them.
 
 ### Tools your agent gets
 
@@ -130,10 +156,14 @@ Gradle runs inside this MCP process and only sees **that** process’s environme
 | **`get_method_signature`**| Fetches real overloads for a method, with parameter names and generics |
 | **`find_in_class_source`**| Performs regex or substring searches inside a resolved class |
 | **`get_class_source`** | Retrieves method bodies or line ranges (used as a last resort) |
+| **`search_in_artifact`** | Greps text across all classes in one resolved dependency JAR |
 | **`resolve_dependencies`**| Analyzes the actual dependency graph this project uses |
 
 > [!TIP]  
 > Every source response includes `sourceAvailable`: `true` for real sources (Javadoc, parameter names, generics), `false` for CFR decompilation (structure reliable, names may be synthetic).
+
+> [!NOTE]  
+> **Multimodule:** omit `modulePath` and jvmsrc auto-picks the unique owning module; on a miss it lists candidate `modulePath`s. **Methods:** `search_classes` matches declared method names when the index has source enrichment; for body text in a known JAR use `search_in_artifact`. `get_class_source` `methodNames` also walks superclasses for unmatched names.
 
 ---
 

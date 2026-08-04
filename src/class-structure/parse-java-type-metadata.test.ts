@@ -21,6 +21,33 @@ public class Foo extends Bar implements Baz, Quux {
     expect(meta!.header.directInterfaces).toEqual(['com.example.Baz', 'com.example.Quux']);
   });
 
+  test('bounded type parameter does not truncate/replace the real extends clause', () => {
+    const src = `
+package com.example;
+
+public abstract class Handler<K, V extends Comparable<K>> extends AbstractHandler<V> implements SomeInterface {
+}
+`;
+    const meta = parseJavaTypeMetadata(src, 'com.example.Handler');
+    expect(meta).not.toBeNull();
+    expect(meta!.header.superClass).toBe('com.example.AbstractHandler');
+    expect(meta!.header.directInterfaces).toEqual(['com.example.SomeInterface']);
+    expect(meta!.header.typeParameterNames).toEqual(['K', 'V']);
+  });
+
+  test('generic superclass argument is not mistaken for the class own type parameter', () => {
+    const src = `
+package com.example;
+
+public abstract class OutboundOrderRestateHandler extends AbstractBiTemporalEventHandler<OutboundOrder> implements SomeInterface {
+}
+`;
+    const meta = parseJavaTypeMetadata(src, 'com.example.OutboundOrderRestateHandler');
+    expect(meta).not.toBeNull();
+    expect(meta!.header.superClass).toBe('com.example.AbstractBiTemporalEventHandler');
+    expect(meta!.header.typeParameterNames).toEqual([]);
+  });
+
   test('interface extends with import resolution', () => {
     const src = `
 package x;

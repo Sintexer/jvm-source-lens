@@ -9,6 +9,12 @@ export type SourceExcerptRequest = {
   endLine?: number;
 };
 
+/** One `methodNames` entry resolved from a superclass/interface, not the requested class's own compilation unit. */
+export type InheritedExcerptInfo = {
+  methodName: string;
+  declaringClass: string;
+};
+
 export type SourceExcerptInfo = {
   excerpted: true;
   requestedMethodNames: string[];
@@ -19,6 +25,8 @@ export type SourceExcerptInfo = {
   /** False when `sourceAvailable` was false (CFR); line-based slices are best-effort. */
   lineNumbersReliable: boolean;
   sourceLineCount: number;
+  /** Present when one or more `matchedMethodNames` were found on a superclass/interface instead of the requested class. */
+  inheritedExcerpts?: InheritedExcerptInfo[];
 };
 
 export type SourceExcerptError =
@@ -87,7 +95,7 @@ function dedupePreserveOrder(names: string[]): string[] {
   return out;
 }
 
-function lineCount(source: string): number {
+export function lineCount(source: string): number {
   if (source.length === 0) {
     return 0;
   }
@@ -130,6 +138,9 @@ function lineRangeToOffsets(source: string, startLine: number, endLine: number):
   return { start, end };
 }
 
+/** Joins non-adjacent excerpted spans (primary or inherited) in the final source text. */
+export const EXCERPT_BOUNDARY_MARKER = '\n\n// --- jvmsrc excerpt boundary ---\n\n';
+
 type Span = { start: number; end: number };
 
 function mergeSpans(spans: Span[]): Span[] {
@@ -156,7 +167,7 @@ function sliceMergedSpans(source: string, spans: Span[]): string {
     const s = spans[i]!;
     parts.push(source.slice(s.start, s.end));
     if (i < spans.length - 1) {
-      parts.push('\n\n// --- jvmsrc excerpt boundary ---\n\n');
+      parts.push(EXCERPT_BOUNDARY_MARKER);
     }
   }
   return parts.join('');

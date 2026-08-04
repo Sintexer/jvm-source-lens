@@ -1,8 +1,10 @@
 import type {
   MethodSignatureProvenance,
 } from './class-structure/types.js';
-import type { ClassSourceLookupOptions } from './extractor/class-source-types.js';
+import type { ClassSourceError, ClassSourceLookupOptions } from './extractor/class-source-types.js';
 import { findClasspathOwningClass } from './extractor/find-external-class-jar.js';
+import { resolveModuleScopeOrError } from './extractor/infer-module-path.js';
+import { enrichIfClassNotFound } from './enrich-class-not-found.js';
 import {
   methodSignatureFail,
   type GetMethodSignatureOptions,
@@ -10,6 +12,19 @@ import {
 } from './get-method-signatures.js';
 import { loadMethodOverloadsViaJavap } from './method-signature-from-javap.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
+import type { ResolutionOutput } from './resolvers/resolution-output.js';
+
+function enrichScopeError(
+  opts: GetMethodSignatureOptions,
+  output: ResolutionOutput,
+  error: ClassSourceError,
+): ClassSourceError {
+  return enrichIfClassNotFound(opts.projectRoot, output, error, {
+    modulePath: opts.modulePath,
+    configuration: opts.configuration,
+    includeTest: opts.includeTest,
+  });
+}
 
 /**
  * Like {@link getMethodSignatures} but **only** `javap -private -verbose` on a classpath that contains
@@ -44,16 +59,27 @@ export async function getMethodSignaturesBytecode(
     };
   }
 
-  const lookupOpts: ClassSourceLookupOptions = {
+  const moduleScope = resolveModuleScopeOrError(resolved.output, {
     className,
     modulePath: opts.modulePath,
+    configuration: opts.configuration,
+    includeTest: opts.includeTest,
+  });
+  if (!moduleScope.ok) {
+    return methodSignatureFail(opts, className, mn, enrichScopeError(opts, resolved.output, moduleScope.error));
+  }
+  const effectiveModulePath = moduleScope.modulePath;
+
+  const lookupOpts: ClassSourceLookupOptions = {
+    className,
+    modulePath: effectiveModulePath,
     configuration: opts.configuration,
     includeTest: opts.includeTest,
   };
 
   const ownerHit = findClasspathOwningClass(resolved.output, lookupOpts);
   if (!ownerHit.ok) {
-    return methodSignatureFail(opts, className, mn, ownerHit.error);
+    return methodSignatureFail(opts, className, mn, enrichScopeError(opts, resolved.output, ownerHit.error));
   }
 
   const { hit } = ownerHit;

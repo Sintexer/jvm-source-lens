@@ -23,6 +23,8 @@ export function mapPublicFailureToDiagnostic(
       return { severity: FailureSeverity.USER_ERROR, errorCode: 'MODULE_NOT_FOUND' };
     case 'CONFIGURATION_NOT_FOUND':
       return { severity: FailureSeverity.USER_ERROR, errorCode: 'CONFIGURATION_NOT_FOUND' };
+    case 'MODULE_AMBIGUOUS':
+      return { severity: FailureSeverity.USER_ERROR, errorCode: 'MODULE_AMBIGUOUS' };
     case 'CLASS_NOT_FOUND':
       return { severity: FailureSeverity.EXPECTED, errorCode: 'CLASS_NOT_ON_CLASSPATH' };
     case 'ZIP_READ_ERROR':

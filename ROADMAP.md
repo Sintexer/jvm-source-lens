@@ -49,7 +49,9 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 - [x] MCP / CLI `get_class_source` optional excerpt (`methodNames` / `methodName` and/or `startLine` / `endLine`) — avoid dumping very large compilation units into agent context
 - [x] MCP / CLI `find_in_class_source` — pattern match inside one resolved compilation unit; return hit line(s) or block + optional ±N context lines (**relevance: high · priority: P2**)
 - [x] MCP / CLI `search_in_artifact` — grep-like search across all classes in one resolved dependency JAR (sources + CFR fallback); hits grouped by `className` + provenance (**vital gap · priority: P2**)
-- [ ] Auto-infer `modulePath` when the FQN resolves in exactly one module (keep explicit `modulePath` for conflicts; discovery via `resolve_dependencies` / `settings.gradle`)
+- [x] Auto-infer `modulePath` when the FQN resolves in exactly one module (keep explicit `modulePath` for conflicts; discovery via `resolve_dependencies` / `settings.gradle`)
+- [x] CLASS_NOT_FOUND did-you-mean (`suggestions` by exact simple name) + multimodule miss `suggestedModulePaths`
+- [x] `get_class_source` `methodNames` excerpts walk superclasses/interfaces for unmatched names (`inheritedExcerpts`)
 - [x] Compact (plain text) / full (JSON) response modes — default compact; `--full` / MCP `full: true`; `get_class_structure` scopes
 - [x] Compact / summary response modes for discovery tools (`get_class_structure`, `resolve_dependencies`, others) — agent-sized JSON without losing "what to call next" (**priority: P2**)
 
@@ -113,11 +115,12 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 
 **Goal:** Reduce friction in multimodule repos when the FQN appears in only one submodule — agents should not have to call `list_modules` first for the common case.
 
-**References:** [src/extractor/pick-classpath.ts](src/extractor/pick-classpath.ts), [src/mcp.ts](src/mcp.ts)
+**References:** [src/extractor/infer-module-path.ts](src/extractor/infer-module-path.ts), [src/enrich-class-not-found.ts](src/enrich-class-not-found.ts), [src/mcp.ts](src/mcp.ts)
 
-- [ ] When `modulePath` is omitted and the class resolves in exactly one module, use that module
-- [ ] When multiple modules match, return a structured conflict (not a silent wrong module) with candidate `modulePath` values
-- [ ] Behavior unchanged when `modulePath` is explicitly provided
+- [x] When `modulePath` is omitted and the class resolves in exactly one module, use that module
+- [x] When multiple modules match, return a structured conflict (`MODULE_AMBIGUOUS`) with candidate `modulePath` values
+- [x] Behavior unchanged when `modulePath` is explicitly provided
+- [x] On miss with omitted `modulePath` in multimodule builds, guided message lists `suggestedModulePaths`
 
 ---
 

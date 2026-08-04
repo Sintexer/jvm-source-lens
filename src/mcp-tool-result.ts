@@ -98,6 +98,10 @@ export type McpClassSourceNotFoundPayload = {
   querySucceeded: true;
   code: 'CLASS_NOT_FOUND';
   message: string;
+  /** Did-you-mean alternate FQNs sharing the missed simple name. */
+  suggestions?: string[];
+  /** Concrete module names to retry with when `modulePath` was omitted on a multimodule project. */
+  suggestedModulePaths?: string[];
 };
 
 export type McpClassSourceFailurePayload = {
@@ -259,6 +263,8 @@ function classNotFoundEnvelope(
     configuration: query.configuration,
     includeTest: query.includeTest,
     methodName: query.methodName,
+    suggestions: error.suggestions,
+    suggestedModulePaths: error.suggestedModulePaths,
   });
   return guidedEnvelope(message, false);
 }
@@ -295,6 +301,8 @@ export type McpMethodSignatureNotFoundPayload = {
   querySucceeded: true;
   code: 'CLASS_NOT_FOUND';
   message: string;
+  suggestions?: string[];
+  suggestedModulePaths?: string[];
 };
 
 export type McpMethodSignatureToolPayload =
@@ -357,6 +365,8 @@ export type McpClassStructureNotFoundPayload = {
   querySucceeded: true;
   code: 'CLASS_NOT_FOUND';
   message: string;
+  suggestions?: string[];
+  suggestedModulePaths?: string[];
 };
 
 export type McpClassStructureToolPayload =
@@ -764,6 +774,12 @@ function mcpNotFoundResult(
     querySucceeded: true as const,
     code: 'CLASS_NOT_FOUND' as const,
     message: env.message,
+    ...(error.suggestions !== undefined && error.suggestions.length > 0
+      ? { suggestions: error.suggestions }
+      : {}),
+    ...(error.suggestedModulePaths !== undefined && error.suggestedModulePaths.length > 0
+      ? { suggestedModulePaths: error.suggestedModulePaths }
+      : {}),
   };
 
   const payload =

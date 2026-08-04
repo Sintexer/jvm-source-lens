@@ -73,10 +73,18 @@ const classSourceErrorSchema = z.discriminatedUnion('code', [
     configuration: z.string(),
   }),
   z.object({
+    code: z.literal('MODULE_AMBIGUOUS'),
+    message: z.string(),
+    modulePaths: z.array(z.string()),
+    className: z.string(),
+  }),
+  z.object({
     code: z.literal('CLASS_NOT_FOUND'),
     message: z.string(),
     className: z.string(),
     searchedArtifactCount: z.number(),
+    suggestions: z.array(z.string()).optional(),
+    suggestedModulePaths: z.array(z.string()).optional(),
   }),
   z.object({
     code: z.literal('DECOMPILE_FAILED'),
@@ -159,6 +167,7 @@ const classSourceErrorCodeSchema = z.enum([
   'INVALID_FQN',
   'MODULE_NOT_FOUND',
   'CONFIGURATION_NOT_FOUND',
+  'MODULE_AMBIGUOUS',
   'CLASS_NOT_FOUND',
   'DECOMPILE_FAILED',
   'ZIP_READ_ERROR',
@@ -196,6 +205,9 @@ export const mcpClassSourceToolPayloadSchema = z.union([
         endLine: z.number().optional(),
         lineNumbersReliable: z.boolean(),
         sourceLineCount: z.number(),
+        inheritedExcerpts: z
+          .array(z.object({ methodName: z.string(), declaringClass: z.string() }))
+          .optional(),
       })
       .optional(),
   }),
@@ -206,6 +218,8 @@ export const mcpClassSourceToolPayloadSchema = z.union([
     searchedArtifactCount: z.number(),
     querySucceeded: z.literal(true),
     code: z.literal('CLASS_NOT_FOUND'),
+    suggestions: z.array(z.string()).optional(),
+    suggestedModulePaths: z.array(z.string()).optional(),
     ...guidedNotFoundEnvelopeSchema,
   }),
   z.object({
@@ -263,6 +277,8 @@ export const mcpFindInClassSourcePayloadSchema = z.union([
     searchedArtifactCount: z.number(),
     querySucceeded: z.literal(true),
     code: z.literal('CLASS_NOT_FOUND'),
+    suggestions: z.array(z.string()).optional(),
+    suggestedModulePaths: z.array(z.string()).optional(),
     ...guidedNotFoundEnvelopeSchema,
   }),
   z.object({
@@ -519,20 +535,68 @@ const classStructureProvenanceSchema = z.union([
   interprojectSourceProvenanceSchema,
 ]);
 
-const getMethodSignatureInputSchema = z.object({
-  className: z.string().min(1),
-  methodName: z.string().min(1),
-  projectRoot: z.string().min(1),
-  modulePath: z.string().optional(),
-  configuration: z.string().optional(),
-  includeTest: z.boolean().optional(),
-  forceRefresh: z.boolean().optional(),
-  /** When true: javap -private -verbose only (no sources JAR or src/ fallback). Default false = IDE-first. */
-  bytecodeOnly: z.boolean().optional(),
-  /** Response projection for full=true JSON. Default: declarationLine only per overload. */
-  include: z.array(z.enum(['parameters', 'exceptions', 'jvmDescriptor', 'provenance', 'all'])).optional(),
-  ...fullResponseInput,
-});
+const getMethodSignatureInputSchema = z
+  .object({
+    className: z.string().min(1),
+    methodName: z.string().min(1).optional(),
+    /** Alias for a single methodName — must have length 1 when used without methodName. */
+    methodNames: z.array(z.string().min(1)).optional(),
+    projectRoot: z.string().min(1),
+    modulePath: z.string().optional(),
+    configuration: z.string().optional(),
+    includeTest: z.boolean().optional(),
+    forceRefresh: z.boolean().optional(),
+    /** When true: javap -private -verbose only (no sources JAR or src/ fallback). Default false = IDE-first. */
+    bytecodeOnly: z.boolean().optional(),
+    /** Response projection for full=true JSON. Default: declarationLine only per overload. */
+    include: z.array(z.enum(['parameters', 'exceptions', 'jvmDescriptor', 'provenance', 'all'])).optional(),
+    ...fullResponseInput,
+  })
+  .superRefine((val, ctx) => {
+    const fromArray = val.methodNames;
+    const singular = val.methodName;
+    if (singular !== undefined && singular.length > 0) {
+      if (fromArray !== undefined && fromArray.length > 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'get_method_signature accepts one method at a time. Pass methodName, or methodNames with a single element; call once per method or use get_class_structure.',
+          path: ['methodNames'],
+        });
+      }
+      return;
+    }
+    if (fromArray === undefined || fromArray.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide methodName (or methodNames with exactly one element).',
+        path: ['methodName'],
+      });
+      return;
+    }
+    if (fromArray.length > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'get_method_signature accepts one method at a time. Pass methodName, or methodNames with a single element; call once per method or use get_class_structure.',
+        path: ['methodNames'],
+      });
+    }
+  });
+
+function resolveMethodSignatureName(args: {
+  methodName?: string;
+  methodNames?: string[];
+}): string {
+  if (args.methodName !== undefined && args.methodName.length > 0) {
+    return args.methodName;
+  }
+  const fromArray = args.methodNames;
+  if (fromArray !== undefined && fromArray.length === 1) {
+    return fromArray[0]!;
+  }
+  throw new Error('methodName required');
+}
 
 const mcpMethodSignatureFailureSchema = z.object({
   ok: z.literal(false),
@@ -565,6 +629,8 @@ export const mcpGetMethodSignaturePayloadSchema = z.union([
     searchedArtifactCount: z.number(),
     querySucceeded: z.literal(true),
     code: z.literal('CLASS_NOT_FOUND'),
+    suggestions: z.array(z.string()).optional(),
+    suggestedModulePaths: z.array(z.string()).optional(),
     ...guidedNotFoundEnvelopeSchema,
   }),
   mcpMethodSignatureFailureSchema,
@@ -670,6 +736,8 @@ export const mcpGetClassStructurePayloadSchema = z.union([
     searchedArtifactCount: z.number(),
     querySucceeded: z.literal(true),
     code: z.literal('CLASS_NOT_FOUND'),
+    suggestions: z.array(z.string()).optional(),
+    suggestedModulePaths: z.array(z.string()).optional(),
     ...guidedNotFoundEnvelopeSchema,
   }),
   mcpClassStructureFailureSchema,
@@ -884,12 +952,13 @@ export async function startMcpServer(): Promise<void> {
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
+      const methodName = resolveMethodSignatureName(args);
       const query: MethodSignatureQueryContext = {
         projectRoot: args.projectRoot,
         modulePath: args.modulePath,
         configuration: args.configuration,
         includeTest: args.includeTest,
-        methodName: args.methodName,
+        methodName,
         full: args.full,
         include: args.include,
       };
@@ -908,8 +977,8 @@ export async function startMcpServer(): Promise<void> {
           forceRefresh: Boolean(args.forceRefresh),
         };
         const result = Boolean(args.bytecodeOnly)
-          ? await getMethodSignaturesBytecode(args.className, args.methodName, opts)
-          : await getMethodSignatures(args.className, args.methodName, opts);
+          ? await getMethodSignaturesBytecode(args.className, methodName, opts)
+          : await getMethodSignatures(args.className, methodName, opts);
         return mcpToolResultFromMethodSignature(result, query);
       } catch (e) {
         return mcpToolResultFromUnexpectedError(e);
