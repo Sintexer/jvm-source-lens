@@ -2,14 +2,18 @@ import type { ClassSearchHit, ClassSearchIndexEntry } from './types.js';
 
 export type ParsedClassSearchQuery =
   | { kind: 'glob'; pattern: string; regex: RegExp }
-  | { kind: 'substring'; needle: string };
+  | { kind: 'substring'; needles: string[] };
 
 export function parseClassSearchQuery(query: string): ParsedClassSearchQuery {
   const t = query.trim();
   if (/[*?]/.test(t)) {
     return { kind: 'glob', pattern: t, regex: globToRegex(t) };
   }
-  return { kind: 'substring', needle: t.toLowerCase() };
+  const needles = t
+    .split(/\s+/)
+    .map((s) => s.toLowerCase())
+    .filter((s) => s.length > 0);
+  return { kind: 'substring', needles };
 }
 
 function globToRegex(pattern: string): RegExp {
@@ -63,6 +67,27 @@ function scoreSubstring(needle: string, e: ClassSearchIndexEntry): number {
   return -1;
 }
 
+/** Every token must match; score is the max token score plus a small AND bonus. */
+function scoreAndSubstrings(needles: string[], e: ClassSearchIndexEntry): number {
+  if (needles.length === 0) {
+    return -1;
+  }
+  if (needles.length === 1) {
+    return scoreSubstring(needles[0]!, e);
+  }
+  let max = -1;
+  let sum = 0;
+  for (const needle of needles) {
+    const s = scoreSubstring(needle, e);
+    if (s < 0) {
+      return -1;
+    }
+    max = Math.max(max, s);
+    sum += s;
+  }
+  return max + Math.min(sum - max, 500_000);
+}
+
 function entryToHit(e: ClassSearchIndexEntry, score: number): ClassSearchHit {
   return {
     className: e.className,
@@ -80,6 +105,7 @@ function entryToHit(e: ClassSearchIndexEntry, score: number): ClassSearchHit {
 
 /**
  * Filters and ranks index entries; deduplicates by `className` keeping the best score.
+ * Non-glob queries: whitespace-separated tokens are AND'd as independent substrings.
  */
 export function matchAndRankClassSearch(
   entries: ClassSearchIndexEntry[],
@@ -92,7 +118,7 @@ export function matchAndRankClassSearch(
 
   for (const e of entries) {
     const score =
-      parsed.kind === 'glob' ? scoreGlob(parsed.regex, e) : scoreSubstring(parsed.needle, e);
+      parsed.kind === 'glob' ? scoreGlob(parsed.regex, e) : scoreAndSubstrings(parsed.needles, e);
     if (score < 0) {
       continue;
     }

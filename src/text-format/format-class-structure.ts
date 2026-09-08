@@ -1,4 +1,5 @@
 import type { ClassStructureKind, ClassStructureMethod, GetClassStructureSuccess } from '../class-structure/types.js';
+import { CONSTRUCTOR_METHOD_NAME } from '../copy/hints.js';
 import { firstJavadocParagraph } from './truncate.js';
 import { formatCompactModifiers } from './format-compact-modifiers.js';
 import { formatClassStructureMethodLine } from './format-method-line.js';
@@ -9,6 +10,11 @@ export type ClassStructureScope = 'overview' | 'declared' | 'effective' | 'full'
 export const DEFAULT_CLASS_STRUCTURE_SCOPE: ClassStructureScope = 'overview';
 
 export const DEFAULT_MAX_INHERITED_METHODS = 40;
+
+/** Overview lists fields when the type is field-heavy (constants-style). */
+export const FIELD_HEAVY_MIN_FIELDS = 8;
+export const FIELD_HEAVY_MAX_NON_CTOR_METHODS = 2;
+export const OVERVIEW_FIELD_LIST_CAP = 40;
 
 export type FormatClassStructureOptions = {
   scope?: ClassStructureScope;
@@ -48,6 +54,20 @@ function formatFieldLine(f: GetClassStructureSuccess['fields'][number]): string 
   return `  ${mods}${f.type} ${f.name}`;
 }
 
+function isConstructorMethod(m: ClassStructureMethod): boolean {
+  return m.jvmMethodName === CONSTRUCTOR_METHOD_NAME;
+}
+
+/**
+ * Field-heavy types (e.g. constants classes): many fields, few non-constructor declared methods.
+ * Overview then lists fields instead of only a count.
+ */
+export function isFieldHeavyOverview(result: GetClassStructureSuccess): boolean {
+  const declared = result.methods.filter((m) => !m.inherited);
+  const nonCtor = declared.filter((m) => !isConstructorMethod(m));
+  return result.fields.length >= FIELD_HEAVY_MIN_FIELDS && nonCtor.length <= FIELD_HEAVY_MAX_NON_CTOR_METHODS;
+}
+
 export function formatClassStructureText(
   result: GetClassStructureSuccess,
   opts: FormatClassStructureOptions = {},
@@ -76,7 +96,20 @@ export function formatClassStructureText(
       );
     }
     if (result.fields.length > 0) {
-      lines.push(`Fields: ${result.fields.length} (use scope=declared to list)`);
+      if (isFieldHeavyOverview(result)) {
+        const shown = result.fields.slice(0, OVERVIEW_FIELD_LIST_CAP);
+        lines.push(`Fields (${result.fields.length}):`);
+        for (const f of shown) {
+          lines.push(formatFieldLine(f));
+        }
+        if (result.fields.length > OVERVIEW_FIELD_LIST_CAP) {
+          lines.push(
+            `… ${result.fields.length - OVERVIEW_FIELD_LIST_CAP} more field(s); use scope=declared to list all.`,
+          );
+        }
+      } else {
+        lines.push(`Fields: ${result.fields.length} (use scope=declared to list)`);
+      }
     }
     lines.push('');
     lines.push(formatProvenanceLine(result.provenance));

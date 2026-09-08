@@ -149,7 +149,7 @@ test('mcpGetMethodSignaturePayloadSchema accepts interprojectSource provenance',
 test('mcpGetMethodSignaturePayloadSchema accepts sourcesJar provenance', () => {
   const parsed = mcpGetMethodSignaturePayloadSchema.safeParse({
     ok: true,
-    found: true,
+    found: false,
     ...outcomeOk,
     className: 'g.a.Foo',
     methodName: 'bar',
@@ -744,6 +744,38 @@ test('mcpGetClassStructurePayloadSchema accepts SIGNATURE_EXTRACT_FAILED without
     },
   });
   expect(parsed.success).toBe(true);
+});
+
+test('mcpToolResultFromMethodSignature method miss sets found false', () => {
+  const r = mcpToolResultFromMethodSignature(
+    {
+      ok: true,
+      className: 'deltix.TimeConstants',
+      methodName: 'HOUR',
+      methodFound: false,
+      sourceAvailable: false,
+      overloads: [],
+      provenance: {
+        kind: 'decompiled',
+        coordinates: { group: 'g', name: 'a', version: '1' },
+        jarPath: '/x.jar',
+        entryRelPath: 'deltix/TimeConstants.class',
+        cachePath: '/cache/x.java',
+      },
+    },
+    { projectRoot: '/tmp/app', methodName: 'HOUR', full: true },
+  );
+  expect(r.isError).toBe(false);
+  const sc = r.structuredContent as {
+    found: boolean;
+    methodFound: boolean;
+    querySucceeded: boolean;
+    message: string;
+  };
+  expect(sc.found).toBe(false);
+  expect(sc.methodFound).toBe(false);
+  expect(sc.querySucceeded).toBe(true);
+  expect(sc.message).toContain('found: false');
 });
 
 test('mcpToolResultFromMethodSignature CLASS_NOT_FOUND is not MCP error', () => {

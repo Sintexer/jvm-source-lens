@@ -95,11 +95,100 @@ describe('pickResolvedConfiguration', () => {
     }
   });
 
-  test('MODULE_NOT_FOUND for unknown module', () => {
+  test('MODULE_NOT_FOUND for unknown module lists availableModules', () => {
     const r = pickResolvedConfiguration(minimalOutput(), { modulePath: ':nope' });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.code).toBe('MODULE_NOT_FOUND');
+      if (r.error.code === 'MODULE_NOT_FOUND') {
+        expect(r.error.availableModules).toEqual(['root', ':lib']);
+        expect(r.error.message).toContain('Available modules');
+      }
+    }
+  });
+
+  test('when root lacks compileClasspath, uniquely picks the sole leaf module', () => {
+    const out: ResolutionOutput = {
+      ...minimalOutput(),
+      modules: [
+        { name: 'root', path: '/tmp/p', configurations: [] },
+        {
+          name: ':backend',
+          path: '/tmp/p/backend',
+          configurations: [
+            {
+              name: 'compileClasspath',
+              scope: 'compile',
+              artifacts: [artifact({ group: 'g', name: 'b', jarPath: '/b.jar' })],
+            },
+          ],
+        },
+      ],
+    };
+    const r = pickResolvedConfiguration(out, {});
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.module.name).toBe(':backend');
+      expect(r.configuration.name).toBe('compileClasspath');
+    }
+  });
+
+  test('when root lacks config and multiple leaves have it, MODULE_AMBIGUOUS', () => {
+    const out: ResolutionOutput = {
+      ...minimalOutput(),
+      modules: [
+        { name: 'root', path: '/tmp/p', configurations: [] },
+        {
+          name: ':app',
+          path: '/tmp/p/app',
+          configurations: [
+            {
+              name: 'compileClasspath',
+              scope: 'compile',
+              artifacts: [artifact({ group: 'g', name: 'a', jarPath: '/a.jar' })],
+            },
+          ],
+        },
+        {
+          name: ':lib',
+          path: '/tmp/p/lib',
+          configurations: [
+            {
+              name: 'compileClasspath',
+              scope: 'compile',
+              artifacts: [artifact({ group: 'g', name: 'l', jarPath: '/l.jar' })],
+            },
+          ],
+        },
+      ],
+    };
+    const r = pickResolvedConfiguration(out, {});
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe('MODULE_AMBIGUOUS');
+      if (r.error.code === 'MODULE_AMBIGUOUS') {
+        expect(r.error.modulePaths).toEqual([':app', ':lib']);
+        expect(r.error.className).toBeUndefined();
+      }
+    }
+  });
+
+  test('when no module has the config, CONFIGURATION_NOT_FOUND lists availableModules', () => {
+    const out: ResolutionOutput = {
+      ...minimalOutput(),
+      modules: [
+        { name: 'root', path: '/tmp/p', configurations: [] },
+        { name: ':docs', path: '/tmp/p/docs', configurations: [] },
+      ],
+    };
+    const r = pickResolvedConfiguration(out, {});
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe('CONFIGURATION_NOT_FOUND');
+      if (r.error.code === 'CONFIGURATION_NOT_FOUND') {
+        expect(r.error.availableModules).toEqual(['root', ':docs']);
+        expect(r.error.message).toContain('Available modules');
+      }
     }
   });
 

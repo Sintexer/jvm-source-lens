@@ -93,6 +93,74 @@ test('formatClassStructureText overview omits signature lines', () => {
   expect(text).toContain('calculate');
   expect(text).not.toContain('long price');
   expect(text).toContain('Inherited methods: 1');
+  expect(text).toContain('Fields: 1 (use scope=declared to list)');
+});
+
+test('formatClassStructureText overview lists fields for field-heavy constants class', () => {
+  const fields = Array.from({ length: 10 }, (_, i) => ({
+    name: i === 9 ? 'HOUR' : `F${i}`,
+    declaringClass: 'com.example.TimeConstants',
+    visibility: 'public' as const,
+    type: 'long',
+    static: true,
+    final: true,
+    enumConstant: false,
+    javadoc: null,
+  }));
+  const result: GetClassStructureSuccess = {
+    ...baseResult,
+    className: 'com.example.TimeConstants',
+    fields,
+    methods: [
+      {
+        name: 'TimeConstants',
+        jvmMethodName: '<init>',
+        declaringClass: 'com.example.TimeConstants',
+        visibility: 'private',
+        returnType: 'void',
+        parameters: [],
+        typeParameters: [],
+        javadoc: null,
+        abstract: false,
+        static: false,
+        throws: [],
+        genericSignature: null,
+        jvmDescriptor: '()V',
+        inherited: false,
+      },
+    ],
+  };
+  const text = formatClassStructureText(result, { scope: 'overview' });
+  expect(text).toContain('Psf long HOUR');
+  expect(text).toContain('Fields (10):');
+  expect(text).not.toContain('use scope=declared to list)');
+});
+
+test('formatClassStructureText overview still hides fields for method-heavy types', () => {
+  const fields = Array.from({ length: 10 }, (_, i) => ({
+    name: `f${i}`,
+    declaringClass: 'com.example.Service',
+    visibility: 'private' as const,
+    type: 'int',
+    static: false,
+    final: false,
+    enumConstant: false,
+    javadoc: null,
+  }));
+  const methods = Array.from({ length: 5 }, (_, i) => ({
+    ...baseResult.methods[0]!,
+    name: `m${i}`,
+    jvmMethodName: `m${i}`,
+    inherited: false as const,
+  }));
+  const result: GetClassStructureSuccess = {
+    ...baseResult,
+    fields,
+    methods,
+  };
+  const text = formatClassStructureText(result, { scope: 'overview' });
+  expect(text).toContain('Fields: 10 (use scope=declared to list)');
+  expect(text).not.toContain('int f0');
 });
 
 test('formatClassStructureText declared lists declaration lines', () => {

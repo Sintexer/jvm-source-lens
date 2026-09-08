@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
-import { capSourceText, DEFAULT_MAX_SOURCE_OUTPUT_CHARS } from './output-limits.js';
+import {
+  capSourceText,
+  checkUnscopedFullSourceSize,
+  DEFAULT_MAX_FULL_SOURCE_CHARS,
+  DEFAULT_MAX_SOURCE_OUTPUT_CHARS,
+} from './output-limits.js';
 
 test('capSourceText leaves short text unchanged', () => {
   const r = capSourceText('hello', 100);
@@ -18,4 +23,33 @@ test('capSourceText truncates with marker', () => {
 
 test('DEFAULT_MAX_SOURCE_OUTPUT_CHARS is positive', () => {
   expect(DEFAULT_MAX_SOURCE_OUTPUT_CHARS).toBeGreaterThan(1024);
+});
+
+test('DEFAULT_MAX_FULL_SOURCE_CHARS is below soft truncation cap', () => {
+  expect(DEFAULT_MAX_FULL_SOURCE_CHARS).toBeLessThan(DEFAULT_MAX_SOURCE_OUTPUT_CHARS);
+  expect(DEFAULT_MAX_FULL_SOURCE_CHARS).toBe(64 * 1024);
+});
+
+test('checkUnscopedFullSourceSize accepts small sources', () => {
+  expect(checkUnscopedFullSourceSize('a.B', 'class B {}').ok).toBe(true);
+});
+
+test('checkUnscopedFullSourceSize refuses oversized unscoped source', () => {
+  const prev = process.env.JVMSRC_MAX_FULL_SOURCE_CHARS;
+  process.env.JVMSRC_MAX_FULL_SOURCE_CHARS = '100';
+  try {
+    const r = checkUnscopedFullSourceSize('a.Huge', 'x'.repeat(101));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.charLength).toBe(101);
+      expect(r.maxChars).toBe(100);
+      expect(r.message).toContain('methodNames');
+    }
+  } finally {
+    if (prev === undefined) {
+      delete process.env.JVMSRC_MAX_FULL_SOURCE_CHARS;
+    } else {
+      process.env.JVMSRC_MAX_FULL_SOURCE_CHARS = prev;
+    }
+  }
 });

@@ -36,6 +36,12 @@ test('buildClassNotFoundMessage lists suggestedModulePaths when omitted on multi
   expect(msg).toContain('":lib"');
 });
 
+test('buildSearchClassesEmptyMessage multi-word query explains AND tokens', () => {
+  const msg = buildSearchClassesEmptyMessage({ query: 'TimeConstants cerebro' });
+  expect(msg).toContain('AND');
+  expect(msg).toContain('TimeConstants');
+});
+
 test('buildSearchClassesEmptyMessage mentions broadening query', () => {
   const msg = buildSearchClassesEmptyMessage({ query: 'MissingType' });
   expect(msg).toContain('No classes matched');

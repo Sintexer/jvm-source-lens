@@ -1,6 +1,9 @@
 /** Default max UTF-16 code units returned for a single class source body (CLI/MCP/library). */
 export const DEFAULT_MAX_SOURCE_OUTPUT_CHARS = 512 * 1024;
 
+/** Refuse unscoped full-source responses above this size (require methodNames / line range). */
+export const DEFAULT_MAX_FULL_SOURCE_CHARS = 64 * 1024;
+
 export type CapSourceTextResult = {
   text: string;
   truncated: boolean;
@@ -21,6 +24,32 @@ function parsePositiveIntEnv(name: string, fallback: number): number {
 
 export function maxSourceOutputChars(): number {
   return parsePositiveIntEnv('JVMSRC_MAX_SOURCE_OUTPUT_CHARS', DEFAULT_MAX_SOURCE_OUTPUT_CHARS);
+}
+
+export function maxFullSourceChars(): number {
+  return parsePositiveIntEnv('JVMSRC_MAX_FULL_SOURCE_CHARS', DEFAULT_MAX_FULL_SOURCE_CHARS);
+}
+
+export type FullSourceSizeCheck =
+  | { ok: true }
+  | { ok: false; charLength: number; maxChars: number; message: string };
+
+/** True when unscoped full source must be refused (agent must narrow with excerpts). */
+export function checkUnscopedFullSourceSize(className: string, source: string): FullSourceSizeCheck {
+  const maxChars = maxFullSourceChars();
+  const charLength = source.length;
+  if (charLength <= maxChars) {
+    return { ok: true };
+  }
+  return {
+    ok: false,
+    charLength,
+    maxChars,
+    message:
+      `Refusing unscoped full source for ${JSON.stringify(className)}: ` +
+      `${charLength} characters exceeds JVMSRC_MAX_FULL_SOURCE_CHARS (${maxChars}). ` +
+      `Pass methodNames or startLine/endLine to narrow the response.`,
+  };
 }
 
 /**

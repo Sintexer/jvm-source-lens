@@ -68,15 +68,29 @@ describe('match-class-search', () => {
     expect(hits).toHaveLength(5);
   });
 
-  test('substring matches v2-enriched searchText (method name absent from FQN)', () => {
+  test('multi-token AND: TimeConstants cerebro matches FQN containing both', () => {
     const entries = [
-      entry({
-        className: 'com.example.Util',
-        searchText: 'com.example.util\nutil\ndoquerystuff',
-      }),
+      entry({ className: 'deltix.cerebro.algorithm.base.constants.TimeConstants' }),
+      entry({ className: 'com.other.TimeConstants' }),
     ];
-    const { hits } = matchAndRankClassSearch(entries, 'doquerystuff', 10);
-    expect(hits).toHaveLength(1);
-    expect(hits[0]!.className).toBe('com.example.Util');
+    const { hits } = matchAndRankClassSearch(entries, 'TimeConstants cerebro', 10);
+    expect(hits.map((h) => h.className)).toEqual([
+      'deltix.cerebro.algorithm.base.constants.TimeConstants',
+    ]);
+  });
+
+  test('multi-token AND: missing token yields zero hits', () => {
+    const entries = [entry({ className: 'deltix.cerebro.algorithm.base.constants.TimeConstants' })];
+    const { hits, totalMatches } = matchAndRankClassSearch(entries, 'TimeConstants xyzzy', 10);
+    expect(totalMatches).toBe(0);
+    expect(hits).toHaveLength(0);
+  });
+
+  test('glob with spaces is still a single glob pattern (no AND split)', () => {
+    const entries = [entry({ className: 'com.foo.Bar' })];
+    const parsed = parseClassSearchQuery('Time* cerebro');
+    expect(parsed.kind).toBe('glob');
+    const { hits } = matchAndRankClassSearch(entries, 'Time* cerebro', 10);
+    expect(hits).toHaveLength(0);
   });
 });

@@ -68,6 +68,9 @@ export function mapPublicFailureToDiagnostic(
       return { severity: FailureSeverity.USER_ERROR, errorCode: 'FIND_QUERY_INVALID' };
     case 'FIND_SOURCE_TOO_LARGE':
       return { severity: FailureSeverity.USER_ERROR, errorCode: 'FIND_SOURCE_TOO_LARGE' };
+    case 'SOURCE_OUTPUT_TOO_LARGE':
+      // File-persisted so `jvmsrc diagnostics last` surfaces agent full-source blow-ups.
+      return { severity: FailureSeverity.INTERNAL, errorCode: 'SOURCE_OUTPUT_TOO_LARGE' };
     default:
       return { severity: FailureSeverity.INTERNAL, errorCode: 'UNKNOWN_FAILURE' };
   }

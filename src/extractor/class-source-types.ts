@@ -49,19 +49,28 @@ export type ClassSourceLookupOptions = {
 };
 
 export type ClassSourceError =
+  | {
+      code: 'MODULE_NOT_FOUND';
+      message: string;
+      modulePath: string;
+      /** All module names in the resolution output (retry hints). */
+      availableModules?: string[];
+    }
   | { code: 'INVALID_FQN'; message: string }
-  | { code: 'MODULE_NOT_FOUND'; message: string; modulePath: string }
   | {
       code: 'CONFIGURATION_NOT_FOUND';
       message: string;
       moduleName: string;
       configuration: string;
+      /** All module names in the resolution output (retry hints). */
+      availableModules?: string[];
     }
   | {
       code: 'MODULE_AMBIGUOUS';
       message: string;
       modulePaths: string[];
-      className: string;
+      /** Present for class-scoped ambiguity; omitted for config-scoped multi-module pick. */
+      className?: string;
     }
   | {
       code: 'CLASS_NOT_FOUND';
@@ -111,6 +120,13 @@ export type ClassSourceError =
     }
   | { code: 'FIND_QUERY_INVALID'; message: string }
   | { code: 'FIND_SOURCE_TOO_LARGE'; message: string; byteLength: number }
+  | {
+      code: 'SOURCE_OUTPUT_TOO_LARGE';
+      message: string;
+      className: string;
+      charLength: number;
+      maxChars: number;
+    }
   | {
       code: 'ARTIFACT_NOT_FOUND';
       message: string;

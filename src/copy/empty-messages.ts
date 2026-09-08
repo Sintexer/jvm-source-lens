@@ -107,11 +107,21 @@ export function buildFindInClassNoMatchMessage(args: {
 
 export function buildSearchClassesEmptyMessage(ctx: GuidedQueryContext & { query: string }): string {
   const scope = formatClasspathScope(ctx);
-  const globHint = ctx.query.includes('*') || ctx.query.includes('?') ? ' Glob ' : ' Substring ';
+  const hasGlob = ctx.query.includes('*') || ctx.query.includes('?');
+  const multiWord = !hasGlob && /\s/.test(ctx.query.trim());
+  const globHint = hasGlob ? ' Glob ' : multiWord ? ' Multi-token (AND) ' : ' Substring ';
   const parts = [
     `No classes matched ${JSON.stringify(ctx.query)}${scope}.${globHint}search is case-insensitive on FQN and simple name (glob applies to names only). ` +
       'Declared method/field names are searchable only when the class-search index could enrich from sources.',
   ];
+  if (multiWord) {
+    const tokens = ctx.query.trim().split(/\s+/).filter((t) => t.length > 0);
+    const distinctive = tokens.reduce((a, b) => (a.length >= b.length ? a : b), tokens[0] ?? '');
+    parts.push(
+      `Whitespace-separated tokens are AND'd as independent substrings (not one phrase). ` +
+        `Try a single distinctive token (e.g. ${JSON.stringify(distinctive)}) or a glob like ${JSON.stringify(`*${distinctive}*`)}.`,
+    );
+  }
   if (looksLikeMethodQuery(ctx.query)) {
     parts.push(
       `Query ${JSON.stringify(ctx.query)} looks like a method name. search_classes is type-oriented; for text inside a known dependency JAR use search_in_artifact (coordinates or jarPath). ` +
@@ -128,8 +138,9 @@ export function buildSearchClassesEmptyMessage(ctx: GuidedQueryContext & { query
 
 export function buildMethodNotFoundOnClassMessage(className: string, methodName: string): string {
   return (
-    `Class ${className} is on the classpath, but no overloads matched method ${JSON.stringify(methodName)}. ` +
-    `Constructors use ${CONSTRUCTOR_METHOD_NAME}. Call get_class_structure with scope=effective to see inherited methods and their declaringClass, ` +
-    `then call get_method_signature or get_class_source on that declaring type (method bodies often live on a superclass, not the subclass).`
+    `No method named ${JSON.stringify(methodName)} on ${className} (found: false, methodFound: false). ` +
+    `The class is on the classpath, but no overloads matched. ` +
+    `If this name is a field or constant, call get_class_structure (scope=overview or declared) instead of get_method_signature. ` +
+    `Constructors use ${CONSTRUCTOR_METHOD_NAME}. For inherited methods use get_class_structure scope=effective, then get_method_signature on the declaringClass.`
   );
 }

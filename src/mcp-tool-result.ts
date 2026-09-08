@@ -271,7 +271,8 @@ function classNotFoundEnvelope(
 
 export type McpMethodSignatureSuccessPayload = {
   ok: true;
-  found: true;
+  /** false when the class exists but no overloads matched methodName. */
+  found: boolean;
   querySucceeded: true;
   className: string;
   methodName: string;
@@ -629,10 +630,11 @@ export function mcpToolResultFromMethodSignature(
 ): CallToolResult {
   const detail = toolResponseDetail(query.full);
   if (result.ok) {
-    if (!result.methodFound) {
+    const memberFound = result.methodFound;
+    if (!memberFound) {
       const env = guidedEnvelope(
         buildMethodNotFoundOnClassMessage(result.className, result.methodName),
-        true,
+        false,
       );
       if (detail === 'compact') {
         return returnCompactGuided(formatMethodSignatureText(result), env);
@@ -663,7 +665,7 @@ export function mcpToolResultFromMethodSignature(
     const wantsFullProv = query.include?.includes('all') || query.include?.includes('provenance');
     const payload: Record<string, unknown> = {
       ok: true,
-      found: true,
+      found: memberFound,
       querySucceeded: true,
       className: result.className,
       methodName: result.methodName,
@@ -672,11 +674,11 @@ export function mcpToolResultFromMethodSignature(
       overloads: projectedOverloads,
       provenance: wantsFullProv ? result.provenance : projectProvenance(result.provenance, query.include as string[] | undefined),
     };
-    if (!result.methodFound) {
+    if (!memberFound) {
       return returnFullGuided(
         `No overloads for ${result.methodName} on ${result.className}.`,
         payload,
-        guidedEnvelope(buildMethodNotFoundOnClassMessage(result.className, result.methodName), true),
+        guidedEnvelope(buildMethodNotFoundOnClassMessage(result.className, result.methodName), false),
       );
     }
     return returnFullPlain(

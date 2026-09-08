@@ -65,18 +65,24 @@ const provenanceSchema = z.union([
 
 const classSourceErrorSchema = z.discriminatedUnion('code', [
   z.object({ code: z.literal('INVALID_FQN'), message: z.string() }),
-  z.object({ code: z.literal('MODULE_NOT_FOUND'), message: z.string(), modulePath: z.string() }),
+  z.object({
+    code: z.literal('MODULE_NOT_FOUND'),
+    message: z.string(),
+    modulePath: z.string(),
+    availableModules: z.array(z.string()).optional(),
+  }),
   z.object({
     code: z.literal('CONFIGURATION_NOT_FOUND'),
     message: z.string(),
     moduleName: z.string(),
     configuration: z.string(),
+    availableModules: z.array(z.string()).optional(),
   }),
   z.object({
     code: z.literal('MODULE_AMBIGUOUS'),
     message: z.string(),
     modulePaths: z.array(z.string()),
-    className: z.string(),
+    className: z.string().optional(),
   }),
   z.object({
     code: z.literal('CLASS_NOT_FOUND'),
@@ -140,6 +146,13 @@ const classSourceErrorSchema = z.discriminatedUnion('code', [
     message: z.string(),
     byteLength: z.number(),
   }),
+  z.object({
+    code: z.literal('SOURCE_OUTPUT_TOO_LARGE'),
+    message: z.string(),
+    className: z.string(),
+    charLength: z.number(),
+    maxChars: z.number(),
+  }),
 ]);
 
 const mcpErrorCategorySchema = z.enum(['transient', 'validation', 'business', 'permission']);
@@ -178,6 +191,7 @@ const classSourceErrorCodeSchema = z.enum([
   'EXCERPT_NOT_FOUND',
   'FIND_QUERY_INVALID',
   'FIND_SOURCE_TOO_LARGE',
+  'SOURCE_OUTPUT_TOO_LARGE',
 ]);
 
 /**
@@ -611,7 +625,8 @@ const mcpMethodSignatureFailureSchema = z.object({
 export const mcpGetMethodSignaturePayloadSchema = z.union([
   z.object({
     ok: z.literal(true),
-    found: z.literal(true),
+    /** false when the class exists but no overloads matched methodName (aligns with search/find). */
+    found: z.boolean(),
     querySucceeded: z.literal(true),
     ...outcomeOnlySuccessSchema,
     className: z.string(),

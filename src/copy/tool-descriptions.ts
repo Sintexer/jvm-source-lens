@@ -10,7 +10,7 @@ export const MCP_TOOL_COPY = {
 
 Use this when: the user mentions a type by simple name, you see an unknown class in a stack trace, or you need to locate which dependency provides something. Follow up with get_class_structure (scope=overview) — never jump straight to get_class_source.
 
-Query: case-insensitive substring matched against FQN, simple name, and (when sources were available at index time) declared method/field names and Javadoc text. This is type-oriented discovery — not a full method-body grep. For literals/strings inside a known dependency JAR, use search_in_artifact. Globs with * and ? are matched against FQN or simple name only.
+Query: case-insensitive substring matched against FQN, simple name, and (when sources were available at index time) declared method/field names and Javadoc text. Whitespace-separated tokens are AND'd (each token must match independently) — not one contiguous phrase. This is type-oriented discovery — not a full method-body grep. For literals/strings inside a known dependency JAR, use search_in_artifact. Globs with * and ? are matched against FQN or simple name only (no AND split).
 
 Params: query (required); modulePath, configuration, includeTest, limit (default 50, max 200), forceRefresh (after dependency changes). Optional include array expands the response (same tokens in compact text and JSON): simpleName, score, origin, coordinates, location (jarPath/moduleRoot), scope (moduleName/configurationName), indexMeta (index build stats at payload root), all (full per-hit fields plus indexMeta). Default omits jar paths and Maven coordinates.
 
@@ -26,7 +26,7 @@ Errors: isError=true with RESOLUTION_FAILED if Gradle resolution fails, or a cla
 Use this when: you have an FQN and want to know what the class does and what methods it exposes. For a single method's overloads, use get_method_signature instead.
 
 Scope (default = overview):
-  • overview   — class purpose + declared method names. Cheapest; start here.
+  • overview   — class purpose + declared method names. When the type is field-heavy (≥8 fields and ≤2 non-constructor declared methods), lists fields (capped) instead of only a count.
   • declared   — signature lines for all declared members.
   • effective  — declared plus inherited API (capped).
 
@@ -57,7 +57,7 @@ Compact lines use the same modifier abbreviations as get_class_structure (P/p/pr
 
 Result semantics:
   • Class missing from classpath: isError=false, found=false (CLASS_NOT_FOUND).
-  • Class found but no matching overloads: isError=false, methodFound=false — try get_class_structure scope=effective; bodies may live on a superclass.`,
+  • Class present but no matching method overloads: isError=false, found=false, methodFound=false, querySucceeded=true — same found semantics as search/find. The name may be a field; use get_class_structure. Inherited bodies: scope=effective then retry on declaringClass.`,
   },
 
   find_in_class_source: {
@@ -85,7 +85,7 @@ Always prefer an excerpt over full source:
   • methodNames — array of method names to extract. Use "<init>" for constructors. Response echoes matchedMethodNames and unmatchedMethodNames. Unmatched names are also sought on superclasses/interfaces on the classpath; inherited bodies include declaringClass metadata.
   • startLine/endLine — 1-based line range.
 
-If neither excerpt param is given, the full file is returned — keep this as a last resort.
+If neither excerpt param is given, the full file is returned only when under ~64KiB (JVMSRC_MAX_FULL_SOURCE_CHARS); larger units return SOURCE_OUTPUT_TOO_LARGE — narrow with methodNames or a line range. Keep full source as a last resort.
 
 Source provenance: original source from a sources JAR when available (Javadoc, parameter names, generics are ground truth); otherwise CFR decompilation, where structure is reliable but identifiers may be synthetic. Check sourceAvailable on the response.
 

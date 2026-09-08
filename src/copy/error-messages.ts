@@ -29,35 +29,54 @@ export function classifyClassSourceError(
         'Invalid fully-qualified class name.',
         `${error.message} Provide a valid Java FQN (e.g. com.example.MyClass). Inner classes use $ in the simple name. Fix the className argument and retry.`,
       );
-    case 'MODULE_NOT_FOUND':
+    case 'MODULE_NOT_FOUND': {
+      const listed =
+        error.availableModules !== undefined && error.availableModules.length > 0
+          ? ` Available modules: [${error.availableModules.map((m) => JSON.stringify(m)).join(', ')}].`
+          : '';
       return envelope(
         error,
         'validation',
         true,
         `Unknown Gradle module ${JSON.stringify(error.modulePath)}.`,
-        `No resolved submodule matches modulePath ${JSON.stringify(error.modulePath)}. ` +
-          `Inspect resolve_dependencies output (resolution.modules[].name) or settings.gradle for valid names like ":app". ` +
-          `Omit modulePath to use the root project union.`,
+        `No resolved submodule matches modulePath ${JSON.stringify(error.modulePath)}.` +
+          listed +
+          (listed.length === 0
+            ? ` Inspect resolve_dependencies output (resolution.modules[].name) or settings.gradle for valid names like ":app".`
+            : ` Retry with modulePath set to one of these.`) +
+          ` Omit modulePath when a single module owns the wanted configuration.`,
       );
-    case 'CONFIGURATION_NOT_FOUND':
+    }
+    case 'CONFIGURATION_NOT_FOUND': {
+      const listed =
+        error.availableModules !== undefined && error.availableModules.length > 0
+          ? ` Available modules: [${error.availableModules.map((m) => JSON.stringify(m)).join(', ')}].`
+          : '';
       return envelope(
         error,
         'validation',
         true,
         `Configuration ${JSON.stringify(error.configuration)} not found on ${JSON.stringify(error.moduleName)}.`,
         error.message +
+          (error.message.includes('Available modules') ? '' : listed) +
           ` Use a configuration present in resolution output (e.g. compileClasspath, testCompileClasspath) ` +
-          `or omit configuration and set includeTest for test scope.`,
+          `or omit configuration and set includeTest for test scope. Pass modulePath when the root module has no JVM classpath.`,
       );
-    case 'MODULE_AMBIGUOUS':
+    }
+    case 'MODULE_AMBIGUOUS': {
+      const subject =
+        error.className !== undefined && error.className.length > 0
+          ? `Class ${JSON.stringify(error.className)}`
+          : 'Classpath scope';
       return envelope(
         error,
         'validation',
         true,
-        `Class ${JSON.stringify(error.className)} is ambiguous across ${error.modulePaths.length} modules.`,
+        `${subject} is ambiguous across ${error.modulePaths.length} modules.`,
         `${error.message} Candidates: ${error.modulePaths.map((m) => JSON.stringify(m)).join(', ')}. ` +
           `Retry with modulePath set to exactly one of these.`,
       );
+    }
     case 'RESOLUTION_FAILED':
       return classifyResolutionFailed(error, query);
     case 'SOURCES_RESOLVE_FAILED':
@@ -108,6 +127,16 @@ export function classifyClassSourceError(
         true,
         'Compilation unit too large for find-in-source.',
         `${error.message} (${error.byteLength} bytes). Narrow with get_class_source excerpt (methodNames) first.`,
+      );
+    case 'SOURCE_OUTPUT_TOO_LARGE':
+      return envelope(
+        error,
+        'validation',
+        true,
+        `Full source for ${JSON.stringify(error.className)} exceeds size limit.`,
+        `${error.message} (${error.charLength} chars; limit ${error.maxChars}). ` +
+          `Pass methodNames and/or startLine/endLine to narrow the response, or raise JVMSRC_MAX_FULL_SOURCE_CHARS. ` +
+          `Prefer get_class_structure / get_method_signature / find_in_class_source before full source.`,
       );
     case 'ARTIFACT_NOT_FOUND':
       return envelope(

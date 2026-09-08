@@ -16,6 +16,10 @@
 
 import type { GetClassStructureSuccess, ClassStructureMethod, ClassStructureScope } from '../class-structure/types.js';
 import { isSyntheticJvmDescriptor } from '../class-structure/parse-java-type-metadata.js';
+import {
+  isFieldHeavyOverview,
+  OVERVIEW_FIELD_LIST_CAP,
+} from '../text-format/format-class-structure.js';
 import { projectProvenance, type SlimProvenance } from './provenance.js';
 
 export type ClassStructureIncludeSection =
@@ -139,14 +143,24 @@ export function projectClassStructure(
   };
 
   const wantsSignatures = scopeImpliesSignatures(scope) || wantsSection(include, 'signatures');
-  const wantsFields = scopeImpliesSignatures(scope) || wantsSection(include, 'fields');
+  const wantsFields =
+    scopeImpliesSignatures(scope) ||
+    wantsSection(include, 'fields') ||
+    ((scope === undefined || scope === 'overview') && isFieldHeavyOverview(result));
   const wantsInherited = scopeImpliesInherited(scope) || wantsSection(include, 'inherited');
 
   if (wantsSignatures) {
     projected.declaredMethods = declared.map((m) => projectMethod(m, result.sourceAvailable));
   }
   if (wantsFields) {
-    projected.fields = result.fields;
+    const fieldHeavyOverview =
+      (scope === undefined || scope === 'overview') &&
+      !scopeImpliesSignatures(scope) &&
+      !wantsSection(include, 'fields') &&
+      isFieldHeavyOverview(result);
+    projected.fields = fieldHeavyOverview
+      ? result.fields.slice(0, OVERVIEW_FIELD_LIST_CAP)
+      : result.fields;
   }
   if (wantsInherited) {
     projected.inheritedMethods = inherited.map((m) => projectMethod(m, result.sourceAvailable));

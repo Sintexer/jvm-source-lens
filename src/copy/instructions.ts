@@ -15,12 +15,12 @@ Use jvmsrc to:
 - Debug NoSuchMethodError, AbstractMethodError, ClassCastException, or version mismatch (start with resolve_dependencies)
 
 Tool ladder — narrowest first:
-1. search_classes        — unknown FQN or simple name (also matches declared method names when sources enriched the index)
-2. get_class_structure   — class purpose + method names (start here; scope=effective for inherited API)
-3. get_method_signature  — one method's overloads (methodName singular; methodNames length-1 alias ok)
-4. find_in_class_source  — literal or regex needle in a known class (default = literal)
+1. search_classes        — unknown FQN or simple name (also matches declared method names when sources enriched the index; whitespace tokens are AND'd)
+2. get_class_structure   — class purpose + method names (start here; scope=effective for inherited API; field-heavy types list fields in overview)
+3. get_method_signature  — one method's overloads (methodName singular; methodNames length-1 alias ok; found=false when no overloads)
+4. find_in_class_source  — literal or regex query in a known class (param name: query; default = literal)
 5. search_in_artifact    — grep across one known dependency JAR when the class is unknown
-6. get_class_source      — bodies; excerpt via methodNames or line range.
+6. get_class_source      — bodies; excerpt via methodNames or line range (unscoped full source refused above ~64KiB).
 Full source is last resort.
 
 If get_class_structure marks a method inherited: true, call get_method_signature /
@@ -36,11 +36,13 @@ Provenance footers omit absolute jar/filesystem paths; use full=true
 with include provenance when you need paths. JSON keeps full spellings.
 
 projectRoot = directory with gradlew. modulePath (e.g. ":app") scopes to
-a submodule. When omitted, jvmsrc auto-picks the unique module that owns the
-FQN; if several modules match, you get a conflict listing candidates. On a
-miss in a multimodule project, retry with the leaf module that depends on the
-JAR. First call invokes Gradle (5–10s); later calls reuse cache.
-forceRefresh: true only after a SNAPSHOT republish.
+a submodule. When omitted on class-scoped tools, jvmsrc auto-picks the unique
+module that owns the FQN; on search_classes / config-scoped tools, it prefers
+root if it has the classpath, else the unique leaf with that config. If several
+modules match, you get candidates to retry with. On a miss in a multimodule
+project, retry with the leaf module that depends on the JAR. First call invokes
+Gradle (5–10s); later calls reuse cache. forceRefresh: true only after a
+SNAPSHOT republish.
 
 Subagent isolation: if the Agent (subagent) tool is available, dispatch
 to a subagent so verbose payloads stay out of the main context. Return a

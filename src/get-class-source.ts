@@ -7,7 +7,7 @@ import { resolveModuleScopeOrError } from './extractor/infer-module-path.js';
 import type { GradleProcessCapture, ResolveOptions } from './resolvers/base.js';
 import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
-import { capSourceText } from './output-limits.js';
+import { capSourceText, checkUnscopedFullSourceSize } from './output-limits.js';
 import {
   createClasspathSupertypeResolver,
   applySourceExcerptWithInheritance,
@@ -90,13 +90,36 @@ async function applyExcerptToSuccess(
     return { ok: false, error: applied.error };
   }
   if (applied.excerpt === undefined) {
-    return capClassSourceSuccess(extracted);
+    return refuseOrCapUnscopedFullSource(extracted);
   }
   return capClassSourceSuccess({
     ...extracted,
     source: applied.source,
     excerpt: applied.excerpt,
   });
+}
+
+function refuseOrCapUnscopedFullSource(
+  result: Extract<ClassSourceLookupResult, { ok: true }>,
+): ClassSourceLookupResult {
+  const check = checkUnscopedFullSourceSize(result.className, result.source);
+  if (!check.ok) {
+    console.error(
+      `[jvmsrc] FATAL: full source too large for ${result.className} (${check.charLength} chars > ${check.maxChars}). ` +
+        `Use methodNames or startLine/endLine (or raise JVMSRC_MAX_FULL_SOURCE_CHARS).`,
+    );
+    return {
+      ok: false,
+      error: {
+        code: 'SOURCE_OUTPUT_TOO_LARGE',
+        message: check.message,
+        className: result.className,
+        charLength: check.charLength,
+        maxChars: check.maxChars,
+      },
+    };
+  }
+  return capClassSourceSuccess(result);
 }
 
 function capClassSourceSuccess(
@@ -291,13 +314,19 @@ export async function getClassSource(
     });
     const withExcerpt = await applyExcerptToSuccess(extracted, opts.excerpt, supertypeResolver);
     if (!withExcerpt.ok) {
+      const err = withExcerpt.error;
       const diag = recordFailureDiagnostic({
         operation: 'get_class_source',
-        publicCode: withExcerpt.error.code,
-        message: withExcerpt.error.message,
+        publicCode: err.code,
+        message: err.message,
         projectRoot: opts.projectRoot,
         buildSystem: 'gradle',
-        input: commonInput(opts, className),
+        input: {
+          ...commonInput(opts, className),
+          ...(err.code === 'SOURCE_OUTPUT_TOO_LARGE'
+            ? { charLength: err.charLength, maxChars: err.maxChars }
+            : {}),
+        },
       });
       return { ...withExcerpt, ...diag };
     }
