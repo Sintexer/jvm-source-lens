@@ -13,7 +13,9 @@ export function formatMethodSignatureText(result: Extract<GetMethodSignatureResu
     return lines.join('\n');
   }
   for (const o of result.overloads) {
-    lines.push(formatJavapOverloadLine(o));
+    lines.push(
+      formatJavapOverloadLine(o, { methodName: result.methodName, className: result.className }),
+    );
   }
   lines.push('');
   lines.push(formatProvenanceLine(result.provenance));

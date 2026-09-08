@@ -71,6 +71,19 @@ const baseResult: GetClassStructureSuccess = {
 test('formatClassStructureMethodLine renders parameter types and names', () => {
   const line = formatClassStructureMethodLine(baseResult.methods[0]!);
   expect(line).toContain('calculate(long price, long quantity)');
+  expect(line).toMatch(/^\s*P long calculate\(/);
+});
+
+test('formatClassStructureMethodLine abbreviates public static', () => {
+  const line = formatClassStructureMethodLine({
+    ...baseResult.methods[0]!,
+    name: 'empty',
+    jvmMethodName: 'empty',
+    static: true,
+    returnType: 'void',
+    parameters: [],
+  });
+  expect(line).toBe('  Ps void empty()');
 });
 
 test('formatClassStructureText overview omits signature lines', () => {
@@ -89,7 +102,7 @@ test('formatClassStructureText declared lists declaration lines', () => {
   expect(text).not.toContain('hashCode');
 });
 
-test('formatClassStructureText declared field line does not duplicate modifiers', () => {
+test('formatClassStructureText declared field line uses compact modifiers', () => {
   const result: GetClassStructureSuccess = {
     ...baseResult,
     fields: [
@@ -107,6 +120,6 @@ test('formatClassStructureText declared field line does not duplicate modifiers'
     methods: [],
   };
   const text = formatClassStructureText(result, { scope: 'declared' });
-  expect(text).toContain('public static final long ZERO');
-  expect(text).not.toContain('public static final public static final');
+  expect(text).toContain('Psf long ZERO');
+  expect(text).not.toContain('public static final');
 });

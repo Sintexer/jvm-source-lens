@@ -1,5 +1,6 @@
 import type { ClassStructureKind, ClassStructureMethod, GetClassStructureSuccess } from '../class-structure/types.js';
 import { firstJavadocParagraph } from './truncate.js';
+import { formatCompactModifiers } from './format-compact-modifiers.js';
 import { formatClassStructureMethodLine } from './format-method-line.js';
 import { formatProvenanceLine } from './format-provenance.js';
 
@@ -39,10 +40,12 @@ function headerLines(result: GetClassStructureSuccess, purpose: string | null): 
 }
 
 function formatFieldLine(f: GetClassStructureSuccess['fields'][number]): string {
-  const vis = f.visibility === 'package' ? '' : `${f.visibility} `;
-  const st = f.static ? 'static ' : '';
-  const fin = f.final ? 'final ' : '';
-  return `  ${vis}${st}${fin}${f.type} ${f.name}`;
+  const mods = formatCompactModifiers({
+    visibility: f.visibility,
+    static: f.static,
+    final: f.final,
+  });
+  return `  ${mods}${f.type} ${f.name}`;
 }
 
 export function formatClassStructureText(

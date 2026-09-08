@@ -33,6 +33,7 @@ Scope (default = overview):
 Params: className (required); scope; include (hierarchy/fields/annotations, mainly useful with full=true); standard project params.
 
 Returns: compact text by default; full=true returns JSON. Does not decompile.
+Compact declaration lines abbreviate modifiers (P=public, p=private, prot=protected, pack=package-private, s=static, f=final, a=abstract) — e.g. "Psf long ZERO", "Ps void foo()". JSON keeps full visibility/static/final fields.
 
 Errors: SIGNATURE_EXTRACT_FAILED if javap cannot read the class. CLASS_NOT_FOUND surfaces as isError=false, found=false — a clean miss, not a failure.`,
   },
@@ -52,6 +53,7 @@ Resolution strategy (default, bytecodeOnly=false):
 bytecodeOnly=true forces step 2: javap only on the binary classpath element. Gives full JVM descriptors, flags, and synthetic members; sourceAvailable is always false.
 
 Returns: compact text — one declaration line per overload — by default; full=true returns JSON.
+Compact lines use the same modifier abbreviations as get_class_structure (P/p/prot/pack + s/f/a), e.g. "Ps void empty()". full=true declarationLine stays full Java spelling.
 
 Result semantics:
   • Class missing from classpath: isError=false, found=false (CLASS_NOT_FOUND).

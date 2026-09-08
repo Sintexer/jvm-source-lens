@@ -29,6 +29,12 @@ get_class_source on the declaringClass (or use methodNames excerpts that walk su
 Never use get_class_source full source to discover names. Never pass
 full: true unless parsing JSON.
 
+Compact text conventions: declaration lines abbreviate modifiers —
+P=public, p=private, prot=protected, pack=package-private,
+s=static, f=final, a=abstract (e.g. "Psf long ZERO", "Ps void foo()").
+Provenance footers omit absolute jar/filesystem paths; use full=true
+with include provenance when you need paths. JSON keeps full spellings.
+
 projectRoot = directory with gradlew. modulePath (e.g. ":app") scopes to
 a submodule. When omitted, jvmsrc auto-picks the unique module that owns the
 FQN; if several modules match, you get a conflict listing candidates. On a

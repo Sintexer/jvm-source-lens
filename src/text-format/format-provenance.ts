@@ -19,13 +19,13 @@ export function formatProvenanceLine(
     case 'classpathJar':
     case 'sourcesJar':
     case 'decompiled':
-      return `Provenance: ${coord} (${p.jarPath})`;
+      return `Provenance: ${coord} (${p.kind})`;
     case 'interproject':
-      return `Provenance: interproject ${p.moduleName} (${p.moduleRoot})`;
+      return `Provenance: interproject ${p.moduleName}`;
     case 'interprojectSource':
-      return `Provenance: interproject ${p.moduleName} (${p.absoluteSourcePath})`;
+      return `Provenance: interproject ${p.moduleName}`;
     case 'interprojectBytecode':
-      return `Provenance: interproject ${p.moduleName} bytecode (${p.classpathRoot})`;
+      return `Provenance: interproject ${p.moduleName} bytecode`;
     default:
       return `Provenance: ${coord}`;
   }
