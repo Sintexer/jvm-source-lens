@@ -13,6 +13,7 @@ import {
   buildJavapDeclaredAnnotationsIndex,
   lookupMethodDeclaredAnnotations,
 } from './class-structure/javap-runtime-visible-annotations.js';
+import { stripLeadingModifiers } from './class-structure/strip-leading-modifiers.js';
 import type {
   ClassStructureField,
   ClassStructureIncludeSection,
@@ -241,10 +242,11 @@ function javapFieldToStructure(
   skeleton: JavaClassSkeleton | null,
   sourceAvailable: boolean,
 ): ClassStructureField {
-  const decl = f.declarationLine.replace(/;$/, '').trim();
-  const parts = decl.split(/\s+/).filter(Boolean);
+  const decl = stripLeadingModifiers(f.declarationLine.replace(/;$/, '').trim());
+  const withoutInit = decl.split('=')[0]!.trim();
+  const parts = withoutInit.split(/\s+/).filter(Boolean);
   const name = parts[parts.length - 1] ?? '';
-  const type = parts.slice(0, -1).join(' ').replace(/^static\s+/, '').replace(/^final\s+/, '').trim();
+  const type = parts.slice(0, -1).join(' ').trim();
   let javadoc: string | null = null;
   if (sourceAvailable && skeleton && name.length > 0) {
     const hit = skeleton.methods.find((m) => m.name === name);

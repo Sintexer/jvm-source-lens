@@ -1,4 +1,5 @@
 import { declaringSimpleName } from './javap-parse.js';
+import { stripLeadingModifiers } from './strip-leading-modifiers.js';
 import type {
   ClassStructureKind,
   JavapFieldInfo,
@@ -274,20 +275,6 @@ function indexOfMatchingBrace(src: string, openIdx: number): number {
     i++;
   }
   return -1;
-}
-
-function stripLeadingModifiers(s: string): string {
-  let cur = s.trimStart();
-  for (;;) {
-    const m = cur.match(
-      /^(?:(?:public|private|protected|abstract|static|final|strictfp|default|synchronized|native|volatile|transient)\s+)/,
-    );
-    if (!m?.[1]) {
-      break;
-    }
-    cur = cur.slice(m[1].length);
-  }
-  return cur.trimStart();
 }
 
 function stripMethodGenericsPrefix(s: string): string {

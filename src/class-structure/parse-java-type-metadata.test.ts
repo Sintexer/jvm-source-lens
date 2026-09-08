@@ -91,6 +91,10 @@ public class Box {
 `;
     const meta = parseJavaTypeMetadata(src, 'q.Box');
     expect(meta).not.toBeNull();
+    const xField = meta!.fields.find((f) => f.declarationLine.includes('X'));
+    expect(xField).toBeDefined();
+    expect(xField!.declarationLine).toBe('int X = 1');
+    expect(xField!.declarationLine).not.toMatch(/\b(public|private|static|final)\b/);
     expect(meta!.fields.some((f) => f.declarationLine.includes('name'))).toBe(true);
     const ctor = meta!.methods.find((m) => m.jvmMethodName === '<init>');
     expect(ctor).toBeDefined();
@@ -99,6 +103,23 @@ public class Box {
     expect(getName).toBeDefined();
     const empty = meta!.methods.find((m) => m.jvmMethodName === 'empty');
     expect(empty?.declarationLine.includes('static')).toBe(true);
+  });
+
+  test('public static final constant declarationLine is type and name only', () => {
+    const src = `
+package deltix.cerebro.algorithm.base.constants;
+
+public class TimeConstants {
+  public static final long ZERO = 0L;
+  public static final long SECOND = 1000L;
+}
+`;
+    const meta = parseJavaTypeMetadata(src, 'deltix.cerebro.algorithm.base.constants.TimeConstants');
+    expect(meta).not.toBeNull();
+    const zero = meta!.fields.find((f) => /\bZERO\b/.test(f.declarationLine));
+    expect(zero).toBeDefined();
+    expect(zero!.declarationLine).toBe('long ZERO = 0L');
+    expect(zero!.visibility).toBe('public');
   });
 
   test('enum constants', () => {

@@ -88,3 +88,25 @@ test('formatClassStructureText declared lists declaration lines', () => {
   expect(text).toContain('calculate(long price, long quantity)');
   expect(text).not.toContain('hashCode');
 });
+
+test('formatClassStructureText declared field line does not duplicate modifiers', () => {
+  const result: GetClassStructureSuccess = {
+    ...baseResult,
+    fields: [
+      {
+        name: 'ZERO',
+        declaringClass: 'com.example.TimeConstants',
+        visibility: 'public',
+        type: 'long',
+        static: true,
+        final: true,
+        enumConstant: false,
+        javadoc: null,
+      },
+    ],
+    methods: [],
+  };
+  const text = formatClassStructureText(result, { scope: 'declared' });
+  expect(text).toContain('public static final long ZERO');
+  expect(text).not.toContain('public static final public static final');
+});

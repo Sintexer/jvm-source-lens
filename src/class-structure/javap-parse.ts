@@ -1,3 +1,4 @@
+import { stripLeadingModifiers } from './strip-leading-modifiers.js';
 import type { JavapMethodOverload, JavapParameter, JavapClassHeader, JavapClassKind, JavapFieldInfo, JavapMethodWithName } from './types.js';
 
 export function declaringSimpleName(classFqn: string): string {
@@ -55,20 +56,6 @@ function isLikelyMethodBlock(block: string): boolean {
     return false;
   }
   return true;
-}
-
-function stripLeadingModifiers(s: string): string {
-  let cur = s.trimStart();
-  for (;;) {
-    const m = cur.match(
-      /^(?:(?:public|private|protected|abstract|static|final|strictfp|default|synchronized|native)\s+)/,
-    );
-    if (!m?.[1]) {
-      break;
-    }
-    cur = cur.slice(m[1].length);
-  }
-  return cur.trimStart();
 }
 
 function stripMethodGenericsPrefix(s: string): string {
