@@ -19,6 +19,21 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 - MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
 - **`src/guided-response/`:** centralized agent recovery copy for CLASS_NOT_FOUND, empty search, decompiled source warnings, and related outcomes.
 
+## [1.16.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.15.0...v1.16.0) (2026-09-08)
+
+
+### Features
+
+* add compact fields and methods modifiers for compact out ([8a6b809](https://github.com/Sintexer/jvm-source-lens/commit/8a6b8093ca660d5a3a52be80b2ad4398d30e0b14))
+* improve mcp tools UX ([0d3683e](https://github.com/Sintexer/jvm-source-lens/commit/0d3683e8fa67368b4a18f7f4509f8bc844ca30f2))
+
+
+### Bug Fixes
+
+* fix duplicated modifiers in class structure output ([9548d08](https://github.com/Sintexer/jvm-source-lens/commit/9548d081ea9b11a26fa25b8624e884d754461447))
+* fix flaky ci tests for jdk roots ([6bc0400](https://github.com/Sintexer/jvm-source-lens/commit/6bc04001f4fce5b35fa32ebf92f762a341442d1a))
+* fix mcp returns full decompiled jar instead of single class ([fd1a371](https://github.com/Sintexer/jvm-source-lens/commit/fd1a371980e52ef1e8425a13c2426d0714ad6f3e))
+
 ## [1.15.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.14.0...v1.15.0) (2026-08-04)
 
 
