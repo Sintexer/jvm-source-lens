@@ -756,11 +756,9 @@ test('mcpToolResultFromMethodSignature method miss sets found false', () => {
       sourceAvailable: false,
       overloads: [],
       provenance: {
-        kind: 'decompiled',
+        kind: 'classpathJar',
         coordinates: { group: 'g', name: 'a', version: '1' },
         jarPath: '/x.jar',
-        entryRelPath: 'deltix/TimeConstants.class',
-        cachePath: '/cache/x.java',
       },
     },
     { projectRoot: '/tmp/app', methodName: 'HOUR', full: true },
