@@ -84,7 +84,12 @@ On JVM projects with private libraries and no public Javadocs, `jvmsrc` is a for
 ### 1. Install CLI
 ```bash
 npm install -g jvmsrc
-# or use it directly via npx: npx jvmsrc <command>
+```
+
+Or use it directly via npx: 
+
+```bash
+npx jvmsrc mcp
 ```
 
 > [!IMPORTANT]  
