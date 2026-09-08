@@ -63,7 +63,7 @@ describe('getDecompiledCacheFilePath', () => {
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.cachePath).toBe(
-        path.join(testCacheRoot, 'decompiled', 'com.example', 'lib', 'unknown', 'Foo.java'),
+        path.join(testCacheRoot, 'decompiled', 'com.example', 'lib', 'unknown', 'jf1', 'Foo.java'),
       );
     }
   });
@@ -78,7 +78,16 @@ describe('getDecompiledCacheFilePath', () => {
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.cachePath).toBe(
-        path.join(testCacheRoot, 'decompiled', 'com.example', 'lib', '1.0.0-SNAPSHOT', 'abcdef12', 'Foo.java'),
+        path.join(
+          testCacheRoot,
+          'decompiled',
+          'com.example',
+          'lib',
+          '1.0.0-SNAPSHOT',
+          'jf1',
+          'abcdef12',
+          'Foo.java',
+        ),
       );
     }
   });
@@ -122,7 +131,7 @@ describe('getDecompiledCacheFilePath', () => {
     );
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.cachePath.endsWith(path.join('1', 'Outer$Inner.java'))).toBe(true);
+      expect(r.cachePath.endsWith(path.join('1', 'jf1', 'Outer$Inner.java'))).toBe(true);
     }
   });
 });
@@ -147,7 +156,10 @@ describe('readDecompiledCacheFile / writeDecompiledCacheFile', () => {
 
   test('refuses read/write outside decompiled root', () => {
     const outside = path.join(testCacheRoot, 'evil.java');
-    writeDecompiledCacheFile(path.join(testCacheRoot, 'decompiled', 'g', 'a', '1', 'Foo.java'), 'ok');
+    writeDecompiledCacheFile(
+      path.join(testCacheRoot, 'decompiled', 'g', 'a', '1', 'jf1', 'Foo.java'),
+      'ok',
+    );
     expect(() => writeDecompiledCacheFile(outside, 'nope')).toThrow(/outside decompiled/);
     expect(readDecompiledCacheFile(outside)).toBe(null);
   });

@@ -83,9 +83,15 @@ export function isPathWithinDecompiledCache(filePath: string): boolean {
 }
 
 /**
+ * Layout bump for CFR `--jarfilter` (one-class) decompile. Invalidates pre-fix entries that
+ * cached whole-JAR dumps from the mistaken positional-FQN argv.
+ */
+export const DECOMPILED_CACHE_LAYOUT = 'jf1';
+
+/**
  * Path under global cache:
- *   - `decompiled/<group>/<artifact>/<version>/<jarHash8>/<SimpleName>.java` when `jarContentHash` is provided
- *   - `decompiled/<group>/<artifact>/<version>/<SimpleName>.java` otherwise (legacy)
+ *   - `decompiled/<group>/<artifact>/<version>/jf1/<jarHash8>/<SimpleName>.java` when `jarContentHash` is provided
+ *   - `decompiled/<group>/<artifact>/<version>/jf1/<SimpleName>.java` otherwise
  *
  * Including a JAR content hash in the path ensures that republished SNAPSHOT/local-Maven
  * artifacts (same coordinates, different bytes) produce a distinct cache entry.
@@ -121,7 +127,13 @@ export function getDecompiledCacheFilePath(
     return fileName;
   }
 
-  const segments = [decompiledRoot.cachePath, group.segment, name.segment, version.segment];
+  const segments = [
+    decompiledRoot.cachePath,
+    group.segment,
+    name.segment,
+    version.segment,
+    DECOMPILED_CACHE_LAYOUT,
+  ];
   if (jarContentHash) {
     segments.push(jarContentHash.slice(0, 8));
   }

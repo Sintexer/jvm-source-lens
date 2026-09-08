@@ -46,7 +46,19 @@ export type CfrDecompileResult =
   | { ok: false; message: string; stderr?: string; command?: string[] };
 
 /**
- * Decompiles one class from a JAR via CFR (`java -jar cfr.jar <jar> <fqn> --silent true`).
+ * Escapes a fully-qualified class name for CFR `--jarfilter` (regex on FQN).
+ * Dots and `$` (inner classes) must be literals, not wildcards / end-anchors.
+ */
+export function escapeCfrJarFilter(className: string): string {
+  return className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Decompiles one class from a JAR via CFR
+ * (`java -jar cfr.jar <jar> --jarfilter <escaped-fqn> --silent true`).
+ *
+ * CFR's second positional argument is a *method* name, not a class — do not pass the FQN there
+ * or CFR decompiles the entire JAR.
  */
 export async function runCfrDecompile(opts: CfrDecompileOptions): Promise<CfrDecompileResult> {
   let javaPath = opts.javaPath;
@@ -71,7 +83,16 @@ export async function runCfrDecompile(opts: CfrDecompileOptions): Promise<CfrDec
   const maxOutputBytes = opts.maxOutputBytes ?? cfrMaxOutputBytes();
   const spawnEnv = opts.env ?? buildCfrSpawnEnv();
 
-  const argv = [javaPath, '-jar', cfrJar, opts.jarPath, opts.className, '--silent', 'true'];
+  const argv = [
+    javaPath,
+    '-jar',
+    cfrJar,
+    opts.jarPath,
+    '--jarfilter',
+    escapeCfrJarFilter(opts.className),
+    '--silent',
+    'true',
+  ];
 
   let proc: ReturnType<typeof spawnChild>;
   try {

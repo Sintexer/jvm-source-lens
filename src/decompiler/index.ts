@@ -7,6 +7,7 @@ export {
   cfrTimeoutMs,
   DEFAULT_CFR_MAX_OUTPUT_BYTES,
   DEFAULT_CFR_TIMEOUT_MS,
+  escapeCfrJarFilter,
   runCfrDecompile,
   type CfrDecompileOptions,
   type CfrDecompileResult,

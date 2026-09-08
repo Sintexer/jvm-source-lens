@@ -194,7 +194,7 @@ src/
     index.ts                     ← re-exports
   cache/
     paths.ts              ← global cache root (env-paths) + project bucket paths
-    decompiled-paths.ts   ← global `decompiled/<g>/<a>/<v>/<Class>.java` paths
+    decompiled-paths.ts   ← global `decompiled/<g>/<a>/<v>/jf1/<Class>.java` paths
     index.ts              ← build-input digest, read/write resolution cache files
   resolve-with-cache.ts   ← resolveWithResolutionCache() — cache gate + resolver on miss
   cli.ts                  ← CLI entry point (`get`, `resolve`, `mcp`, …)
@@ -580,11 +580,12 @@ When the build-input digest matches `resolution.hash`, the cached document is us
 
 ### 6.2 Decompilation Cache
 
-CFR decompilation results are cached by artifact coordinates + class name under the **same global cache root** as §6.1 (not under the project directory):
+CFR decompilation results are cached by artifact coordinates + class name under the **same global cache root** as §6.1 (not under the project directory). Each miss invokes CFR with **`--jarfilter`** on the requested FQN (not a positional “method” arg), so stdout is one compilation unit — not the whole JAR. Layout segment **`jf1`** invalidates older whole-JAR cache blobs from the pre-fix argv.
 
 ```
 <env-paths cache for jvmsrc>/
-  decompiled/<group>/<artifact>/<version>/<ClassName>.java
+  decompiled/<group>/<artifact>/<version>/jf1/<ClassName>.java
+  decompiled/<group>/<artifact>/<version>/jf1/<jarHash8>/<ClassName>.java   ← when JAR content hash is known
 ```
 
 This means sequential agent calls for classes within the same dependency pay the decompilation cost only once, and the store can be shared across projects on one machine. Files are written on the first decompile miss (atomic temp + rename, same pattern as resolution cache buckets).
