@@ -36,7 +36,6 @@ export function formatSearchInArtifactText(
     lines.push('');
   }
 
-  lines.push(`Use full=true for JSON hits with full context arrays.`);
   return lines.join('\n');
 }
 

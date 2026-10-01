@@ -1,5 +1,5 @@
 import type { ClassStructureKind, ClassStructureMethod, GetClassStructureSuccess } from '../class-structure/types.js';
-import { CONSTRUCTOR_METHOD_NAME } from '../copy/hints.js';
+import { CONSTRUCTOR_METHOD_NAME, MODIFIER_LEGEND } from '../copy/hints.js';
 import { firstJavadocParagraph } from './truncate.js';
 import { formatCompactModifiers } from './format-compact-modifiers.js';
 import { formatClassStructureMethodLine } from './format-method-line.js';
@@ -84,7 +84,12 @@ export function formatClassStructureText(
   if (scope === 'overview') {
     lines.push('');
     if (declared.length > 0) {
-      const names = declared.map((m) => m.name);
+      // Overloads collapse to `name×N` so a 4-overload method costs one entry, not four.
+      const counts = new Map<string, number>();
+      for (const m of declared) {
+        counts.set(m.name, (counts.get(m.name) ?? 0) + 1);
+      }
+      const names = [...counts].map(([name, n]) => (n > 1 ? `${name}×${n}` : name));
       const preview = names.length > 24 ? `${names.slice(0, 24).join(', ')}, …` : names.join(', ');
       lines.push(`Declared method names (${declared.length}): ${preview}`);
     } else {
@@ -107,6 +112,7 @@ export function formatClassStructureText(
             `… ${result.fields.length - OVERVIEW_FIELD_LIST_CAP} more field(s); use scope=declared to list all.`,
           );
         }
+        lines.push(MODIFIER_LEGEND);
       } else {
         lines.push(`Fields: ${result.fields.length} (use scope=declared to list)`);
       }
@@ -142,12 +148,13 @@ export function formatClassStructureText(
       }
       if (inherited.length > cap) {
         lines.push(
-          `… ${inherited.length - cap} inherited method(s) omitted. Use get_method_signature(methodName) or scope with full=true for JSON.`,
+          `… ${inherited.length - cap} inherited method(s) omitted. Use get_method_signature for a specific method.`,
         );
       }
     }
 
     lines.push('');
+    lines.push(MODIFIER_LEGEND);
     lines.push(formatProvenanceLine(result.provenance));
     lines.push(`sourceAvailable: ${result.sourceAvailable}`);
     return lines.join('\n');

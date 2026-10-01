@@ -1,0 +1,11 @@
+plugins {
+    id 'java'
+}
+
+// Same library as :worker but a different version, on purpose (version-conflict prompts).
+dependencies {
+    implementation project(':core')
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+    implementation 'org.springframework.retry:spring-retry:2.0.4'
+}

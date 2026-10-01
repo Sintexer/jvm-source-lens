@@ -28,7 +28,7 @@ import type {
 } from './class-structure/types.js';
 import type { ArtifactCoordinates, ClassSourceError, ClassSourceLookupOptions } from './extractor/class-source-types.js';
 import { findClasspathOwningClass } from './extractor/find-external-class-jar.js';
-import { resolveModuleScopeOrError } from './extractor/infer-module-path.js';
+import { resolveClassScopeOrError } from './extractor/canonicalize-class-name.js';
 import {
   tryReadJavaSourceFromClasspath,
   type TryReadJavaSourceFromClasspathResult,
@@ -291,7 +291,7 @@ export async function getClassStructure(
     };
   }
 
-  const moduleScope = resolveModuleScopeOrError(resolved.output, {
+  const moduleScope = resolveClassScopeOrError(opts.projectRoot, resolved.output, {
     className,
     modulePath: opts.modulePath,
     configuration: opts.configuration,
@@ -301,6 +301,7 @@ export async function getClassStructure(
     return classStructureFail(opts, className, enrichClassStructureError(opts, resolved.output, moduleScope.error));
   }
   const effectiveModulePath = moduleScope.modulePath;
+  className = moduleScope.className;
 
   const lookupOpts: ClassSourceLookupOptions = {
     className,

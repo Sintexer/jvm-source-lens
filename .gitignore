@@ -210,3 +210,8 @@ test/fixtures/gradle-smoke/gradle/wrapper/gradle-wrapper.jar
 
 # End of https://www.toptal.com/developers/gitignore/api/node,gradle,macos
 
+
+# MCP eval run output (transcripts, summaries)
+test/evals/results/
+test/evals/project/.gradle/
+test/evals/project/**/build/

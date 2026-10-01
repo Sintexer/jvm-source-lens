@@ -6,4 +6,6 @@ export const METHOD_NOT_FOUND_ON_CLASS_LINES = [
   'If this is a field/constant, use get_class_structure. Otherwise use scope=overview/effective to browse method names.',
 ] as const;
 
-export const USE_FULL_JSON_HINT = 'Use full=true for structured JSON overload objects.';
+/** Footer for results whose declaration lines use abbreviated modifiers (see format-compact-modifiers.ts). */
+export const MODIFIER_LEGEND =
+  'Modifiers: P=public p=private prot=protected pack=package-private s=static f=final a=abstract';

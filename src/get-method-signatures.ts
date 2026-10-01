@@ -13,7 +13,7 @@ import type {
   SourcesJarProvenance,
 } from './extractor/class-source-types.js';
 import { findClasspathOwningClass } from './extractor/find-external-class-jar.js';
-import { resolveModuleScopeOrError } from './extractor/infer-module-path.js';
+import { resolveClassScopeOrError } from './extractor/canonicalize-class-name.js';
 import { tryReadJavaSourceFromClasspath } from './extractor/read-java-source-from-classpath.js';
 import { enrichIfClassNotFound } from './enrich-class-not-found.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
@@ -171,7 +171,7 @@ export async function getMethodSignatures(
     };
   }
 
-  const moduleScope = resolveModuleScopeOrError(resolved.output, {
+  const moduleScope = resolveClassScopeOrError(opts.projectRoot, resolved.output, {
     className,
     modulePath: opts.modulePath,
     configuration: opts.configuration,
@@ -181,6 +181,7 @@ export async function getMethodSignatures(
     return methodSignatureFail(opts, className, mn, enrichScopeError(opts, resolved.output, moduleScope.error));
   }
   const effectiveModulePath = moduleScope.modulePath;
+  className = moduleScope.className;
 
   const lookupOpts: ClassSourceLookupOptions = {
     className,

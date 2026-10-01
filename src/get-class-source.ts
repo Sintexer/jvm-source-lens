@@ -3,7 +3,7 @@ import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import { enrichIfClassNotFound } from './enrich-class-not-found.js';
 import type { ArtifactCoordinates, ClassSourceLookupResult } from './extractor/class-source-types.js';
 import { extractExternalClassSource } from './extractor/extract-external-class-source.js';
-import { resolveModuleScopeOrError } from './extractor/infer-module-path.js';
+import { resolveClassScopeOrError } from './extractor/canonicalize-class-name.js';
 import type { GradleProcessCapture, ResolveOptions } from './resolvers/base.js';
 import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
@@ -32,6 +32,11 @@ export type GetClassSourceOptions = {
   forceRefresh?: boolean;
   /** When set, return only matching method bodies and/or a line range. */
   excerpt?: SourceExcerptRequest;
+  /**
+   * Internal (find-in-class): return the whole compilation unit without the agent-facing size
+   * refusal / truncation, because the caller only emits matching hits, never the source itself.
+   */
+  rawForSearch?: boolean;
   /** CLI-only: progress labels and Gradle verbose stderr. */
   cli?: GetClassSourceCliOptions;
 };
@@ -183,7 +188,7 @@ export async function getClassSource(
       };
     }
 
-    const moduleScope = resolveModuleScopeOrError(resolved.output, {
+    const moduleScope = resolveClassScopeOrError(opts.projectRoot, resolved.output, {
       className,
       modulePath: opts.modulePath,
       configuration: opts.configuration,
@@ -206,6 +211,7 @@ export async function getClassSource(
       return { ok: false, error, ...diag };
     }
     const effectiveModulePath = moduleScope.modulePath;
+    className = moduleScope.className;
 
     const sourcesJarCache = new Map<string, string | null>();
 
@@ -312,7 +318,9 @@ export async function getClassSource(
       includeTest: opts.includeTest,
       resolveSourcesJar: resolveSourcesJarFn,
     });
-    const withExcerpt = await applyExcerptToSuccess(extracted, opts.excerpt, supertypeResolver);
+    const withExcerpt = opts.rawForSearch
+      ? extracted
+      : await applyExcerptToSuccess(extracted, opts.excerpt, supertypeResolver);
     if (!withExcerpt.ok) {
       const err = withExcerpt.error;
       const diag = recordFailureDiagnostic({

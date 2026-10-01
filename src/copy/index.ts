@@ -13,5 +13,5 @@ export {
   type ClassifiedFailure,
   type ClassifiedFailurePayload,
 } from './error-messages.js';
-export { CONSTRUCTOR_METHOD_NAME, METHOD_NOT_FOUND_ON_CLASS_LINES, USE_FULL_JSON_HINT } from './hints.js';
+export { CONSTRUCTOR_METHOD_NAME, METHOD_NOT_FOUND_ON_CLASS_LINES, MODIFIER_LEGEND } from './hints.js';
 export type { ClassNotFoundContext, ClassifyErrorQueryContext, GuidedQueryContext } from './types.js';

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import * as z from 'zod';
 import { getClassSource } from './get-class-source.js';
@@ -33,6 +35,7 @@ import { getMethodSignatures } from './get-method-signatures.js';
 import { searchClasses } from './search-classes.js';
 import { searchInArtifact } from './search-in-artifact.js';
 import { JVMSRC_INSTRUCTIONS, MCP_TOOL_COPY } from './copy/index.js';
+import { withCallLog } from './diagnostics/call-log.js';
 
 const artifactCoordinatesSchema = z.object({
   group: z.string(),
@@ -305,39 +308,64 @@ export const mcpFindInClassSourcePayloadSchema = z.union([
   }),
 ]);
 
-const fullResponseInput = { full: z.boolean().optional() };
+/** Agent-facing parameter docs. Keep each to one short sentence: they are sent to the model on every turn. */
+const D = {
+  projectRoot: 'Project root. Omit to use the workspace.',
+  modulePath: "Gradle path like ':app'. Omit unless an error lists candidates.",
+  className: 'FQN, e.g. com.fasterxml.jackson.databind.ObjectMapper; a unique simple name works.',
+  configuration: 'Gradle configuration (default compileClasspath).',
+  includeTest: 'Use the test classpath.',
+  forceRefresh: 'Bypass the resolution cache.',
+  regex: 'Treat query as a regex.',
+  contextLines: 'Context lines per hit.',
+  maxHits: 'Max hits.',
+} as const;
 
-const findInClassSourceInputSchema = z.object({
-  className: z.string().min(1),
-  projectRoot: z.string().min(1),
-  query: z.string().min(1),
-  modulePath: z.string().optional(),
-  configuration: z.string().optional(),
-  includeTest: z.boolean().optional(),
-  forceRefresh: z.boolean().optional(),
-  contextLines: z.number().int().min(0).max(50).optional(),
-  maxHits: z.number().int().min(1).max(100).optional(),
-  regex: z.boolean().optional(),
-  /** Response projection for full=true JSON. Default: line/column/matchedText only. */
-  include: z.array(z.enum(['context', 'block', 'provenance', 'all'])).optional(),
-  ...fullResponseInput,
+/** Names for one or more methods; a bare string is accepted for convenience. `<init>` = constructors. */
+const methodNamesSchema = z.union([z.array(z.string().min(1)), z.string().min(1)]);
+
+function methodNameList(v: string | string[] | undefined): string[] | undefined {
+  return v === undefined ? undefined : typeof v === 'string' ? [v] : v;
+}
+
+/**
+ * Inputs accepted but deliberately not advertised: `full` / `include` (JSON projection, for tests and
+ * other tooling; agents get compact text) and the legacy singular `methodName`.
+ */
+function hiddenArgs(args: object): { full?: boolean; include?: string[]; methodName?: string } {
+  const a = args as Record<string, unknown>;
+  return {
+    full: typeof a.full === 'boolean' ? a.full : undefined,
+    include: Array.isArray(a.include) ? a.include.filter((x): x is string => typeof x === 'string') : undefined,
+    methodName: typeof a.methodName === 'string' && a.methodName.length > 0 ? a.methodName : undefined,
+  };
+}
+
+const findInClassSourceInputSchema = z.looseObject({
+  className: z.string().min(1).describe(D.className),
+  query: z.string().min(1).describe('Text to find in the class source (literal; regex if regex=true).'),
+  projectRoot: z.string().optional().describe(D.projectRoot),
+  modulePath: z.string().optional().describe(D.modulePath),
+  configuration: z.string().optional().describe(D.configuration),
+  includeTest: z.boolean().optional().describe(D.includeTest),
+  forceRefresh: z.boolean().optional().describe(D.forceRefresh),
+  contextLines: z.number().int().min(0).max(50).optional().describe(D.contextLines),
+  maxHits: z.number().int().min(1).max(100).optional().describe(D.maxHits),
+  regex: z.boolean().optional().describe(D.regex),
 });
 
-const getClassSourceInputSchema = z.object({
-  className: z.string().min(1),
-  projectRoot: z.string().min(1),
-  modulePath: z.string().optional(),
-  configuration: z.string().optional(),
-  includeTest: z.boolean().optional(),
-  forceRefresh: z.boolean().optional(),
-  /** Return only these methods/constructors (`<init>` for constructors). Multiple overloads are all included. */
-  methodNames: z.array(z.string().min(1)).optional(),
-  /** Convenience when a single method is needed; merged with `methodNames`. */
-  methodName: z.string().min(1).optional(),
-  /** 1-based inclusive line range in the full compilation unit (combine with `methodNames`). */
-  startLine: z.number().int().positive().optional(),
-  endLine: z.number().int().positive().optional(),
-  ...fullResponseInput,
+const getClassSourceInputSchema = z.looseObject({
+  className: z.string().min(1).describe(D.className),
+  methodNames: methodNamesSchema
+    .optional()
+    .describe('Only these methods ("<init>" = constructors), all overloads. Omit for the whole class.'),
+  projectRoot: z.string().optional().describe(D.projectRoot),
+  modulePath: z.string().optional().describe(D.modulePath),
+  configuration: z.string().optional().describe(D.configuration),
+  includeTest: z.boolean().optional().describe(D.includeTest),
+  forceRefresh: z.boolean().optional().describe(D.forceRefresh),
+  startLine: z.number().int().positive().optional().describe('First line (1-based); needs endLine.'),
+  endLine: z.number().int().positive().optional().describe('Last line; needs startLine.'),
 });
 
 const buildSystemInfoSchema = z.object({
@@ -463,37 +491,23 @@ export const mcpSearchClassesPayloadSchema = z.union([
   resolveDependenciesFailureSchema,
 ]);
 
-const searchClassesInputSchema = z.object({
-  query: z.string().min(1),
-  projectRoot: z.string().min(1),
-  modulePath: z.string().optional(),
-  configuration: z.string().optional(),
-  includeTest: z.boolean().optional(),
-  forceRefresh: z.boolean().optional(),
-  limit: z.number().int().positive().max(200).optional(),
-  include: z
-    .array(
-      z.enum([
-        'simpleName',
-        'score',
-        'origin',
-        'coordinates',
-        'location',
-        'scope',
-        'indexMeta',
-        'all',
-      ]),
-    )
-    .optional(),
-  ...fullResponseInput,
+const searchClassesInputSchema = z.looseObject({
+  query: z.string().min(1).describe('Case-insensitive substring; words are AND-ed; * ? globs.'),
+  projectRoot: z.string().optional().describe(D.projectRoot),
+  modulePath: z.string().optional().describe(D.modulePath),
+  configuration: z.string().optional().describe(D.configuration),
+  includeTest: z.boolean().optional().describe(D.includeTest),
+  forceRefresh: z.boolean().optional().describe(D.forceRefresh),
+  limit: z.number().int().positive().max(200).optional().describe('Maximum hits (default 50).'),
 });
 
-const resolveDependenciesInputSchema = z.object({
-  projectRoot: z.string().min(1),
-  forceRefresh: z.boolean().optional(),
-  /** Response projection for full=true JSON. Default: summary counts only. */
-  include: z.array(z.enum(['artifacts', 'coordinates', 'jarPaths', 'errors', 'all'])).optional(),
-  ...fullResponseInput,
+const resolveDependenciesInputSchema = z.looseObject({
+  query: z
+    .string()
+    .optional()
+    .describe('Library filter, e.g. "jackson": lists matching artifact versions per module.'),
+  projectRoot: z.string().optional().describe(D.projectRoot),
+  forceRefresh: z.boolean().optional().describe(D.forceRefresh),
 });
 
 const javapParameterSchema = z.object({
@@ -550,67 +564,22 @@ const classStructureProvenanceSchema = z.union([
 ]);
 
 const getMethodSignatureInputSchema = z
-  .object({
-    className: z.string().min(1),
-    methodName: z.string().min(1).optional(),
-    /** Alias for a single methodName — must have length 1 when used without methodName. */
-    methodNames: z.array(z.string().min(1)).optional(),
-    projectRoot: z.string().min(1),
-    modulePath: z.string().optional(),
-    configuration: z.string().optional(),
-    includeTest: z.boolean().optional(),
-    forceRefresh: z.boolean().optional(),
-    /** When true: javap -private -verbose only (no sources JAR or src/ fallback). Default false = IDE-first. */
-    bytecodeOnly: z.boolean().optional(),
-    /** Response projection for full=true JSON. Default: declarationLine only per overload. */
-    include: z.array(z.enum(['parameters', 'exceptions', 'jvmDescriptor', 'provenance', 'all'])).optional(),
-    ...fullResponseInput,
+  .looseObject({
+    className: z.string().min(1).describe(D.className),
+    methodNames: methodNamesSchema
+      .optional()
+      .describe('Method name(s) ("<init>" = constructors). Required.'),
+    projectRoot: z.string().optional().describe(D.projectRoot),
+    modulePath: z.string().optional().describe(D.modulePath),
+    configuration: z.string().optional().describe(D.configuration),
+    includeTest: z.boolean().optional().describe(D.includeTest),
+    forceRefresh: z.boolean().optional().describe(D.forceRefresh),
+    bytecodeOnly: z.boolean().optional().describe('Skip sources; read bytecode only.'),
   })
-  .superRefine((val, ctx) => {
-    const fromArray = val.methodNames;
-    const singular = val.methodName;
-    if (singular !== undefined && singular.length > 0) {
-      if (fromArray !== undefined && fromArray.length > 1) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            'get_method_signature accepts one method at a time. Pass methodName, or methodNames with a single element; call once per method or use get_class_structure.',
-          path: ['methodNames'],
-        });
-      }
-      return;
-    }
-    if (fromArray === undefined || fromArray.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Provide methodName (or methodNames with exactly one element).',
-        path: ['methodName'],
-      });
-      return;
-    }
-    if (fromArray.length > 1) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          'get_method_signature accepts one method at a time. Pass methodName, or methodNames with a single element; call once per method or use get_class_structure.',
-        path: ['methodNames'],
-      });
-    }
+  .refine((v) => (methodNameList(v.methodNames)?.length ?? 0) > 0 || hiddenArgs(v).methodName !== undefined, {
+    message: 'Provide methodNames, e.g. ["findById"] ("<init>" for constructors).',
+    path: ['methodNames'],
   });
-
-function resolveMethodSignatureName(args: {
-  methodName?: string;
-  methodNames?: string[];
-}): string {
-  if (args.methodName !== undefined && args.methodName.length > 0) {
-    return args.methodName;
-  }
-  const fromArray = args.methodNames;
-  if (fromArray !== undefined && fromArray.length === 1) {
-    return fromArray[0]!;
-  }
-  throw new Error('methodName required');
-}
 
 const mcpMethodSignatureFailureSchema = z.object({
   ok: z.literal(false),
@@ -702,19 +671,18 @@ const classStructureTypeHierarchySchema = z.object({
   allSuperinterfaces: z.array(z.string()),
 });
 
-const classStructureScopeSchema = z.enum(['overview', 'declared', 'effective', 'full']);
+const classStructureScopeSchema = z.enum(['overview', 'declared', 'effective']);
 
-const getClassStructureInputSchema = z.object({
-  className: z.string().min(1),
-  projectRoot: z.string().min(1),
-  modulePath: z.string().optional(),
-  configuration: z.string().optional(),
-  includeTest: z.boolean().optional(),
-  forceRefresh: z.boolean().optional(),
-  include: z.array(z.enum(['hierarchy', 'fields', 'annotations', 'signatures', 'inherited', 'provenance', 'all'])).optional(),
-  /** Compact text detail: overview (default), declared, effective. Use full=true for JSON. */
-  scope: classStructureScopeSchema.optional(),
-  ...fullResponseInput,
+const getClassStructureInputSchema = z.looseObject({
+  className: z.string().min(1).describe(D.className),
+  scope: classStructureScopeSchema
+    .optional()
+    .describe('overview (default): purpose + method names; declared: all signatures; effective: + inherited.'),
+  projectRoot: z.string().optional().describe(D.projectRoot),
+  modulePath: z.string().optional().describe(D.modulePath),
+  configuration: z.string().optional().describe(D.configuration),
+  includeTest: z.boolean().optional().describe(D.includeTest),
+  forceRefresh: z.boolean().optional().describe(D.forceRefresh),
 });
 
 const mcpClassStructureFailureSchema = z.object({
@@ -759,32 +727,60 @@ export const mcpGetClassStructurePayloadSchema = z.union([
 ]);
 
 const searchInArtifactInputSchema = z
-  .object({
-    projectRoot: z.string().min(1),
+  .looseObject({
+    query: z.string().min(1).describe('Text to find in the JAR\'s classes (literal; regex if regex=true).'),
     coordinates: z
       .object({
         group: z.string().min(1),
         name: z.string().min(1),
         version: z.string().nullable().optional(),
       })
-      .optional(),
-    jarPath: z.string().optional(),
-    query: z.string().min(1),
-    regex: z.boolean().optional(),
-    contextLines: z.number().int().min(0).max(50).optional(),
-    maxHits: z.number().int().min(1).max(100).optional(),
-    maxClasses: z.number().int().min(1).max(500).optional(),
-    modulePath: z.string().optional(),
-    configuration: z.string().optional(),
-    includeTest: z.boolean().optional(),
-    forceRefresh: z.boolean().optional(),
-    ...fullResponseInput,
+      .optional()
+      .describe('Dependency to search, as listed by resolve_dependencies.'),
+    jarPath: z.string().optional().describe('Absolute JAR path (instead of coordinates).'),
+    projectRoot: z.string().optional().describe(D.projectRoot),
+    modulePath: z.string().optional().describe(D.modulePath),
+    configuration: z.string().optional().describe(D.configuration),
+    includeTest: z.boolean().optional().describe(D.includeTest),
+    forceRefresh: z.boolean().optional().describe(D.forceRefresh),
+    regex: z.boolean().optional().describe(D.regex),
+    contextLines: z.number().int().min(0).max(50).optional().describe(D.contextLines),
+    maxHits: z.number().int().min(1).max(100).optional().describe(D.maxHits),
+    maxClasses: z.number().int().min(1).max(500).optional().describe('Maximum classes to scan.'),
   })
   .refine((v) => v.coordinates !== undefined || v.jarPath !== undefined, {
     message: 'At least one of coordinates or jarPath must be provided.',
   });
 
-export async function startMcpServer(): Promise<void> {
+/** One result per requested method: a single result passes through; several are joined as text (errors win `isError`). */
+function combineToolResults(results: CallToolResult[]): CallToolResult {
+  if (results.length === 1) {
+    return results[0]!;
+  }
+  const text = results
+    .map((r) => r.content.map((c) => (c.type === 'text' ? c.text : '')).join('\n'))
+    .join('\n\n');
+  return { isError: results.some((r) => r.isError), content: [{ type: 'text', text }] };
+}
+
+/** Workspace folders the client announced via MCP `roots`; empty when unsupported or on error. */
+async function listWorkspaceRoots(server: McpServer): Promise<string[]> {
+  if (!server.server.getClientCapabilities()?.roots) {
+    return [];
+  }
+  try {
+    const { roots } = await server.server.listRoots();
+    return roots
+      .map((r) => r.uri)
+      .filter((u) => u.startsWith('file:'))
+      .map((u) => fileURLToPath(u));
+  } catch {
+    return [];
+  }
+}
+
+/** Builds the MCP server with all tools registered; no transport attached. */
+export function createMcpServer(): McpServer {
   const pkgPath = fileURLToPath(new URL('../package.json', import.meta.url));
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
 
@@ -795,6 +791,18 @@ export async function startMcpServer(): Promise<void> {
     },
   );
 
+  const locateProjectRoot = async (requested: string | undefined) => {
+    let workspaceRoots: string[] = [];
+    if (!requested?.trim() || !path.isAbsolute(requested.trim())) {
+      workspaceRoots = await listWorkspaceRoots(server);
+    }
+    return resolveProjectRoot(requested, { workspaceRoots });
+  };
+
+  const registerTool = server.registerTool.bind(server) as typeof server.registerTool;
+  server.registerTool = ((name: string, config: never, cb: never) =>
+    registerTool(name, config, withCallLog(name, cb) as never)) as typeof server.registerTool;
+
   server.registerTool(
     'get_class_source',
     {
@@ -804,21 +812,22 @@ export async function startMcpServer(): Promise<void> {
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
+      const root = await locateProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot ?? process.cwd());
+      }
+      const hidden = hiddenArgs(args);
+
       const query: ClassSourceQueryContext = {
-        projectRoot: args.projectRoot,
+        projectRoot: root.path,
         modulePath: args.modulePath,
         configuration: args.configuration,
         includeTest: args.includeTest,
-        full: args.full,
+        full: hidden.full,
       };
 
-      const root = resolveProjectRoot(args.projectRoot);
-      if (!root.ok) {
-        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
-      }
-
       try {
-        const methodNames = mergeSourceExcerptInputs(args.methodNames, args.methodName);
+        const methodNames = mergeSourceExcerptInputs(methodNameList(args.methodNames), hidden.methodName);
         const result = await getClassSource(args.className, {
           projectRoot: root.path,
           modulePath: args.modulePath,
@@ -850,21 +859,22 @@ export async function startMcpServer(): Promise<void> {
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
+      const root = await locateProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot ?? process.cwd());
+      }
+      const hidden = hiddenArgs(args);
+
       const query: FindInClassSourceQueryContext = {
-        projectRoot: args.projectRoot,
+        projectRoot: root.path,
         modulePath: args.modulePath,
         configuration: args.configuration,
         includeTest: args.includeTest,
         query: args.query,
         regex: args.regex,
-        full: args.full,
-        include: args.include,
+        full: hidden.full,
+        include: hidden.include as never,
       };
-
-      const root = resolveProjectRoot(args.projectRoot);
-      if (!root.ok) {
-        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
-      }
 
       try {
         const result = await findInClassSource(args.className, {
@@ -894,20 +904,21 @@ export async function startMcpServer(): Promise<void> {
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
-      const root = resolveProjectRoot(args.projectRoot);
+      const root = await locateProjectRoot(args.projectRoot);
       if (!root.ok) {
-        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot ?? process.cwd());
       }
+      const hidden = hiddenArgs(args);
 
       try {
         const result = await resolveWithResolutionCache(root.path, {
           forceRefresh: Boolean(args.forceRefresh),
           diagnosticOperation: 'resolve_dependencies',
         });
-        return mcpToolResultFromResolutionResult(result, args.projectRoot, args.full, args.include);
+        return mcpToolResultFromResolutionResult(result, root.path, hidden.full, hidden.include as never, args.query);
       } catch (e) {
         if (e instanceof UnsupportedProjectError) {
-          return mcpToolResultFromProjectRootError(e.message, args.projectRoot);
+          return mcpToolResultFromProjectRootError(e.message, root.path);
         }
         return mcpToolResultFromUnexpectedError(e);
       }
@@ -923,20 +934,21 @@ export async function startMcpServer(): Promise<void> {
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
+      const root = await locateProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot ?? process.cwd());
+      }
+      const hidden = hiddenArgs(args);
+
       const queryCtx: SearchClassesQueryContext = {
-        projectRoot: args.projectRoot,
+        projectRoot: root.path,
         modulePath: args.modulePath,
         configuration: args.configuration,
         includeTest: args.includeTest,
         query: args.query,
-        full: args.full,
-        include: args.include,
+        full: hidden.full,
+        include: hidden.include as never,
       };
-
-      const root = resolveProjectRoot(args.projectRoot);
-      if (!root.ok) {
-        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
-      }
 
       try {
         const result = await searchClasses({
@@ -951,7 +963,7 @@ export async function startMcpServer(): Promise<void> {
         return mcpToolResultFromSearchClasses(result, queryCtx);
       } catch (e) {
         if (e instanceof UnsupportedProjectError) {
-          return mcpToolResultFromProjectRootError(e.message, args.projectRoot);
+          return mcpToolResultFromProjectRootError(e.message, root.path);
         }
         return mcpToolResultFromUnexpectedError(e);
       }
@@ -967,21 +979,13 @@ export async function startMcpServer(): Promise<void> {
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
-      const methodName = resolveMethodSignatureName(args);
-      const query: MethodSignatureQueryContext = {
-        projectRoot: args.projectRoot,
-        modulePath: args.modulePath,
-        configuration: args.configuration,
-        includeTest: args.includeTest,
-        methodName,
-        full: args.full,
-        include: args.include,
-      };
-
-      const root = resolveProjectRoot(args.projectRoot);
+      const root = await locateProjectRoot(args.projectRoot);
       if (!root.ok) {
-        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot ?? process.cwd());
       }
+      const hidden = hiddenArgs(args);
+
+      const methodNames = mergeSourceExcerptInputs(methodNameList(args.methodNames), hidden.methodName) ?? [];
 
       try {
         const opts = {
@@ -991,10 +995,23 @@ export async function startMcpServer(): Promise<void> {
           includeTest: Boolean(args.includeTest),
           forceRefresh: Boolean(args.forceRefresh),
         };
-        const result = Boolean(args.bytecodeOnly)
-          ? await getMethodSignaturesBytecode(args.className, methodName, opts)
-          : await getMethodSignatures(args.className, methodName, opts);
-        return mcpToolResultFromMethodSignature(result, query);
+        const results: CallToolResult[] = [];
+        for (const methodName of methodNames) {
+          const query: MethodSignatureQueryContext = {
+            projectRoot: root.path,
+            modulePath: args.modulePath,
+            configuration: args.configuration,
+            includeTest: args.includeTest,
+            methodName,
+            full: hidden.full,
+            include: hidden.include as never,
+          };
+          const result = Boolean(args.bytecodeOnly)
+            ? await getMethodSignaturesBytecode(args.className, methodName, opts)
+            : await getMethodSignatures(args.className, methodName, opts);
+          results.push(mcpToolResultFromMethodSignature(result, query));
+        }
+        return combineToolResults(results);
       } catch (e) {
         return mcpToolResultFromUnexpectedError(e);
       }
@@ -1010,23 +1027,24 @@ export async function startMcpServer(): Promise<void> {
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
+      const root = await locateProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot ?? process.cwd());
+      }
+      const hidden = hiddenArgs(args);
+
       const query: ClassStructureQueryContext = {
-        projectRoot: args.projectRoot,
+        projectRoot: root.path,
         modulePath: args.modulePath,
         configuration: args.configuration,
         includeTest: args.includeTest,
-        full: args.full ?? (args.scope === 'full' ? true : undefined),
+        full: hidden.full,
         scope: args.scope,
-        include: args.include,
+        include: hidden.include as ClassStructureQueryContext['include'],
       };
 
-      const root = resolveProjectRoot(args.projectRoot);
-      if (!root.ok) {
-        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
-      }
-
       try {
-        const coreInclude = (args.include ?? []).filter(
+        const coreInclude = (hidden.include ?? []).filter(
           (s): s is 'hierarchy' | 'fields' | 'annotations' =>
             s === 'hierarchy' || s === 'fields' || s === 'annotations',
         );
@@ -1037,7 +1055,7 @@ export async function startMcpServer(): Promise<void> {
           includeTest: Boolean(args.includeTest),
           forceRefresh: Boolean(args.forceRefresh),
           include: coreInclude.length > 0 ? coreInclude : undefined,
-          scope: args.scope === 'full' ? 'overview' : args.scope,
+          scope: args.scope,
         });
         return mcpToolResultFromClassStructure(result, query);
       } catch (e) {
@@ -1055,18 +1073,19 @@ export async function startMcpServer(): Promise<void> {
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async (args) => {
+      const root = await locateProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot ?? process.cwd());
+      }
+      const hidden = hiddenArgs(args);
+
       const query: SearchInArtifactQueryContext = {
-        projectRoot: args.projectRoot,
+        projectRoot: root.path,
         modulePath: args.modulePath,
         configuration: args.configuration,
         includeTest: args.includeTest,
-        full: args.full,
+        full: hidden.full,
       };
-
-      const root = resolveProjectRoot(args.projectRoot);
-      if (!root.ok) {
-        return mcpToolResultFromProjectRootError(root.message, args.projectRoot);
-      }
 
       try {
         const result = await searchInArtifact({
@@ -1090,13 +1109,18 @@ export async function startMcpServer(): Promise<void> {
         return mcpToolResultFromSearchInArtifact(result, query);
       } catch (e) {
         if (e instanceof UnsupportedProjectError) {
-          return mcpToolResultFromProjectRootError(e.message, args.projectRoot);
+          return mcpToolResultFromProjectRootError(e.message, root.path);
         }
         return mcpToolResultFromUnexpectedError(e);
       }
     },
   );
 
+  return server;
+}
+
+export async function startMcpServer(): Promise<void> {
+  const server = createMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

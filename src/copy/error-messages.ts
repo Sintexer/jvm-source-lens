@@ -27,7 +27,9 @@ export function classifyClassSourceError(
         'validation',
         true,
         'Invalid fully-qualified class name.',
-        `${error.message} Provide a valid Java FQN (e.g. com.example.MyClass). Inner classes use $ in the simple name. Fix the className argument and retry.`,
+        error.message.includes('Retry with className')
+          ? error.message
+          : `${error.message} Provide a valid Java FQN (e.g. com.example.MyClass). Inner classes use $ in the simple name. Fix the className argument and retry.`,
       );
     case 'MODULE_NOT_FOUND': {
       const listed =
@@ -39,7 +41,9 @@ export function classifyClassSourceError(
         'validation',
         true,
         `Unknown Gradle module ${JSON.stringify(error.modulePath)}.`,
-        `No resolved submodule matches modulePath ${JSON.stringify(error.modulePath)}.` +
+        (error.message.includes('matches several modules')
+          ? `Module ${JSON.stringify(error.modulePath)} matches several modules.`
+          : `No resolved submodule matches modulePath ${JSON.stringify(error.modulePath)}.`) +
           listed +
           (listed.length === 0
             ? ` Inspect resolve_dependencies output (resolution.modules[].name) or settings.gradle for valid names like ":app".`
@@ -73,8 +77,10 @@ export function classifyClassSourceError(
         'validation',
         true,
         `${subject} is ambiguous across ${error.modulePaths.length} modules.`,
-        `${error.message} Candidates: ${error.modulePaths.map((m) => JSON.stringify(m)).join(', ')}. ` +
-          `Retry with modulePath set to exactly one of these.`,
+        error.message.includes('Retry with modulePath=')
+          ? error.message
+          : `${error.message} Candidates: ${error.modulePaths.map((m) => JSON.stringify(m)).join(', ')}. ` +
+            `Retry with modulePath set to exactly one of these.`,
       );
     }
     case 'RESOLUTION_FAILED':

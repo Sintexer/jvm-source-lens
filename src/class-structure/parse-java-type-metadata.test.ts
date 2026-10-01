@@ -140,3 +140,50 @@ public enum Color { RED, GREEN, BLUE }
     );
   });
 });
+
+describe('parseJavaTypeMetadata annotated members', () => {
+  const src = `
+package com.example;
+import java.util.*;
+public final class Lists {
+  private Lists() {}
+  @GwtCompatible(serializable = true)
+  public static <E extends @Nullable Object> ArrayList<E> newArrayList() { return null; }
+  @GwtCompatible
+  public static <E> List<E> asList(E first, E[] rest) { return null; }
+  @J2ktIncompatible @GwtIncompatible
+  public static <E> List<E> newCopy() { return null; }
+  @Deprecated public static void old() {}
+  public static <E> @Nullable E annotatedReturn(@Nullable E first) { return null; }
+  @Nullable
+  public String viaDoc(
+      @Nullable String first) { return null; }
+}
+`;
+  const methods = () =>
+    Object.fromEntries(
+      parseJavaTypeMetadata(src, 'com.example.Lists')!.methods.map((m) => [m.jvmMethodName, m]),
+    );
+
+  test('annotations (with and without arguments) never become method names', () => {
+    expect(Object.keys(methods()).sort()).toEqual(
+      ['<init>', 'annotatedReturn', 'asList', 'newArrayList', 'newCopy', 'old', 'viaDoc'].sort(),
+    );
+  });
+
+  test('return types do not carry annotations or modifiers', () => {
+    const m = methods();
+    expect(m.asList!.returnTypeDisplay).toBe('List<E>');
+    expect(m.newCopy!.returnTypeDisplay).toBe('List<E>');
+    expect(m.old!.returnTypeDisplay).toBe('void');
+    expect(m.annotatedReturn!.returnTypeDisplay).toBe('E');
+    expect(m.viaDoc!.returnTypeDisplay).toBe('String');
+  });
+
+  test('parameter counts survive annotations', () => {
+    const m = methods();
+    expect(m.newArrayList!.parameters).toHaveLength(0);
+    expect(m.asList!.parameters).toHaveLength(2);
+    expect(m.annotatedReturn!.parameters).toHaveLength(1);
+  });
+});

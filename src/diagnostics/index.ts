@@ -6,3 +6,4 @@ export { mapPublicFailureToDiagnostic, type PublicFailureCode, type MapFailureRe
 export { appendNdjsonLine } from './rolling-log.js';
 export { tailText, DIAGNOSTIC_STREAM_TAIL_BYTES } from './text-tail.js';
 export { registerDiagnosticsCli } from './cli-diagnostics-command.js';
+export { withCallLog, isCallLogEnabled, summarizeToolResult, CALL_LOG_FILE_NAME, type CallLogRecord } from './call-log.js';

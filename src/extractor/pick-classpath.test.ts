@@ -232,3 +232,30 @@ describe('pickResolvedConfiguration', () => {
     }
   });
 });
+
+describe('pickResolvedConfiguration loose modulePath', () => {
+  function twoModules(): ResolutionOutput {
+    const base = minimalOutput();
+    const root = base.modules[0]!;
+    return {
+      ...base,
+      modules: [root, { ...root, name: ':app', path: '/tmp/p/app' }, { ...root, name: ':core', path: '/tmp/p/core' }],
+    };
+  }
+
+  test('accepts app / /app/ for :app', () => {
+    for (const raw of ['app', '/app/', ':APP:']) {
+      const r = pickResolvedConfiguration(twoModules(), { modulePath: raw });
+      expect(r.ok && r.module.name).toBe(':app');
+    }
+  });
+
+  test('unknown module lists available modules', () => {
+    const r = pickResolvedConfiguration(twoModules(), { modulePath: 'nope' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe('MODULE_NOT_FOUND');
+      expect(r.error.message).toContain(':app');
+    }
+  });
+});

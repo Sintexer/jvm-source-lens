@@ -1,0 +1,372 @@
+[
+  {
+    "id": "d01",
+    "category": "direct",
+    "prompt": "What methods does com.fasterxml.jackson.databind.ObjectMapper have for reading JSON from a String? Use the version this project actually resolves in the app module.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_structure",
+      "get_method_signature"
+    ]
+  },
+  {
+    "id": "d02",
+    "category": "direct",
+    "prompt": "Show me the overloads of ObjectMapper.readValue in the app module.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature",
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "d03",
+    "category": "direct",
+    "prompt": "What does org.apache.commons.lang3.StringUtils.isBlank do exactly? Show the implementation.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_source",
+      "get_method_signature",
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "d04",
+    "category": "direct",
+    "prompt": "List the API of com.google.common.collect.ImmutableList in the guava version the worker module uses.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "d05",
+    "category": "direct",
+    "prompt": "Does org.slf4j.Logger have a method that takes a Supplier?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature",
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "d06",
+    "category": "direct",
+    "prompt": "What constructors does org.springframework.retry.support.RetryTemplate have?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature",
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "d07",
+    "category": "direct",
+    "prompt": "Show the source of ObjectMapper#readTree(String) in the app module.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_source"
+    ]
+  },
+  {
+    "id": "d08",
+    "category": "direct",
+    "prompt": "Which interfaces does com.google.common.collect.ImmutableMap implement?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "d09",
+    "category": "direct",
+    "prompt": "Does commons-lang3's StringUtils mention 'isNumericSpace' anywhere? Where?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "find_in_class_source",
+      "get_class_structure",
+      "search_classes"
+    ]
+  },
+  {
+    "id": "d10",
+    "category": "direct",
+    "prompt": "What is the return type of StringUtils.join(Iterable, String) in commons-lang3?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature"
+    ]
+  },
+  {
+    "id": "i01",
+    "category": "indirect",
+    "prompt": "Which library defines RetryTemplate?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "search_classes"
+    ]
+  },
+  {
+    "id": "i02",
+    "category": "indirect",
+    "prompt": "I get NoSuchMethodError on ObjectMapper.readerForUpdating after upgrading. Which jackson-databind versions are on our classpath?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "resolve_dependencies"
+    ]
+  },
+  {
+    "id": "i03",
+    "category": "indirect",
+    "prompt": "We see a ClassCastException around Guava collections between modules. Are our modules on different Guava versions?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "resolve_dependencies"
+    ]
+  },
+  {
+    "id": "i04",
+    "category": "indirect",
+    "prompt": "A stack trace shows com.google.common.base.Preconditions.checkArgument. Which overloads exist in our version?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature",
+      "search_classes",
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "i05",
+    "category": "indirect",
+    "prompt": "Which dependency class produces the message 'Unrecognized field'? Search jackson-databind.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "search_in_artifact"
+    ]
+  },
+  {
+    "id": "i06",
+    "category": "indirect",
+    "prompt": "What version of slf4j-api do we actually use?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "resolve_dependencies"
+    ]
+  },
+  {
+    "id": "i07",
+    "category": "indirect",
+    "prompt": "Is there a cache-related class in the guava we use? Find classes about caching.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "search_classes"
+    ]
+  },
+  {
+    "id": "i08",
+    "category": "indirect",
+    "prompt": "A teammate says jackson-databind has configure(DeserializationFeature, boolean). Is that true for our version?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature"
+    ]
+  },
+  {
+    "id": "i09",
+    "category": "indirect",
+    "prompt": "We hit AbstractMethodError in a class implementing org.slf4j.Logger. Which methods does the interface require in our version?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_structure",
+      "resolve_dependencies"
+    ]
+  },
+  {
+    "id": "i10",
+    "category": "indirect",
+    "prompt": "Where does the text 'Cannot deserialize' occur in jackson-databind?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "search_in_artifact"
+    ]
+  },
+  {
+    "id": "m01",
+    "category": "multimodule",
+    "prompt": "In the worker module, what methods does com.google.common.collect.Lists have?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "m02",
+    "category": "multimodule",
+    "prompt": "Which jackson-databind version does app use, and which does worker use?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "resolve_dependencies"
+    ]
+  },
+  {
+    "id": "m03",
+    "category": "multimodule",
+    "prompt": "Show the structure of com.fasterxml.jackson.databind.ObjectMapper.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_structure",
+      "resolve_dependencies"
+    ]
+  },
+  {
+    "id": "m04",
+    "category": "multimodule",
+    "prompt": "What does RetryTemplate expose? (It is only used in the app module.)",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_structure",
+      "search_classes"
+    ]
+  },
+  {
+    "id": "m05",
+    "category": "multimodule",
+    "prompt": "Find the class Lists in our dependencies and tell me which module has it.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "search_classes"
+    ]
+  },
+  {
+    "id": "m06",
+    "category": "multimodule",
+    "prompt": "Compare the readValue overloads of ObjectMapper in the app module.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature"
+    ]
+  },
+  {
+    "id": "m07",
+    "category": "multimodule",
+    "prompt": "Is commons-lang3 on the worker module's classpath?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "resolve_dependencies"
+    ]
+  },
+  {
+    "id": "m08",
+    "category": "multimodule",
+    "prompt": "Show StringUtils.isBlank source from commons-lang3 as the core module sees it.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_source",
+      "get_method_signature",
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "s01",
+    "category": "sloppy",
+    "prompt": "Show methods of ObjectMapper",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "search_classes",
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "s02",
+    "category": "sloppy",
+    "prompt": "Structure of StringUtils, app module",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_structure",
+      "search_classes"
+    ]
+  },
+  {
+    "id": "s03",
+    "category": "sloppy",
+    "prompt": "Methods of com/fasterxml/jackson/databind/ObjectMapper.class",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "s04",
+    "category": "sloppy",
+    "prompt": "Show the nested class ImmutableList.Builder from guava.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_structure",
+      "search_classes"
+    ]
+  },
+  {
+    "id": "s05",
+    "category": "sloppy",
+    "prompt": "In 'worker', list overloads of Lists.newArrayList.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature",
+      "get_class_structure",
+      "search_classes"
+    ]
+  },
+  {
+    "id": "s06",
+    "category": "sloppy",
+    "prompt": "The project is at ./ ; show the source of RetryTemplate.execute.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_source",
+      "search_classes",
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "n01",
+    "category": "negative",
+    "prompt": "Where is UserService defined in this repo?",
+    "expectJvmsrc": false,
+    "expectFirstTools": []
+  },
+  {
+    "id": "n02",
+    "category": "negative",
+    "prompt": "Add a method findByEmail(String) to UserService in the core module.",
+    "expectJvmsrc": false,
+    "expectFirstTools": []
+  },
+  {
+    "id": "n03",
+    "category": "negative",
+    "prompt": "What does the App class in the app module do?",
+    "expectJvmsrc": false,
+    "expectFirstTools": []
+  },
+  {
+    "id": "n04",
+    "category": "negative",
+    "prompt": "Explain the difference between HashMap and TreeMap in Java.",
+    "expectJvmsrc": false,
+    "expectFirstTools": []
+  },
+  {
+    "id": "n05",
+    "category": "negative",
+    "prompt": "Rename the field `mapper` to `jsonMapper` in App.java.",
+    "expectJvmsrc": false,
+    "expectFirstTools": []
+  },
+  {
+    "id": "n06",
+    "category": "negative",
+    "prompt": "Which Gradle plugins are applied in app/build.gradle?",
+    "expectJvmsrc": false,
+    "expectFirstTools": []
+  }
+]

@@ -518,12 +518,13 @@ export function mcpToolResultFromResolutionResult(
   projectRoot: string,
   full?: boolean,
   include?: ResolutionIncludeSection[],
+  artifactQuery?: string,
 ): CallToolResult {
   const detail = toolResponseDetail(full);
   if (result.ok) {
     const { output } = result;
     if (detail === 'compact') {
-      return returnCompactPlain(formatResolutionSummaryText(output));
+      return returnCompactPlain(formatResolutionSummaryText(output, { artifactQuery, audience: 'mcp' }));
     }
     const projected = projectResolution(output, include);
     return returnFullPlain(`Resolved ${output.modules.length} module(s).`, projected as Record<string, unknown>);
@@ -815,7 +816,8 @@ function buildMcpErrorCallResult(summary: string, payload: McpClassSourceFailure
   };
   return {
     isError: true,
-    content: [{ type: 'text', text: summary }],
+    // Many MCP clients show the model only `content`; the actionable next step lives in `message`.
+    content: [{ type: 'text', text: payload.message.includes(summary) ? payload.message : `${summary} ${payload.message}` }],
     structuredContent: withGuidedEnvelope(payload, env),
     errorCategory: payload.errorCategory,
     isRetryable: payload.isRetryable,

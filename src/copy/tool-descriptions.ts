@@ -6,128 +6,37 @@ export type McpToolCopy = {
 export const MCP_TOOL_COPY = {
   search_classes: {
     title: 'Search classes on the resolved classpath',
-    description: `Discovery tool for finding classes when you don't know the FQN. Returns a ranked suggestion list: each hit is className (FQN) plus libName (artifact or Gradle module) — enough to call get_class_structure next.
-
-Use this when: the user mentions a type by simple name, you see an unknown class in a stack trace, or you need to locate which dependency provides something. Follow up with get_class_structure (scope=overview) — never jump straight to get_class_source.
-
-Query: case-insensitive substring matched against FQN, simple name, and (when sources were available at index time) declared method/field names and Javadoc text. Whitespace-separated tokens are AND'd (each token must match independently) — not one contiguous phrase. This is type-oriented discovery — not a full method-body grep. For literals/strings inside a known dependency JAR, use search_in_artifact. Globs with * and ? are matched against FQN or simple name only (no AND split).
-
-Params: query (required); modulePath, configuration, includeTest, limit (default 50, max 200), forceRefresh (after dependency changes). Optional include array expands the response (same tokens in compact text and JSON): simpleName, score, origin, coordinates, location (jarPath/moduleRoot), scope (moduleName/configurationName), indexMeta (index build stats at payload root), all (full per-hit fields plus indexMeta). Default omits jar paths and Maven coordinates.
-
-Returns: compact text — one FQN and libName per line by default; full=true returns JSON with the same default projection unless include expands it. Only set full=true if you are parsing the result programmatically.
-
-Errors: isError=true with RESOLUTION_FAILED if Gradle resolution fails, or a classpath validation code.`,
+    description: `Find which dependency JAR provides a class when you only have a simple name, partial name, or keyword (e.g. ObjectMapper, retry). Use for unknown types in stack traces or imports, instead of unzip/jar searches. Returns FQN + library per hit; next call get_class_structure.`,
   },
 
   get_class_structure: {
     title: 'Get structured Java class API',
-    description: `Returns the API surface of a class: purpose, declared methods, optionally fields/annotations/hierarchy. The right starting point after search_classes and before fetching source.
-
-Use this when: you have an FQN and want to know what the class does and what methods it exposes. For a single method's overloads, use get_method_signature instead.
-
-Scope (default = overview):
-  • overview   — class purpose + declared method names. When the type is field-heavy (≥8 fields and ≤2 non-constructor declared methods), lists fields (capped) instead of only a count.
-  • declared   — signature lines for all declared members.
-  • effective  — declared plus inherited API (capped).
-
-Params: className (required); scope; include (hierarchy/fields/annotations, mainly useful with full=true); standard project params.
-
-Returns: compact text by default; full=true returns JSON. Does not decompile.
-Compact declaration lines abbreviate modifiers (P=public, p=private, prot=protected, pack=package-private, s=static, f=final, a=abstract) — e.g. "Psf long ZERO", "Ps void foo()". JSON keeps full visibility/static/final fields.
-
-Errors: SIGNATURE_EXTRACT_FAILED if javap cannot read the class. CLASS_NOT_FOUND surfaces as isError=false, found=false — a clean miss, not a failure.`,
+    description: `Show what a third-party library (JAR) class is and does: purpose and method names; scope=declared adds all signatures and fields, scope=effective adds inherited members. First call for any dependency class you can name; use instead of reading source or javap. One method's overloads: get_method_signature.`,
   },
 
   get_method_signature: {
     title: 'Get Java method overload signatures',
-    description: `Lists every overload of a named method on a class. Preferred over get_class_source whenever you only need signatures.
-
-Use this when: verifying a method exists, checking parameter types, picking the right overload, or confirming a return type. For constructors, pass methodName = "<init>".
-
-Params: className; methodName (required singular) OR methodNames with exactly one element (alias — do not pass multiple names; call once per method or use get_class_structure). Standard project params.
-
-Resolution strategy (default, bytecodeOnly=false):
-  1. Parse .java from the sources JAR or inter-project src if available — keeps real parameter names and generics (sourceAvailable=true).
-  2. Otherwise fall back to javap -private -verbose on bytecode — parameter names may be synthetic like arg0 (sourceAvailable=false).
-
-bytecodeOnly=true forces step 2: javap only on the binary classpath element. Gives full JVM descriptors, flags, and synthetic members; sourceAvailable is always false.
-
-Returns: compact text — one declaration line per overload — by default; full=true returns JSON.
-Compact lines use the same modifier abbreviations as get_class_structure (P/p/prot/pack + s/f/a), e.g. "Ps void empty()". full=true declarationLine stays full Java spelling.
-
-Result semantics:
-  • Class missing from classpath: isError=false, found=false (CLASS_NOT_FOUND).
-  • Class present but no matching method overloads: isError=false, found=false, methodFound=false, querySucceeded=true — same found semantics as search/find. The name may be a field; use get_class_structure. Inherited bodies: scope=effective then retry on declaringClass.`,
+    description: `List every overload (parameters, generics, return type) of one or more methods or constructors ("<init>") of a dependency class. Use to verify a call or pick an overload. Not for bodies: use get_class_source.`,
   },
 
   find_in_class_source: {
     title: 'Find text in resolved Java source',
-    description: `Default query is a literal substring; set regex: true only for a JavaScript RegExp. Searches the source of one resolved class — like grep, scoped to a single classpath-resolved class, not the workspace.
-
-Use this when: the class is known and you need to locate a specific string, identifier, or pattern inside it. For discovering classes by name, use search_classes; for grepping a whole dependency JAR, use search_in_artifact.
-
-Resolves source the same way as get_class_source (sources JAR preferred; CFR decompilation if absent).
-
-Returns hits with line/column, matched text, optional multiline block, and surrounding context lines. Compact text by default; full=true returns JSON.
-
-Result semantics:
-  • Class missing from classpath: isError=false, found=false (CLASS_NOT_FOUND).
-  • Class found, pattern not present: isError=false, found=false, querySucceeded=true — a successful scan with no match, not an error. Empty regex results state that regex mode was used.`,
+    description: `Grep one known dependency class's source for a string, identifier, or pattern (literal; regex optional). Unknown class: search_classes. Whole JAR: search_in_artifact.`,
   },
 
   get_class_source: {
     title: 'Get Java source for a class',
-    description: `Returns the Java source of a fully-qualified class. The heaviest tool in the ladder — reach for it only when you genuinely need method bodies.
-
-Use this when: reading implementation details, understanding control flow, or confirming behavior the signature alone can't reveal. Do NOT use it to discover method names (use get_class_structure) or to check signatures (use get_method_signature).
-
-Always prefer an excerpt over full source:
-  • methodNames — array of method names to extract. Use "<init>" for constructors. Response echoes matchedMethodNames and unmatchedMethodNames. Unmatched names are also sought on superclasses/interfaces on the classpath; inherited bodies include declaringClass metadata.
-  • startLine/endLine — 1-based line range.
-
-If neither excerpt param is given, the full file is returned only when under ~64KiB (JVMSRC_MAX_FULL_SOURCE_CHARS); larger units return SOURCE_OUTPUT_TOO_LARGE — narrow with methodNames or a line range. Keep full source as a last resort.
-
-Source provenance: original source from a sources JAR when available (Javadoc, parameter names, generics are ground truth); otherwise CFR decompilation, where structure is reliable but identifiers may be synthetic. Check sourceAvailable on the response.
-
-Returns: compact text source with a provenance footer; full=true returns a JSON envelope. Only set full=true if you are parsing the result.
-
-Result semantics:
-  • Class missing from a successfully resolved classpath: isError=false, found=false. Not an access failure.
-  • If outputTruncated=true, fetch a narrower excerpt (methodNames or a tighter line range) — do not assume the missing code is absent.
-
-Errors: isError=true with errorCategory, isRetryable, message, and a stable error code.`,
+    description: `Read a dependency class's Java source, ideally only specific methods via methodNames (or startLine/endLine). Use only when you need the implementation, not names or signatures. Sources JAR if present, else decompiled (sourceAvailable=false). Whole files over ~64KiB are refused: pass methodNames.`,
   },
 
   resolve_dependencies: {
     title: 'Resolve Gradle dependencies',
-    description: `Runs (or returns cached) Gradle dependency resolution for the project and reports modules, configurations, and resolved artifacts.
-
-Use this when: diagnosing a version mismatch, debugging NoSuchMethodError / AbstractMethodError / ClassCastException across libraries, or confirming which version of a dependency is actually on the classpath. Start here before chasing symptoms in source.
-
-Params: standard project params; forceRefresh=true bypasses the hash cache — use it after dependency changes that don't touch build files (e.g., SNAPSHOT republish).
-
-Returns: compact text module/configuration summary by default; full=true returns the full artifact JSON. Only set full=true if parsing.
-
-Errors: isError=true with RESOLUTION_FAILED, plus errorCategory, isRetryable, and message.`,
+    description: `List Gradle modules and, with query, the exact dependency versions on the classpath per module (conflicts flagged). Start here for NoSuchMethodError, AbstractMethodError, ClassCastException, or "which version of X is used?"; use instead of reading Gradle files or ~/.gradle caches.`,
   },
+
   search_in_artifact: {
     title: 'Search text across all classes in one resolved dependency JAR',
-    description: `Grep-like search across every class in one artifact (by Maven coordinates or absolute jarPath). Fetches source for each class (sources JAR preferred; CFR decompilation fallback) and runs the query, returning hits grouped by className.
-
-Use this when: you know which library contains a log message, exception string, or API literal — but not which class. Use find_in_class_source when the class is already known; use search_classes when you need to discover which library provides a class by name.
-
-Artifact selector (one required):
-  • coordinates — { group, name, version? }. Omitting version does a loose match; if multiple JAR paths match, ARTIFACT_AMBIGUOUS is returned with a candidates list.
-  • jarPath — absolute path from a prior resolve_dependencies result. Always unambiguous.
-
-Search params: query (required, literal by default); regex=true for JS RegExp; contextLines (default 3, max 50); maxHits (total across all classes, default 20, max 100); maxClasses (FQN scan cap, default 500).
-
-Returns: compact text — hits grouped by className with line:col and context; full=true for JSON. truncated=true when maxHits or maxClasses was reached.
-
-Result semantics:
-  • ARTIFACT_NOT_FOUND / ARTIFACT_AMBIGUOUS: isError=false, found=false — not an access failure.
-  • FIND_QUERY_INVALID: bad regex — fix and retry.
-  • Line numbers are reliable only when sourceAvailable=true (original sources JAR).`,
+    description: `Grep every class in one dependency JAR for a string (log message, exception text, constant). Use when you know the library but not the class. Pass coordinates {group, name, version} (see resolve_dependencies with query) or jarPath.`,
   },
 } as const satisfies Record<string, McpToolCopy>;
 

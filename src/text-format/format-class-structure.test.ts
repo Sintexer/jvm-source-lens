@@ -191,3 +191,19 @@ test('formatClassStructureText declared field line uses compact modifiers', () =
   expect(text).toContain('Psf long ZERO');
   expect(text).not.toContain('public static final');
 });
+
+test('overview collapses overloads to name×N', () => {
+  const method = (name: string) => ({ name, jvmMethodName: name, inherited: false }) as never;
+  const text = formatClassStructureText({
+    className: 'a.B',
+    kind: 'class',
+    superclass: null,
+    interfaces: [],
+    typeParameters: [],
+    fields: [],
+    methods: [method('of'), method('of'), method('of'), method('copy')],
+    sourceAvailable: true,
+    provenance: { kind: 'classpathJar', coordinates: { group: 'g', name: 'a', version: '1' }, jarPath: '/x.jar' },
+  } as never);
+  expect(text).toContain('Declared method names (4): of×3, copy');
+});

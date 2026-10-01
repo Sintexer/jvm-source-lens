@@ -16,7 +16,7 @@ export function formatClassSourceCompactText(result: Extract<ClassSourceLookupRe
           : '')
       : '';
   const trunc = result.outputTruncated
-    ? `\n(source truncated from ${result.sourceLength} chars; use methodNames excerpt or full=true)`
+    ? `\n(source truncated from ${result.sourceLength} chars; use a methodNames excerpt)`
     : '';
   return (
     result.source +

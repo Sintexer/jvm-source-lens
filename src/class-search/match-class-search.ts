@@ -111,6 +111,8 @@ export function matchAndRankClassSearch(
   entries: ClassSearchIndexEntry[],
   query: string,
   limit: number,
+  /** Hits with the same key collapse to the best-scoring one. Default: FQN only. */
+  dedupeKey: (e: ClassSearchIndexEntry) => string = (e) => e.className,
 ): { hits: ClassSearchHit[]; totalMatches: number } {
   const lim = Math.min(Math.max(limit, 1), 200);
   const parsed = parseClassSearchQuery(query);
@@ -122,11 +124,12 @@ export function matchAndRankClassSearch(
     if (score < 0) {
       continue;
     }
-    const prev = best.get(e.className);
+    const key = dedupeKey(e);
+    const prev = best.get(key);
     if (prev !== undefined && prev.score >= score) {
       continue;
     }
-    best.set(e.className, entryToHit(e, score));
+    best.set(key, entryToHit(e, score));
   }
 
   const list = [...best.values()].sort((a, b) => {

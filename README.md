@@ -170,6 +170,41 @@ Omit the `env` block entirely when the project does not need them.
 > [!NOTE]  
 > **Multimodule:** omit `modulePath` and jvmsrc auto-picks the unique owning module; on a miss it lists candidate `modulePath`s. **Methods:** `search_classes` matches declared method names when the index has source enrichment; for body text in a known JAR use `search_in_artifact`. `get_class_source` `methodNames` also walks superclasses for unmatched names.
 
+### Make your agent use it
+
+Tool descriptions help, but a built-in `Bash` tool the agent already trusts will often win. Two small additions make `jvmsrc` the default for dependency questions.
+
+**1. Add a rule to your agent's instructions** (`CLAUDE.md`, `AGENTS.md`, Cursor rules) — many clients do not show MCP server `instructions` at all:
+
+```markdown
+## Dependencies (jvmsrc)
+For any question about a third-party library class, method or version, use the jvmsrc MCP tools
+(search_classes → get_class_structure → get_class_source with methodNames; resolve_dependencies for versions).
+Never use javap, unzip/jar on JARs, or ~/.gradle/caches. Code under this repo's src/ → grep/read as usual.
+```
+
+**2. (Claude Code) Block the shell fallbacks with a hook.** [`docs/hooks/block-jvm-fallbacks.mjs`](docs/hooks/block-jvm-fallbacks.mjs) denies `javap`, `unzip`/`jar` on JARs, and `~/.gradle/caches` / `~/.m2` access, and tells the agent to use `jvmsrc` instead, so it redirects instead of silently reading the wrong version. Save the script somewhere stable and add to `.claude/settings.json` (project) or `~/.claude/settings.json` (all projects):
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "node /absolute/path/to/block-jvm-fallbacks.mjs" }]
+      }
+    ]
+  }
+}
+```
+
+Set `JVMSRC_HOOK_DISABLE=1` to switch it off temporarily. Other clients have their own hook mechanisms; check their current docs before porting.
+
+**Check that your client shows the server instructions:** ask the agent *"What instructions does the jvmsrc MCP server give?"*. If it cannot answer, rely on the rule in step 1.
+
+> [!NOTE]
+> **Inputs are forgiving.** `projectRoot` can be omitted (the workspace is used, or set `JVMSRC_PROJECT_ROOT`); `modulePath` accepts `app`, `/app` or `:app`; `className` accepts a simple name, `Outer.Inner`, or a trailing `.class`/`.java`. The first call on a project runs Gradle (typically 5–10s); later calls use the cache. Pass `forceRefresh: true` only after something changed that the build files do not show, such as a SNAPSHOT republish.
+
 ---
 
 ## How It Compares
@@ -277,7 +312,9 @@ jvmsrc mcp                                                     # run as MCP serv
 | `JVMSRC_CONFIG_DIR` | Global jvmsrc config directory (absolute) |
 | `JVMSRC_CACHE_ROOT` | Cache root (absolute) |
 | `JVMSRC_LOG_DIR` | Diagnostic logs (absolute) |
+| `JVMSRC_CALL_LOG` | `1` = append one line per MCP tool call to `calls.log` (opt-in; see SPEC §6.3) |
 | `JVMSRC_ALLOWED_ROOTS` | Allowed `projectRoot` prefixes |
+| `JVMSRC_PROJECT_ROOT` | Default project root for MCP tools when `projectRoot` is omitted and the client sends no workspace roots (falls back to the working directory) |
 | `JVMSRC_MAX_SOURCE_OUTPUT_CHARS` | Max source body size (default 524288) |
 | `JVMSRC_GRADLE_TIMEOUT_MS` | Gradle timeout |
 | `JVMSRC_CFR_PATH` | Custom CFR JAR |

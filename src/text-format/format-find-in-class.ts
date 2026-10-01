@@ -28,8 +28,6 @@ export function formatFindInClassSourceText(
   }
   lines.push('');
   lines.push(formatProvenanceLine(result.provenance));
-  lines.push('');
-  lines.push('Use full=true for JSON hits with full context arrays.');
   return lines.join('\n');
 }
 

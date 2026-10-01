@@ -59,6 +59,8 @@ export type ClassSearchHit = {
   moduleRoot: string | null;
   interprojectModuleName: string | null;
   score: number;
+  /** Set when several modules were searched: the modules whose classpath provides exactly this class/artifact. */
+  modules?: string[];
 };
 
 export type SearchClassesOptions = {

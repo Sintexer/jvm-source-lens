@@ -69,6 +69,8 @@ When you **merge** work that completes an item (or a clearly scoped sub-bullet u
 ### P3 — Future / post–v2
 
 - [ ] MCP hierarchy discovery: `get_implementors` / `get_subclasses` (inverted index over resolved JARs; §12.2)
+- [ ] **Nested (inner) class source** — `get_class_source` / `get_class_structure` / `get_method_signature` / `find_in_class_source` for `Outer$Inner` read the enclosing `Outer.java` and return only the nested type (today: `DECOMPILE_FAILED`). See *Nested class source* below.
+- [ ] **Package & docs-only JAR documentation** — package-level Javadoc (`package-info.java`, `package-summary.html`) and Javadoc from `-javadoc.jar` artifacts when no sources exist. See *Package documentation* below.
 
 ### Done (baseline — do not uncheck)
 
@@ -181,6 +183,92 @@ Requires an inverted index (supertype → known subtypes / implementors) across 
 - Bazel resolver
 - Pluggable decompiler backends beyond CFR
 - Bulk sources download at `jvmsrcResolve` time (use on-demand `jvmsrcResolveSources` only)
+
+---
+
+## P3 — Planned: nested (inner) class source
+
+**Problem (reproduced 2026-10, eval prompt `s04`):** `get_class_source` for `com.google.common.collect.ImmutableList$Builder` fails with `DECOMPILE_FAILED`. Every source lookup derives the file name from the binary name (`fqnToZipRelPaths` → `…/ImmutableList$Builder.java`), which does not exist; the CFR fallback then decompiles the inner `.class` alone and produces nothing. `get_class_structure` still works through `javap` but loses Javadoc and real parameter names for nested types, and `parseJavaTypeMetadata` only finds **top-level** declarations.
+
+**Where it bites:** `fqn-paths.ts` (`sourceRelPath`) is consumed by `extract-external-class-source.ts`, `read-java-source-from-classpath.ts`, `local-module-sources.ts`, `interproject-paths.ts`; the structure/signature source-first paths use `parseJavaTypeMetadata` / `collectMethodSourceSpans`; `search_in_artifact` enumerates `Outer$Inner` entries as if they were separate files.
+
+**Target behavior**
+
+- `Outer$Inner` (any depth) resolves to the enclosing `Outer.java` in sources JARs, inter-project modules and local modules; result contains **only the nested type** (declaration + body, leading Javadoc/annotations), not the whole outer file, so the size guard applies to the slice.
+- Line numbers stay **file-relative** (`startLine`/`endLine`, `find_in_class_source` hits), with a one-line header comment naming the enclosing file and range.
+- `methodNames` excerpts, `get_method_signature`, `get_class_structure` (Javadoc, parameter names) work on the nested type; `sourceAvailable` stays `true` when read from sources.
+- Provenance gains the enclosing file (`sourceRelativePath` of `Outer.java`) and a `nestedIn` field (SPEC §7.1 / §8 update).
+- CFR fallback: decompile the **outer** class (CFR emits inner classes inline), cache once per outer entry under `decompiled/`, then extract the nested type with the same locator; `sourceAvailable: false`.
+- `search_in_artifact`: skip `$` classes whose outer source was scanned (no duplicate or failed per-inner loads).
+- Anonymous / local classes (`Outer$1`, `Outer$1Local`) have no declaration: return the enclosing member's context or a clear message; low priority.
+- Unchanged: `Outer.Inner` → `Outer$Inner` canonicalization (already in `canonicalize-class-name.ts`).
+
+**Design notes**
+
+1. **File candidates, in order:** the exact `Outer$Inner.java` (rare real top-level names containing `$`), then the outer name (strip from the first `$`). New `fqnToSourceCandidates()` instead of one `sourceRelPath`.
+2. **Locator:** `locateTypeDeclaration(source, ['Outer','Inner',…])` → `{ start (incl. leading Javadoc/annotations), openBrace, closeBrace }`. Reuse `findTopLevelTypeKeywordMatch`, `findTypeBodyOpenBrace`, `indexOfMatchingBrace`, `skipLexicalNoise`, `extendSpanWithLeadingJavadoc`; descend by scanning member declarations at body depth 0 (the member loop in `parseJavaTypeMetadata` currently *skips* nested types). Must handle strings, char literals `'{'`, comments, text blocks, annotations with braces, generics, `record`/`enum`/`interface`/`@interface` members, same simple name nested under different outers.
+3. **Metadata:** `parseJavaTypeMetadata(source, fqn)` takes the nested path so header, members and Javadoc come from the nested body; `collectMethodSourceSpans` restricted to the nested range.
+4. **Not solvable from the name:** non-public secondary top-level classes living in another file; stay on the CFR fallback.
+
+**Checkpoints (developer stops after each)**
+
+- [ ] **N0 — Spike:** confirm CFR behavior (inner alone vs outer with `--innerclasses`/default) on guava `ImmutableList`; record findings and decide the decompile fallback shape.
+- [ ] **N1 — Locator + tests:** `locateTypeDeclaration` with unit tests for the cases above (no pipeline wiring yet).
+- [ ] **N2 — Source lookup:** `fqnToSourceCandidates` through the sources-JAR / inter-project / local-module readers; `get_class_source` returns the nested slice with file-relative line numbers; provenance + SPEC.
+- [ ] **N3 — Structure, signatures, find, excerpts:** `parseJavaTypeMetadata` nested path; `get_class_structure` / `get_method_signature` Javadoc and parameter names; `find_in_class_source` on the slice; `methodNames` excerpts.
+- [ ] **N4 — Decompile fallback + search_in_artifact:** outer-class decompile with extraction and cache; skip scanned `$` classes.
+- [ ] **N5 — Evals:** `s04` passes first call; add 3–4 nested-class prompts to `test/evals/prompts.json`; re-run baseline.
+
+**Acceptance:** `get_class_source com.google.common.collect.ImmutableList$Builder` (and `methodNames: ["build"]`) succeeds from a sources JAR and under the size limit; same call with sources absent succeeds via the outer-class decompile; no regression in `bun test`.
+
+---
+
+## P3 — Planned: package documentation and docs-only artifacts
+
+**Problem:** agents often need to know **what a package is for** ("what does `org.springframework.retry` do?") or want a library's own prose, and some dependencies publish **documentation without sources** (`-javadoc.jar`; older JARs with `package.html`). Today jvmsrc ignores both: the Gradle init script deliberately drops `*-javadoc.jar` artifacts (`analyzer-init.gradle`), there is no on-demand javadoc resolution (only `jvmsrcResolveSources`), and package-level Javadoc (`package-info.java`) is never surfaced. For classes without sources the agent gets decompiled code with no comments (`sourceAvailable: false`).
+
+**Documentation sources, in priority order**
+
+| # | Source | Content | Cost |
+|---|---|---|---|
+| 1 | `package-info.java` in the sources JAR (or inter-project `src/main/java`) | package Javadoc | low: existing ZIP reader + Javadoc extraction |
+| 2 | `-javadoc.jar` → `…/package-summary.html` (+ `package-tree`, `index-all`, `element-list`) | package description, type list with summaries | medium: Gradle `JavadocArtifact` resolution + HTML→text |
+| 3 | `-javadoc.jar` → `…/Foo.html` | class and member Javadoc when **no sources** exist | medium: same HTML extractor |
+| 4 | `package.html` / `overview.html` in binary or sources JARs | legacy package docs | low |
+| 5 | Resource docs (`META-INF`/root `README`, `*.md`) | free-form | later, optional |
+
+**Target behavior**
+
+- A way to ask for a package: description + list of its types with one-line summaries, labelled with the **source of the text** (`sourcesJar` / `javadocJar` / `packageHtml`).
+- `get_class_structure` / `get_method_signature`: when sources are absent but a javadoc JAR exists, fill `Purpose:` and member Javadoc from it (`sourceAvailable` stays `false`; add a `docsSource` field so the two are not conflated).
+- Optional docs search ("find the concept 'retry'" across prose): either `search_in_artifact` with a docs scope or enrichment of the class-search index with package/class summaries.
+- Output budgets and `truncated` flags like the other tools; no network fetch of linked pages; HTML is treated as untrusted (strip scripts/styles, never execute, size guard).
+
+**Design notes**
+
+1. **Resolution:** new on-demand Gradle task `jvmsrcResolveJavadoc` mirroring `jvmsrcResolveSources` (ArtifactResolutionQuery with the javadoc artifact type — *verify the exact Gradle API on the supported Gradle versions in the spike*), plus `resolve-javadoc-jar.ts` mirroring `resolve-sources-jar.ts`. Keep it **on demand** (no `ResolutionOutput` schema bump); private-repository credentials work as for sources.
+2. **HTML extraction:** JDK 8 vs 11 vs 17+ javadoc layouts differ (`div.block`, `section.package-description`, `section.class-description`). Prefer a small tolerant extractor targeting those containers with a stripped-text fallback, **without new runtime dependencies** unless the spike shows it is unreliable (then evaluate a minimal HTML parser).
+3. **Caching:** extracted text per (JAR path + mtime/hash, entry) under a global `docs/` directory beside `decompiled/` (SPEC §6.2).
+4. **Tool surface — decide in D0:** (a) dedicated `get_package_docs` (best discoverability for tool search; ~+200 eager tokens), vs (b) let `get_class_structure` accept a package name (no new tool, overloaded semantics). Add 6 package-doc prompts to the evals and compare selection and first-call success; check `bun run measure:tokens` stays reasonable.
+5. **Errors:** new stable code(s) (e.g. `DOCS_NOT_FOUND`, `DOCS_RESOLVE_FAILED`) are a public-contract change: SPEC §7 and a release note.
+6. **Out of scope for now:** JDK (`java.*`) docs, Maven site/Dokka non-Javadoc formats, documentation fetched from the web.
+
+**Checkpoints (developer stops after each)**
+
+- [ ] **D0 — Discovery spike:** list which artifacts on a real project (eval project plus the developer's own) are docs-only or have `package-info` / `package.html`; verify the Gradle API for javadoc artifacts; sample HTML from JDK 8, 11 and 17+ javadoc; decide tool surface (4 above). Output: short findings added here.
+- [ ] **D1 — `package-info.java` from sources:** package Javadoc end to end (tool or fold-in per D0), including inter-project modules; tests with a synthetic sources JAR.
+- [ ] **D2 — Javadoc JAR resolution + extraction:** `jvmsrcResolveJavadoc`, HTML extractor, package summary and type list; synthetic javadoc-JAR fixtures for each layout; docs cache.
+- [ ] **D3 — Class and member Javadoc without sources:** `get_class_structure` / `get_method_signature` fallback and `docsSource` field; SPEC §7.1 / §8.
+- [ ] **D4 — Docs search (optional):** `search_in_artifact` docs scope or index enrichment, whichever D0 favors.
+- [ ] **D5 — Evals and copy:** package-doc prompts, tool description (selection signal), token budget check, README/SPEC.
+
+**Open questions (answer before D0)**
+
+1. What exactly are the "docs only" JARs you meet: `-javadoc.jar` classifiers, internal documentation artifacts (Markdown/HTML), or something else? A concrete example artifact would settle the extractor scope.
+2. Should package documentation be a new tool or part of `get_class_structure`?
+3. Priority against nested-class support and the open items in `docs/mcp-ux-todo.md`.
+
+**Sequencing:** do *Nested class source* first. Its locator and Javadoc handling are reused for per-member documentation, and it fixes a failure seen in the eval baseline.
 
 ---
 

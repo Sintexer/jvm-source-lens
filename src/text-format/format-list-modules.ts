@@ -15,9 +15,7 @@ export function formatListModulesText(data: ListModulesPayloadData): string {
   }
   if (data.resolutionWarningCount > 0) {
     lines.push('');
-    lines.push(`Resolution warnings: ${data.resolutionWarningCount} (use resolve_dependencies full=true for errors[])`);
+    lines.push(`Resolution warnings: ${data.resolutionWarningCount}`);
   }
-  lines.push('');
-  lines.push('Use full=true for JSON module objects.');
   return lines.join('\n');
 }

@@ -31,6 +31,10 @@ const ALLOWED_INPUT_KEYS = new Set([
   'includeTest',
   'forceRefresh',
   'operation',
+  'scope',
+  'full',
+  'jarPath',
+  'maxClasses',
 ]);
 
 /**

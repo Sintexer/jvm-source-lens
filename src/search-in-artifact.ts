@@ -231,18 +231,42 @@ export async function searchInArtifactFromOutput(
 ): Promise<SearchInArtifactResult> {
   const projectRoot = opts.projectRoot ?? output.projectRoot;
 
-  // 1. Pick configuration
+  // 1–2. Pick configuration and collect candidate artifacts. Without modulePath on a multi-module
+  // build, look in every module that has the classpath: differing versions then surface as
+  // ARTIFACT_AMBIGUOUS (with candidates) instead of a module error.
   const picked = pickResolvedConfiguration(output, {
     modulePath: opts.modulePath,
     configuration: opts.configuration,
     includeTest: opts.includeTest,
   });
-  if (!picked.ok) {
+  let binaryArtifacts: ResolvedArtifact[];
+  if (picked.ok) {
+    binaryArtifacts = picked.configuration.artifacts.filter(isClasspathBinaryJarArtifact);
+  } else if (picked.error.code === 'MODULE_AMBIGUOUS' && picked.error.className === undefined) {
+    const seen = new Set<string>();
+    binaryArtifacts = [];
+    for (const modulePath of picked.error.modulePaths) {
+      const each = pickResolvedConfiguration(output, {
+        modulePath,
+        configuration: opts.configuration,
+        includeTest: opts.includeTest,
+      });
+      if (!each.ok) {
+        continue;
+      }
+      for (const a of each.configuration.artifacts.filter(isClasspathBinaryJarArtifact)) {
+        const key = `${a.group}:${a.name}:${a.version ?? ''}|${a.jarPath ?? ''}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          binaryArtifacts.push(a);
+        }
+      }
+    }
+  } else {
     return { ok: false, error: picked.error };
   }
 
-  // 2. Select artifact
-  const binaryArtifacts = picked.configuration.artifacts.filter(isClasspathBinaryJarArtifact);
+  // 2b. Select artifact
   const selection = selectArtifact(binaryArtifacts, opts.selector);
   if ('ok' in selection && selection.found === false) {
     return selection;

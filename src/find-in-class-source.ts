@@ -64,6 +64,7 @@ function toGetOpts(opts: FindInClassSourceOptions): GetClassSourceOptions {
     configuration: opts.configuration,
     includeTest: opts.includeTest,
     forceRefresh: opts.forceRefresh,
+    rawForSearch: true,
     cli: opts.cli,
   };
 }

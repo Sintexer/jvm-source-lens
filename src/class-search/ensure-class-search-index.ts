@@ -30,7 +30,11 @@ export function ensureClassSearchIndex(
   const buildInputsDigest = computeBuildInputsDigest(canonical);
   const fp = resolutionFingerprint(output);
 
-  const cached = readClassSearchIndex(canonical);
+  const cached = readClassSearchIndex(canonical, {
+    moduleName: scope.module.name,
+    configurationName: scope.configuration.name,
+    includeTest: scope.includeTest,
+  });
   if (cached.ok) {
     const { meta } = cached.file;
     if (

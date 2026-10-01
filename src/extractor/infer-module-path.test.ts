@@ -88,6 +88,30 @@ describe('inferModulePath', () => {
     }
   });
 
+  test('source-only inter-project classes are found, and owner modules sharing them are not ambiguous', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-infer-'));
+    const coreDir = path.join(dir, 'core');
+    fs.mkdirSync(path.join(coreDir, 'src/main/java/com/example'), { recursive: true });
+    fs.writeFileSync(path.join(coreDir, 'src/main/java/com/example/Foo.java'), 'package com.example; class Foo {}');
+
+    const out = multiModuleOutput(dir, {
+      ':app': [
+        artifact({
+          group: 'project',
+          name: 'core',
+          version: null,
+          type: 'project',
+          origin: 'interproject',
+          interproject: { moduleName: ':core', modulePath: coreDir },
+        }),
+      ],
+      ':core': [],
+    });
+
+    const r = inferModulePath(out, { className: 'com.example.Foo' });
+    expect(r).toEqual({ kind: 'use', modulePath: ':app', inferred: true });
+  });
+
   test('reports none with all module names and summed searched count when no owner exists', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-infer-'));
     const jarA = jarWithClass(dir, 'a.jar', 'com/other/A.class');

@@ -132,6 +132,52 @@ function stripAnnotationsPrefix(segment: string): string {
   return s.replace(/^final\s+/, '').trim();
 }
 
+/** Strips any mix of leading `@Annotation(...)` and modifiers (`@A public @B static final ...`). */
+function stripLeadingAnnotationsAndModifiers(s: string): string {
+  let cur = s.trimStart();
+  for (;;) {
+    const next = stripLeadingModifiers(stripAnnotationsPrefix(cur));
+    if (next === cur) {
+      return cur;
+    }
+    cur = next;
+  }
+}
+
+/** Removes `@Foo` / `@Foo(...)` occurring anywhere in a type fragment (e.g. `@Nullable String`). */
+function stripInlineAnnotations(s: string): string {
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    if (s[i] === '@' && /[\w$]/.test(s[i + 1] ?? '')) {
+      i++;
+      while (i < s.length && /[\w$.]/.test(s[i]!)) {
+        i++;
+      }
+      let j = i;
+      while (j < s.length && /\s/.test(s[j]!)) {
+        j++;
+      }
+      if (s[j] === '(') {
+        let depth = 0;
+        for (; j < s.length; j++) {
+          if (s[j] === '(') {
+            depth++;
+          } else if (s[j] === ')' && --depth === 0) {
+            j++;
+            break;
+          }
+        }
+        i = j;
+      }
+      continue;
+    }
+    out += s[i];
+    i++;
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
+
 function skipLineComment(src: string, i: number): number {
   let j = i + 2;
   while (j < src.length && src[j] !== '\n') {
@@ -732,12 +778,12 @@ export function parseJavaTypeMetadata(
 
     const parseMethodDecl = (declRaw: string, relStart: number, relEnd: number): void => {
       const decl = declRaw.trim();
-      const inner = stripMethodGenericsPrefix(stripLeadingModifiers(decl));
+      const inner = stripAnnotationsPrefix(stripMethodGenericsPrefix(stripLeadingAnnotationsAndModifiers(decl)));
       const openParen = inner.indexOf('(');
       if (openParen <= 0) {
         return;
       }
-      const head = inner.slice(0, openParen).trim();
+      const head = stripInlineAnnotations(inner.slice(0, openParen));
       const paramsInner = extractParenContent(inner);
       const throwsRaw = parseThrowsTail(decl);
 

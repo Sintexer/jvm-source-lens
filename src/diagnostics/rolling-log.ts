@@ -4,8 +4,8 @@ import path from 'node:path';
 const MAX_BYTES = 5 * 1024 * 1024;
 const BACKUP_COUNT = 3;
 
-function rotateIfNeeded(logRoot: string): void {
-  const current = path.join(logRoot, 'current.log');
+function rotateIfNeeded(logRoot: string, fileName: string): void {
+  const current = path.join(logRoot, fileName);
   let size = 0;
   try {
     size = fs.statSync(current).size;
@@ -16,7 +16,7 @@ function rotateIfNeeded(logRoot: string): void {
     return;
   }
 
-  const topBackup = path.join(logRoot, `current.log.${BACKUP_COUNT}`);
+  const topBackup = path.join(logRoot, `${fileName}.${BACKUP_COUNT}`);
   try {
     fs.unlinkSync(topBackup);
   } catch {
@@ -24,8 +24,8 @@ function rotateIfNeeded(logRoot: string): void {
   }
 
   for (let i = BACKUP_COUNT - 1; i >= 1; i--) {
-    const from = path.join(logRoot, `current.log.${i}`);
-    const to = path.join(logRoot, `current.log.${i + 1}`);
+    const from = path.join(logRoot, `${fileName}.${i}`);
+    const to = path.join(logRoot, `${fileName}.${i + 1}`);
     try {
       fs.renameSync(from, to);
     } catch {
@@ -34,18 +34,18 @@ function rotateIfNeeded(logRoot: string): void {
   }
 
   try {
-    fs.renameSync(current, path.join(logRoot, 'current.log.1'));
+    fs.renameSync(current, path.join(logRoot, `${fileName}.1`));
   } catch {
     /* ignore */
   }
 }
 
-/** Append one NDJSON line; rotates `current.log` when it exceeds 5 MiB (SPEC §6.3). */
-export function appendNdjsonLine(logRoot: string, line: string): void {
+/** Append one NDJSON line; rotates `fileName` (default `current.log`) when it exceeds 5 MiB (SPEC §6.3). */
+export function appendNdjsonLine(logRoot: string, line: string, fileName = 'current.log'): void {
   try {
     fs.mkdirSync(logRoot, { recursive: true });
-    rotateIfNeeded(logRoot);
-    const current = path.join(logRoot, 'current.log');
+    rotateIfNeeded(logRoot, fileName);
+    const current = path.join(logRoot, fileName);
     fs.appendFileSync(current, `${line}\n`, 'utf8');
   } catch {
     /* diagnostic writes must not throw */

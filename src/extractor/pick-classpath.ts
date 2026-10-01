@@ -1,4 +1,5 @@
 import type { ClassSourceError } from './class-source-types.js';
+import { matchModule } from './match-module.js';
 import type {
   ResolutionOutput,
   ResolvedConfiguration,
@@ -77,20 +78,24 @@ export function pickResolvedConfiguration(
   const wantModule = opts.modulePath;
 
   if (wantModule !== undefined && wantModule.length > 0) {
-    const module = output.modules.find((m) => m.name === wantModule);
-    if (module === undefined) {
+    const match = matchModule(wantModule, output.modules);
+    if (match.kind !== 'match') {
+      const ambiguous = match.kind === 'ambiguous';
       return {
         ok: false,
         error: {
           code: 'MODULE_NOT_FOUND',
           message:
-            `No resolved module named ${JSON.stringify(wantModule)}.` +
-            formatAvailableModulesHint(availableModules),
+            (ambiguous
+              ? `Module ${JSON.stringify(wantModule)} matches several modules (${match.candidates.join(', ')}).`
+              : `No resolved module named ${JSON.stringify(wantModule)}.`) +
+            formatAvailableModulesHint(ambiguous ? match.candidates : availableModules),
           modulePath: wantModule,
-          availableModules,
+          availableModules: ambiguous ? match.candidates : availableModules,
         },
       };
     }
+    const module = match.module;
     const configuration = pickConfiguration(module, candidates);
     if (configuration === undefined) {
       const wanted = candidates.join(' or ');

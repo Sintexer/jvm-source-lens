@@ -50,6 +50,8 @@
   "scripts": {
     "dev:cli": "bun run src/cli.ts",
     "dev:mcp": "bun run src/mcp.ts",
+    "eval": "bun test/evals/run-evals.ts",
+    "measure:tokens": "tsx scripts/measure-eager-tokens.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "check": "bun run typecheck && bun test",
     "test": "bun test",

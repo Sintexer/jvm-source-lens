@@ -1,54 +1,14 @@
 export const JVMSRC_INSTRUCTIONS = `
-jvmsrc inspects external JVM dependencies — classes from JARs on the Gradle
-classpath, not files in this repo. Gradle projects only.
+jvmsrc reads third-party JVM dependencies: classes inside JARs on a Gradle project's classpath
+(structure, signatures, source, versions). Gradle projects only.
 
-Routing (strict):
-- External dependency (in a JAR) → jvmsrc, always
-- Local source under src/        → grep/glob/bash
-- If jvmsrc fails, surface the error. Never fall back to javap, unzip, jar, or the Gradle cache — they silently pick the wrong version.
+Use it instead of memory, web search, or javap/unzip/Gradle-cache digging for any question about
+a library class, method, or version — "what does X do", "which JAR has Y", NoSuchMethodError,
+ClassCastException, version conflicts. Code under this repo's src/ → grep/read instead.
 
-Use jvmsrc to:
-- Understand an external class, interface, or annotation
-- Find which dependency provides a type (unknown FQN or simple name)
-- Verify a method signature, overload, or return type
-- Inspect inherited members from an external superclass
-- Debug NoSuchMethodError, AbstractMethodError, ClassCastException, or version mismatch (start with resolve_dependencies)
+Flow: search_classes (only if the name is unknown) → get_class_structure → get_class_source with
+methodNames. For version problems start with resolve_dependencies.
 
-Tool ladder — narrowest first:
-1. search_classes        — unknown FQN or simple name (also matches declared method names when sources enriched the index; whitespace tokens are AND'd)
-2. get_class_structure   — class purpose + method names (start here; scope=effective for inherited API; field-heavy types list fields in overview)
-3. get_method_signature  — one method's overloads (methodName singular; methodNames length-1 alias ok; found=false when no overloads)
-4. find_in_class_source  — literal or regex query in a known class (param name: query; default = literal)
-5. search_in_artifact    — grep across one known dependency JAR when the class is unknown
-6. get_class_source      — bodies; excerpt via methodNames or line range (unscoped full source refused above ~64KiB).
-Full source is last resort.
-
-If get_class_structure marks a method inherited: true, call get_method_signature /
-get_class_source on the declaringClass (or use methodNames excerpts that walk supers).
-
-Never use get_class_source full source to discover names. Never pass
-full: true unless parsing JSON.
-
-Compact text conventions: declaration lines abbreviate modifiers —
-P=public, p=private, prot=protected, pack=package-private,
-s=static, f=final, a=abstract (e.g. "Psf long ZERO", "Ps void foo()").
-Provenance footers omit absolute jar/filesystem paths; use full=true
-with include provenance when you need paths. JSON keeps full spellings.
-
-projectRoot = directory with gradlew. modulePath (e.g. ":app") scopes to
-a submodule. When omitted on class-scoped tools, jvmsrc auto-picks the unique
-module that owns the FQN; on search_classes / config-scoped tools, it prefers
-root if it has the classpath, else the unique leaf with that config. If several
-modules match, you get candidates to retry with. On a miss in a multimodule
-project, retry with the leaf module that depends on the JAR. First call invokes
-Gradle (5–10s); later calls reuse cache. forceRefresh: true only after a
-SNAPSHOT republish.
-
-Subagent isolation: if the Agent (subagent) tool is available, dispatch
-to a subagent so verbose payloads stay out of the main context. Return a
-written summary matching the defined goal, not raw output.
-
-On errors or empty results, read message — it states what happened and the
-next tool to try. found: false with querySucceeded: true is a successful
-scan with no match, not a failure.
+Omit projectRoot and modulePath unless an error asks for them. If a call fails, fix the arguments
+as the error says and retry; never fall back to javap/unzip.
 `;

@@ -43,16 +43,20 @@ export function formatSearchClassesText(args: {
     `search_classes: ${args.totalMatches} match(es) for ${JSON.stringify(args.query)}; showing ${args.hits.length} (limit ${args.limit})`,
     '',
   ];
+  // Same FQN from different artifact versions (multi-module search): show the version to tell the lines apart.
+  const fqnCounts = new Map<string, number>();
   for (const h of args.hits) {
-    const libName = deriveLibName(h);
+    fqnCounts.set(h.className, (fqnCounts.get(h.className) ?? 0) + 1);
+  }
+  for (const h of args.hits) {
+    const version = (fqnCounts.get(h.className) ?? 0) > 1 && h.coordinates.version ? `:${h.coordinates.version}` : '';
+    const modules = h.modules !== undefined && h.modules.length > 0 ? `  [${h.modules.join(', ')}]` : '';
     const suffix = formatHitSuffix(h, args.include);
-    lines.push(`${h.className}  ${libName}${suffix}`);
+    lines.push(`${h.className}  ${deriveLibName(h)}${version}${modules}${suffix}`);
   }
   if (args.hits.length < args.totalMatches) {
     lines.push('');
     lines.push(`… ${args.totalMatches - args.hits.length} more match(es). Raise limit or narrow query.`);
   }
-  lines.push('');
-  lines.push('Use full=true for JSON. Optional include: score, coordinates, location, scope, indexMeta, all.');
   return lines.join('\n');
 }

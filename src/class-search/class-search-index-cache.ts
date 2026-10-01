@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { canonicalProjectRoot, getProjectResolutionCacheDir, writeFileAtomicSameDir } from '../cache/paths.js';
@@ -7,7 +8,16 @@ import {
   type ClassSearchIndexMeta,
 } from './types.js';
 
-const INDEX_FILE = 'class-search-index.json';
+/** One index file per (module, configuration, includeTest) so multi-module searches do not evict each other. */
+export type ClassSearchIndexScopeKey = { moduleName: string; configurationName: string; includeTest: boolean };
+
+function indexFileName(key: ClassSearchIndexScopeKey): string {
+  const h = createHash('sha1')
+    .update(`${key.moduleName}\0${key.configurationName}\0${key.includeTest ? 1 : 0}`)
+    .digest('hex')
+    .slice(0, 12);
+  return `class-search-index.${h}.json`;
+}
 
 export type ReadClassSearchIndexResult =
   | { ok: true; file: ClassSearchIndexFileV1 }
@@ -85,13 +95,13 @@ function parseIndexFile(raw: unknown): ClassSearchIndexFileV1 | null {
   };
 }
 
-export function readClassSearchIndex(projectRoot: string): ReadClassSearchIndexResult {
+export function readClassSearchIndex(projectRoot: string, key: ClassSearchIndexScopeKey): ReadClassSearchIndexResult {
   const canonical = canonicalProjectRoot(projectRoot);
   const bucketRes = getProjectResolutionCacheDir(canonical);
   if (!bucketRes.ok) {
     return { ok: false, reason: 'bucket', message: bucketRes.message };
   }
-  const p = path.join(bucketRes.dir, INDEX_FILE);
+  const p = path.join(bucketRes.dir, indexFileName(key));
   let text: string;
   try {
     text = fs.readFileSync(p, 'utf8');
@@ -113,6 +123,11 @@ export function readClassSearchIndex(projectRoot: string): ReadClassSearchIndexR
 }
 
 export function writeClassSearchIndex(projectRoot: string, file: ClassSearchIndexFileV1): { ok: true } | { ok: false; message: string } {
+  const key: ClassSearchIndexScopeKey = {
+    moduleName: file.meta.moduleName,
+    configurationName: file.meta.configurationName,
+    includeTest: file.meta.includeTest,
+  };
   const canonical = canonicalProjectRoot(projectRoot);
   const bucketRes = getProjectResolutionCacheDir(canonical);
   if (!bucketRes.ok) {
@@ -125,7 +140,7 @@ export function writeClassSearchIndex(projectRoot: string, file: ClassSearchInde
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, message: `Failed to ensure cache dir: ${msg}` };
   }
-  const dest = path.join(dir, INDEX_FILE);
+  const dest = path.join(dir, indexFileName(key));
   try {
     writeFileAtomicSameDir(dest, `${JSON.stringify(file)}\n`);
   } catch (e) {
