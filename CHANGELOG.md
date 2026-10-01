@@ -19,6 +19,15 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 - MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
 - **`src/guided-response/`:** centralized agent recovery copy for CLASS_NOT_FOUND, empty search, decompiled source warnings, and related outcomes.
 
+## [1.17.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.16.0...v1.17.0) (2026-10-01)
+
+
+### Features
+
+* bump versions ([d312683](https://github.com/Sintexer/jvm-source-lens/commit/d31268343fcfaeaf1ead835a4287d3ac34c09f2c))
+* implement better descriptions for mcp and work with falky input ([0fc2088](https://github.com/Sintexer/jvm-source-lens/commit/0fc2088d7c7f91ad97ee75fa2d0bf4e593c99914))
+* update installation readme ([9e759e4](https://github.com/Sintexer/jvm-source-lens/commit/9e759e4e173b33a0a1f59bf01939eb2085c8fc04))
+
 ## [1.16.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.15.0...v1.16.0) (2026-09-08)
 
 
