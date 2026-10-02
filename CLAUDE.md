@@ -47,6 +47,7 @@ Current scenarios:
 - **`gradle/multi-module/`** — real Gradle resolution of inter-project source (`origin: interproject`) and cache hit behaviour.
 - **`gradle/local-maven-publish/`** — `producer/` publishes a snapshot to a temp local Maven repo; `consumer/` depends on it. Tests verify the tool automatically picks up a new method added between two publishes (via local-artifact digest — no `forceRefresh` needed).
 - **`gradle/dependency-change/`** — `lib/` publishes two stable versions to a temp local Maven repo; `app/` starts on v1. Tests verify that editing `build.gradle` to reference v2 triggers an automatic cache miss and re-resolution without `forceRefresh`.
+- **`gradle/flatdir-jar/`** — `app/` depends on a flatDir jar (`implementation name: 'feedos_client_api'`, no group/version, no sources) built at test time. Tests verify `get` decompiles it via CFR instead of failing on the empty decompile-cache group.
 - **`gradle/version-conflict/`** — direct dep (v2) and transitive dep (v1) of the same library in `app/`. Tests verify the tool reports exactly the version Gradle selected (`highest-wins`) and that extracted source matches that version.
 
 Wrapper JARs are generated once via `bun run ensure:scenario-wrappers` (calls `scripts/ensure-scenario-wrappers.sh`). All scenario tests use `describe.skipIf(!wrapperJar)` — silent no-op in CI.

@@ -68,6 +68,23 @@ describe('getDecompiledCacheFilePath', () => {
     }
   });
 
+  test('falls back to _local group and unknown version for coordinate-less jars', () => {
+    for (const version of [null, '', '  ']) {
+      const r = getDecompiledCacheFilePath({ group: '', name: 'feedos_client_api', version }, 'com.feedos.Foo');
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.cachePath).toBe(
+          path.join(testCacheRoot, 'decompiled', '_local', 'feedos_client_api', 'unknown', 'jf1', 'Foo.java'),
+        );
+      }
+    }
+  });
+
+  test('still rejects empty artifact name', () => {
+    const r = getDecompiledCacheFilePath({ group: '', name: '', version: null }, 'com.feedos.Foo');
+    expect(r.ok).toBe(false);
+  });
+
   test('includes truncated jarContentHash segment when provided', () => {
     const hash = 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
     const r = getDecompiledCacheFilePath(

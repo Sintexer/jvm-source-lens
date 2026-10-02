@@ -590,6 +590,8 @@ CFR decompilation results are cached by artifact coordinates + class name under 
   decompiled/<group>/<artifact>/<version>/jf1/<jarHash8>/<ClassName>.java   ← when JAR content hash is known
 ```
 
+Jars without Maven coordinates (Gradle `flatDir`, `files(...)`) use group **`_local`** when the group is empty and version **`unknown`** when the version is empty or missing; the `<jarHash8>` segment keeps same-named jars distinct.
+
 This means sequential agent calls for classes within the same dependency pay the decompilation cost only once, and the store can be shared across projects on one machine. Files are written on the first decompile miss (atomic temp + rename, same pattern as resolution cache buckets).
 
 **Security (decompile path):**

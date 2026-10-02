@@ -25,6 +25,7 @@ projects=(
   "version-conflict/app"
   "gradle-properties-version/lib"
   "gradle-properties-version/app"
+  "flatdir-jar/app"
 )
 
 if ! command -v gradle >/dev/null 2>&1; then

@@ -67,6 +67,23 @@ describe('decompileExternalClass', () => {
     }
   });
 
+  test('decompiles coordinate-less (flatDir / files()) jars under the _local group', async () => {
+    isolateCacheEnv();
+    try {
+      const r = await decompileExternalClass({
+        ...baseOpts,
+        coordinates: { group: '', name: 'feedos_client_api', version: null },
+        runCfr: async () => ({ ok: true, source: 'class Foo {}' }),
+      });
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.provenance.cachePath).toContain(path.join('decompiled', '_local', 'feedos_client_api', 'unknown'));
+      }
+    } finally {
+      restoreCacheEnv();
+    }
+  });
+
   test('calls CFR on cache miss and writes cache', async () => {
     isolateCacheEnv();
     try {

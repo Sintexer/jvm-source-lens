@@ -88,6 +88,9 @@ export function isPathWithinDecompiledCache(filePath: string): boolean {
  */
 export const DECOMPILED_CACHE_LAYOUT = 'jf1';
 
+/** Cache group for jars without Maven coordinates (matches `analyzer-init.gradle` local-file jars). */
+const LOCAL_JAR_GROUP = '_local';
+
 /**
  * Path under global cache:
  *   - `decompiled/<group>/<artifact>/<version>/jf1/<jarHash8>/<SimpleName>.java` when `jarContentHash` is provided
@@ -108,7 +111,9 @@ export function getDecompiledCacheFilePath(
     return decompiledRoot;
   }
 
-  const group = validateCacheSegment('group', coordinates.group);
+  // Coordinate-less jars (Gradle flatDir / files(...)) have an empty group and may have a blank version.
+  const groupRaw = coordinates.group?.trim() ? coordinates.group : LOCAL_JAR_GROUP;
+  const group = validateCacheSegment('group', groupRaw);
   if (!group.ok) {
     return group;
   }
@@ -116,7 +121,7 @@ export function getDecompiledCacheFilePath(
   if (!name.ok) {
     return name;
   }
-  const versionRaw = coordinates.version ?? 'unknown';
+  const versionRaw = coordinates.version?.trim() ? coordinates.version : 'unknown';
   const version = validateCacheSegment('version', versionRaw);
   if (!version.ok) {
     return version;
