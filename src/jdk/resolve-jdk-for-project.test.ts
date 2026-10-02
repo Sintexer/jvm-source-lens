@@ -87,6 +87,30 @@ describe('resolveJdkForProject', () => {
     expect(result.majorVersion).toBe(17);
   });
 
+  test.each([11, 23])('Gradle 8.11.1 wrapper accepts JAVA_HOME=JDK %i without JVMSRC_JAVA_HOME', (major) => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-resolve-jdk-'));
+
+    fs.mkdirSync(path.join(tmpRoot, 'gradle', 'wrapper'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpRoot, 'gradle', 'wrapper', 'gradle-wrapper.properties'),
+      'distributionUrl=https://services.gradle.org/distributions/gradle-8.11.1-bin.zip\n',
+      'utf8',
+    );
+
+    const jdk = path.join(tmpRoot, '.jdks', `temurin-${major}`);
+    writeReleaseFile(jdk, `${major}.0.1`);
+
+    const result = resolveJdkForProject(tmpRoot, undefined, { JAVA_HOME: jdk }, hermeticLinux(tmpRoot));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.jdkHome).toBe(jdk);
+    expect(result.majorVersion).toBe(major);
+    expect(result.hint.source).toBe('gradle-wrapper-inferred');
+  });
+
   test('jdk not found message advises jdk-roots and states future operations fail', () => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-resolve-jdk-'));
 

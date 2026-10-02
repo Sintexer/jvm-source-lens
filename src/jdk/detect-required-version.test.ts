@@ -5,7 +5,8 @@ describe('gradleVersionToMinJava', () => {
   test('maps known Gradle baselines to minimum Java', () => {
     expect(gradleVersionToMinJava('7.4.2')).toBe(8);
     expect(gradleVersionToMinJava('8.7')).toBe(8);
-    expect(gradleVersionToMinJava('8.8')).toBe(17);
+    expect(gradleVersionToMinJava('8.8')).toBe(8);
+    expect(gradleVersionToMinJava('8.11.1')).toBe(8);
     expect(gradleVersionToMinJava('9.0')).toBe(17);
   });
 });
@@ -16,6 +17,8 @@ describe('gradleVersionToMaxJava', () => {
     expect(gradleVersionToMaxJava('8.3')).toBe(20);
     expect(gradleVersionToMaxJava('8.6')).toBe(21);
     expect(gradleVersionToMaxJava('8.8')).toBe(22);
+    expect(gradleVersionToMaxJava('8.11.1')).toBe(23);
+    expect(gradleVersionToMaxJava('8.14')).toBe(24);
     expect(gradleVersionToMaxJava('9.0')).toBe(25);
   });
 

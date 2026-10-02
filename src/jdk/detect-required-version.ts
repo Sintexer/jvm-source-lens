@@ -39,7 +39,6 @@ export type JavaVersionHint =
 // ---------------------------------------------------------------------------
 const GRADLE_MIN_JAVA: Array<{ gradleMajor: number; gradleMinor?: number; minJava: number }> = [
   { gradleMajor: 9, minJava: 17 },
-  { gradleMajor: 8, gradleMinor: 8, minJava: 17 },
   { gradleMajor: 8, minJava: 8 },
   { gradleMajor: 7, minJava: 8 },
 ];
@@ -53,6 +52,8 @@ const GRADLE_MIN_JAVA: Array<{ gradleMajor: number; gradleMinor?: number; minJav
  */
 const GRADLE_MAX_JAVA: Array<{ gradleMajor: number; gradleMinor?: number; maxJava: number }> = [
   { gradleMajor: 9, maxJava: 25 },
+  { gradleMajor: 8, gradleMinor: 14, maxJava: 24 },
+  { gradleMajor: 8, gradleMinor: 10, maxJava: 23 },
   { gradleMajor: 8, gradleMinor: 8, maxJava: 22 },
   { gradleMajor: 8, gradleMinor: 5, maxJava: 21 },
   { gradleMajor: 8, maxJava: 20 },
