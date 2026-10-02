@@ -31,7 +31,7 @@ export const MCP_TOOL_COPY = {
 
   resolve_dependencies: {
     title: 'Resolve Gradle dependencies',
-    description: `List Gradle modules and, with query, the exact dependency versions on the classpath per module (conflicts flagged). Start here for NoSuchMethodError, AbstractMethodError, ClassCastException, or "which version of X is used?"; use instead of reading Gradle files or ~/.gradle caches.`,
+    description: `List Gradle modules and, with query, the exact dependency versions on the classpath with module counts (conflicts flagged); add modules to name the modules (a path filter, or \"all\"). Start here for NoSuchMethodError, AbstractMethodError, ClassCastException, or "which version of X is used?"; use instead of reading Gradle files or ~/.gradle caches.`,
   },
 
   search_in_artifact: {

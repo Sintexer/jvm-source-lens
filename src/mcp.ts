@@ -505,7 +505,13 @@ const resolveDependenciesInputSchema = z.looseObject({
   query: z
     .string()
     .optional()
-    .describe('Library filter, e.g. "jackson": lists matching artifact versions per module.'),
+    .describe('Library filter, e.g. "jackson": lists matching artifact versions with module counts.'),
+  modules: z
+    .string()
+    .optional()
+    .describe(
+      'With query: omit for counts only. Module path/prefix list (e.g. ":services,:app") to name modules in scope, or "all" for every module (can be very large).',
+    ),
   projectRoot: z.string().optional().describe(D.projectRoot),
   forceRefresh: z.boolean().optional().describe(D.forceRefresh),
 });
@@ -915,7 +921,7 @@ export function createMcpServer(): McpServer {
           forceRefresh: Boolean(args.forceRefresh),
           diagnosticOperation: 'resolve_dependencies',
         });
-        return mcpToolResultFromResolutionResult(result, root.path, hidden.full, hidden.include as never, args.query);
+        return mcpToolResultFromResolutionResult(result, root.path, hidden.full, hidden.include as never, args.query, args.modules);
       } catch (e) {
         if (e instanceof UnsupportedProjectError) {
           return mcpToolResultFromProjectRootError(e.message, root.path);

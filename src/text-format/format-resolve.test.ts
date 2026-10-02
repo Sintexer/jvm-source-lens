@@ -49,13 +49,45 @@ const output: ResolutionOutput = {
 };
 
 describe('formatArtifactVersionsText', () => {
-  test('lists versions per module and flags conflicts', () => {
+  test('default lists versions with module counts only and flags conflicts', () => {
     const text = formatArtifactVersionsText(output, 'jackson').join('\n');
     expect(text).toContain('com.fasterxml.jackson.core:jackson-databind');
     expect(text).toContain('⚠ 2 versions');
-    expect(text).toContain('2.14.0 [:worker]');
-    expect(text).toContain('2.15.2 [:app]');
+    expect(text).toContain('2.14.0 (1 module)');
+    expect(text).toContain('2.15.2 (1 module)');
+    expect(text).not.toContain(':worker');
     expect(text).not.toContain('g:other');
+  });
+
+  test('modules="all" names every module', () => {
+    const text = formatArtifactVersionsText(output, 'jackson', 'all').join('\n');
+    expect(text).toContain('2.14.0 (1 module: :worker)');
+    expect(text).toContain('2.15.2 (1 module: :app)');
+  });
+
+  test('modules filter restricts scope and names modules', () => {
+    const text = formatArtifactVersionsText(output, 'jackson', ':app').join('\n');
+    expect(text).toContain('2.15.2 (1 module: :app)');
+    expect(text).not.toContain('2.14.0');
+    expect(text).not.toContain('⚠');
+  });
+
+  test('stays small on a many-module build by default and caps names per version', () => {
+    const many: ResolutionOutput = {
+      ...output,
+      modules: Array.from({ length: 160 }, (_, i) => ({
+        name: `:svc:m${i}`,
+        path: `/p/m${i}`,
+        configurations: [
+          { name: 'compileClasspath', scope: 'compile' as const, artifacts: [art('g', 'lib', i % 2 ? '1' : '2')] },
+        ],
+      })),
+    };
+    const brief = formatArtifactVersionsText(many, 'lib').join('\n');
+    expect(brief).toContain('1 (80 modules)');
+    expect(brief.length).toBeLessThan(400);
+    expect(formatArtifactVersionsText(many, 'lib', ':svc').join('\n')).toContain('… +55 more');
+    expect(formatArtifactVersionsText(many, 'lib', 'all').join('\n')).not.toContain('more');
   });
 
   test('words are AND-ed and inter-project edges skipped', () => {
@@ -72,6 +104,8 @@ describe('formatResolutionSummaryText hints', () => {
   });
 
   test('query appends the artifact listing', () => {
-    expect(formatResolutionSummaryText(output, { audience: 'mcp', artifactQuery: 'other' })).toContain('g:other');
+    const text = formatResolutionSummaryText(output, { audience: 'mcp', artifactQuery: 'other' });
+    expect(text).toContain('g:other');
+    expect(text).not.toContain('Modules (');
   });
 });
