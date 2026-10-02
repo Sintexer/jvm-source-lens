@@ -23,7 +23,7 @@ bun run eval --rescore test/evals/results/<run>   # re-score saved transcripts, 
 - Isolation: `--strict-mcp-config` and `--setting-sources project`, so your user-level `CLAUDE.md`, hooks and MCP servers do not leak in.
 - Tools allowed: jvmsrc, Read/Grep/Glob, and read-only Bash (including `javap`, `unzip`, `jar`) **on purpose**: the point is to see whether the agent prefers jvmsrc, not to force it. Anything else is denied (`dontAsk`).
 
-## Prompts (`prompts.json`, 40)
+## Prompts (`prompts.json`, 44)
 
 | Category | n | What it checks |
 |---|---|---|
@@ -31,6 +31,7 @@ bun run eval --rescore test/evals/results/<run>   # re-score saved transcripts, 
 | `indirect` | 10 | Symptoms ("NoSuchMethodError…", "which library defines…"): should still pick jvmsrc |
 | `multimodule` | 8 | Class only in one module, or the same artifact at different versions per module |
 | `sloppy` | 6 | Simple names, `.class` paths, `Outer.Inner`, module without `:` |
+| `filecontext` | 4 | Only a file the user is editing is named (no module): the agent should pass `modulePath` (module or that file) on its first call so it gets *that module's* versions |
 | `negative` | 6 | Questions about this repo's own code or general Java: must **not** call jvmsrc |
 
 Each prompt has `expectJvmsrc` and `expectFirstTools` (any-of sensible first jvmsrc calls).
@@ -42,6 +43,7 @@ Each prompt has `expectJvmsrc` and `expectFirstTools` (any-of sensible first jvm
 | selection recall | positives that called any jvmsrc tool | ≥ 95% (before the hook) |
 | selection precision | of prompts that called jvmsrc, how many should have | — (negatives lower it) |
 | first-call success | first jvmsrc call returned without `isError` | ≥ 95% |
+| module passed / correct (`filecontext`) | first jvmsrc call carried a concrete `modulePath`, and it denotes the module of the named file | high; low values mean the instructions/descriptions do not make agents pass the module |
 | first-tool accuracy | first jvmsrc call ∈ `expectFirstTools` | high; low values mean sibling-tool confusion (Checkpoint 7) |
 | calls per task | jvmsrc calls per positive prompt | lower is better |
 | shell fallback rate | positives that ran javap/unzip/jar/Gradle-cache commands | 0% with `--with-hook` |

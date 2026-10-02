@@ -56,13 +56,27 @@ function minimalOutput(): ResolutionOutput {
 }
 
 describe('pickResolvedConfiguration', () => {
-  test('defaults to root compileClasspath', () => {
-    const r = pickResolvedConfiguration(minimalOutput(), {});
+  test('single-module project: omitted modulePath uses root compileClasspath', () => {
+    const base = minimalOutput();
+    const r = pickResolvedConfiguration({ ...base, modules: [base.modules[0]!] }, {});
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.module.name).toBe('root');
       expect(r.configuration.name).toBe('compileClasspath');
       expect(r.configuration.artifacts[0]?.name).toBe('a');
+    }
+  });
+
+  test('multi-module: root does not shadow submodules when modulePath is omitted', () => {
+    // A root project often has the configuration but an empty classpath; the agent then saw 0 matches.
+    const r = pickResolvedConfiguration(minimalOutput(), {});
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe('MODULE_AMBIGUOUS');
+      if (r.error.code === 'MODULE_AMBIGUOUS') {
+        expect(r.error.modulePaths).toEqual(['root', ':lib']);
+        expect(r.error.className).toBeUndefined();
+      }
     }
   });
 
@@ -77,6 +91,7 @@ describe('pickResolvedConfiguration', () => {
 
   test('explicit configuration overrides includeTest', () => {
     const r = pickResolvedConfiguration(minimalOutput(), {
+      modulePath: 'root',
       includeTest: true,
       configuration: 'compileClasspath',
     });
@@ -256,6 +271,24 @@ describe('pickResolvedConfiguration loose modulePath', () => {
     if (!r.ok) {
       expect(r.error.code).toBe('MODULE_NOT_FOUND');
       expect(r.error.message).toContain(':app');
+    }
+  });
+});
+
+describe('pickResolvedConfiguration modulePath "*"', () => {
+  test('behaves exactly like an omitted modulePath', () => {
+    const omitted = pickResolvedConfiguration(minimalOutput(), {});
+    for (const star of ['*', 'all']) {
+      expect(pickResolvedConfiguration(minimalOutput(), { modulePath: star })).toEqual(omitted);
+    }
+  });
+});
+
+describe('pickResolvedConfiguration with a file path as modulePath', () => {
+  test('absolute and project-relative source paths select the containing module', () => {
+    for (const raw of ['/tmp/p/lib/src/main/java/com/x/Foo.java', 'lib/src/main/java/com/x/Foo.java']) {
+      const r = pickResolvedConfiguration(minimalOutput(), { modulePath: raw });
+      expect(r.ok && r.module.name).toBe(':lib');
     }
   });
 });

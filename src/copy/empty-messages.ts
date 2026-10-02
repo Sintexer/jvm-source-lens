@@ -114,6 +114,12 @@ export function buildSearchClassesEmptyMessage(ctx: GuidedQueryContext & { query
     `No classes matched ${JSON.stringify(ctx.query)}${scope}.${globHint}search is case-insensitive on FQN and simple name (glob applies to names only). ` +
       'Declared method/field names are searchable only when the class-search index could enrich from sources.',
   ];
+  if (ctx.modulePath !== undefined && ctx.modulePath.trim().length > 0 && !/^(\*|all)$/i.test(ctx.modulePath.trim())) {
+    // The most common cause of a miss in a multi-module build: the class lives in another module.
+    parts.push(
+      `Only module ${JSON.stringify(ctx.modulePath)} was searched. Omit modulePath (or pass "*") to search all modules.`,
+    );
+  }
   if (multiWord) {
     const tokens = ctx.query.trim().split(/\s+/).filter((t) => t.length > 0);
     const distinctive = tokens.reduce((a, b) => (a.length >= b.length ? a : b), tokens[0] ?? '');

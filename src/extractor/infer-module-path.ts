@@ -3,7 +3,7 @@ import type { ClassSourceError, ClassSourceLookupOptions } from './class-source-
 import { findClasspathOwningClass, type ClasspathOwningClassHit } from './find-external-class-jar.js';
 import { fqnToZipRelPaths } from './fqn-paths.js';
 import { candidateInterprojectJavaSourcePaths } from './interproject-paths.js';
-import { matchModule } from './match-module.js';
+import { matchModule, withoutAllModules } from './match-module.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
 
@@ -121,12 +121,13 @@ export function probeClassOwner(
  */
 export function inferModulePath(
   output: ResolutionOutput,
-  opts: InferModulePathOptions,
+  rawOpts: InferModulePathOptions,
 ): InferModulePathResult {
+  const opts = withoutAllModules(rawOpts);
   if (opts.modulePath !== undefined && opts.modulePath.length > 0) {
     // Canonicalize loose input (`app`, `/app`) so responses echo the real Gradle path; unmatched
     // input passes through and pickResolvedConfiguration reports MODULE_NOT_FOUND with candidates.
-    const match = matchModule(opts.modulePath, output.modules);
+    const match = matchModule(opts.modulePath, output.modules, output.projectRoot);
     return {
       kind: 'use',
       modulePath: match.kind === 'match' ? match.module.name : opts.modulePath,

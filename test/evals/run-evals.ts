@@ -192,6 +192,9 @@ function printReport(scores: PromptScore[], tokens: number | null): void {
   console.log(`selection precision   ${pct(total.selectionPrecision)}`);
   console.log(`first-call success    ${pct(total.firstCallSuccess)}  [${mark(total.firstCallSuccess, TARGETS.firstCallSuccess)} target ${pct(TARGETS.firstCallSuccess)}]`);
   console.log(`first-call usable     ${pct(total.firstCallUsable)}  (success + retry-ready ambiguity answers)`);
+  if (scores.some((s) => s.moduleCorrect !== null)) {
+    console.log(`module passed (file-context prompts)  ${pct(total.modulePassRate)}   correct ${pct(total.moduleCorrectRate)}`);
+  }
   console.log(`first-tool accuracy   ${pct(total.firstToolAccuracy)}   (sibling-confusion signal)`);
   console.log(`calls per task        ${total.callsPerTask.toFixed(1)}`);
   console.log(`shell fallback rate   ${pct(total.fallbackRate)}`);

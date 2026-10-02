@@ -82,5 +82,7 @@ export type SearchClassesResult =
       totalMatches: number;
       hits: ClassSearchHit[];
       indexMeta: ClassSearchIndexMeta;
+      /** Set when no modulePath was given on a multi-module build: every module that was searched. */
+      searchedModules?: string[];
     }
   | { ok: false; error: ClassSourceError; diagnosticId?: string; hint?: string };

@@ -76,7 +76,9 @@ export function classifyClassSourceError(
         error,
         'validation',
         true,
-        `${subject} is ambiguous across ${error.modulePaths.length} modules.`,
+        error.message.includes('resolves to different artifacts')
+          ? 'Different dependency versions per module.'
+          : `${subject} is ambiguous across ${error.modulePaths.length} modules.`,
         error.message.includes('Retry with modulePath=')
           ? error.message
           : `${error.message} Candidates: ${error.modulePaths.map((m) => JSON.stringify(m)).join(', ')}. ` +

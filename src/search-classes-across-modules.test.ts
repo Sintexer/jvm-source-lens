@@ -90,6 +90,20 @@ describe('search without modulePath on a multi-module build', () => {
     expect(r.hits.map((h) => [h.className, h.modules])).toEqual([['org.x.OnlyWorker', [':worker']]]);
   });
 
+  test('reports every searched module and names them in the text header', () => {
+    const r = run('nothing-matches-this');
+    expect(r.searchedModules).toEqual([':app', ':worker']);
+    expect(r.hits).toHaveLength(0);
+    const text = formatSearchClassesText({
+      query: r.query,
+      totalMatches: 0,
+      hits: [],
+      limit: 50,
+      searchedModules: r.searchedModules,
+    });
+    expect(text).toContain('across all modules (:app, :worker)');
+  });
+
   test('the same artifact in several modules is one hit listing all modules', () => {
     const r = run('Shared');
     expect(r.hits).toHaveLength(1);

@@ -6,12 +6,17 @@
 
 export type EvalPrompt = {
   id: string;
-  category: 'direct' | 'indirect' | 'multimodule' | 'sloppy' | 'negative';
+  category: 'direct' | 'indirect' | 'multimodule' | 'sloppy' | 'filecontext' | 'negative';
   prompt: string;
   /** Should the agent use jvmsrc at all? `false` for negative prompts. */
   expectJvmsrc: boolean;
   /** jvmsrc tools that are a sensible FIRST jvmsrc call for this prompt (any-of). */
   expectFirstTools: string[];
+  /**
+   * `filecontext` prompts only name a file the user is editing; the agent should map it to this module
+   * (Gradle path) and pass `modulePath` on its first jvmsrc call.
+   */
+  expectModule?: string;
 };
 
 export type ToolCall = {
@@ -131,6 +136,10 @@ export type PromptScore = {
   firstCallOk: boolean | null;
   /** First call succeeded, or failed with a retry-ready answer to a genuinely ambiguous question. */
   firstCallUsable: boolean | null;
+  /** First jvmsrc call carried a concrete `modulePath` (not omitted, not `*`/`all`); `null` when no module expectation. */
+  modulePassed: boolean | null;
+  /** ...and it points at `expectModule` (Gradle path, or a path inside that module). */
+  moduleCorrect: boolean | null;
   /** First jvmsrc call is one of `expectFirstTools`; `null` when not applicable. */
   firstToolExpected: boolean | null;
   /** Ran javap/unzip/jar/Gradle-cache style shell commands. */
@@ -142,6 +151,13 @@ export type PromptScore = {
   costUsd?: number;
   runError?: string;
 };
+
+/** Does `given` (a Gradle path, bare name, or file/dir path) denote `expected` (Gradle path)? */
+export function modulePathMatches(given: string, expected: string): boolean {
+  const bare = expected.replace(/^:+/, '').toLowerCase();
+  const g = given.trim().toLowerCase().replace(/\\/g, '/');
+  return g.replace(/^[:/]+|[:/]+$/g, '').replace(/:/g, '/') === bare.replace(/:/g, '/') || g.includes(`/${bare.replace(/:/g, '/')}/`) || g.startsWith(`${bare.replace(/:/g, '/')}/`);
+}
 
 export function scorePrompt(p: EvalPrompt, t: ParsedTranscript): PromptScore {
   const jv = t.calls.filter((c) => isJvmsrcTool(c.name));
@@ -160,6 +176,18 @@ export function scorePrompt(p: EvalPrompt, t: ParsedTranscript): PromptScore {
     firstTool: first ? shortToolName(first.name) : null,
     firstCallOk: first ? first.isError !== true : null,
     firstCallUsable: first ? first.isError !== true || isRetryReadyError(first) : null,
+    modulePassed:
+      first && p.expectModule !== undefined
+        ? typeof first.input.modulePath === 'string' && first.input.modulePath.trim() !== '' && !/^(\*|all)$/i.test(first.input.modulePath.trim())
+        : p.expectModule !== undefined
+          ? false
+          : null,
+    moduleCorrect:
+      p.expectModule === undefined
+        ? null
+        : first !== undefined &&
+          typeof first.input.modulePath === 'string' &&
+          modulePathMatches(first.input.modulePath, p.expectModule),
     firstToolExpected: first && p.expectJvmsrc ? p.expectFirstTools.includes(shortToolName(first.name)) : null,
     fallbackUsed,
     webUsed,
@@ -186,6 +214,10 @@ export type Aggregate = {
   callsPerTask: number;
   /** Positives that ran a shell fallback / positives. */
   fallbackRate: number;
+  /** Of prompts that expect a module: first jvmsrc call passed a concrete modulePath. */
+  modulePassRate: number;
+  /** ...and it was the right module. */
+  moduleCorrectRate: number;
   passRate: number;
 };
 
@@ -197,6 +229,7 @@ export function aggregate(scores: PromptScore[]): Aggregate {
   const selectedPos = positives.filter((s) => s.selected);
   const called = scores.filter((s) => s.firstCallOk !== null);
   const expectable = scores.filter((s) => s.firstToolExpected !== null);
+  const withModule = scores.filter((s) => s.moduleCorrect !== null);
   return {
     prompts: scores.length,
     selectionRecall: ratio(selectedPos.length, positives.length),
@@ -206,6 +239,8 @@ export function aggregate(scores: PromptScore[]): Aggregate {
     firstToolAccuracy: ratio(expectable.filter((s) => s.firstToolExpected).length, expectable.length),
     callsPerTask: ratio(selectedPos.reduce((n, s) => n + s.jvmsrcCalls, 0), selectedPos.length),
     fallbackRate: ratio(positives.filter((s) => s.fallbackUsed).length, positives.length),
+    modulePassRate: ratio(withModule.filter((s) => s.modulePassed).length, withModule.length),
+    moduleCorrectRate: ratio(withModule.filter((s) => s.moduleCorrect).length, withModule.length),
     passRate: ratio(scores.filter((s) => s.passed).length, scores.length),
   };
 }

@@ -1,5 +1,5 @@
 import type { ClassSourceError } from './class-source-types.js';
-import { matchModule } from './match-module.js';
+import { matchModule, withoutAllModules } from './match-module.js';
 import type {
   ResolutionOutput,
   ResolvedConfiguration,
@@ -65,20 +65,22 @@ function formatAvailableModulesHint(names: string[]): string {
 }
 
 /**
- * When `modulePath` is omitted: prefer `root` if it has the wanted config; otherwise uniquely
- * pick the sole module that has it; if several match, return MODULE_AMBIGUOUS; if none,
- * CONFIGURATION_NOT_FOUND with availableModules.
+ * When `modulePath` is omitted: the sole module that has the wanted config is used; if several have
+ * it (root included: a root project often has the configuration but an empty classpath, so it must
+ * not shadow the submodules), return MODULE_AMBIGUOUS with every candidate so callers that can
+ * (search_classes, search_in_artifact) search all of them; if none, CONFIGURATION_NOT_FOUND.
  */
 export function pickResolvedConfiguration(
   output: ResolutionOutput,
-  opts: PickClasspathOptions,
+  rawOpts: PickClasspathOptions,
 ): PickClasspathResult {
+  const opts = withoutAllModules(rawOpts);
   const candidates = configurationCandidates(opts.configuration, opts.includeTest);
   const availableModules = listModuleNames(output);
   const wantModule = opts.modulePath;
 
   if (wantModule !== undefined && wantModule.length > 0) {
-    const match = matchModule(wantModule, output.modules);
+    const match = matchModule(wantModule, output.modules, output.projectRoot);
     if (match.kind !== 'match') {
       const ambiguous = match.kind === 'ambiguous';
       return {
@@ -116,18 +118,8 @@ export function pickResolvedConfiguration(
   }
 
   const root = output.modules.find((m) => m.name === 'root');
-  if (root !== undefined) {
-    const rootConfig = pickConfiguration(root, candidates);
-    if (rootConfig !== undefined) {
-      return { ok: true, module: root, configuration: rootConfig };
-    }
-  }
-
   const withConfig: { module: ResolvedModule; configuration: ResolvedConfiguration }[] = [];
   for (const module of output.modules) {
-    if (module.name === 'root') {
-      continue;
-    }
     const configuration = pickConfiguration(module, candidates);
     if (configuration !== undefined) {
       withConfig.push({ module, configuration });

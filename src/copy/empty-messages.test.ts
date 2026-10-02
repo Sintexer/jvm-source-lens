@@ -81,3 +81,11 @@ test('appendGuidanceFooter includes message line when guided', () => {
   expect(out).toContain('message: Retry with includeTest: true.');
   expect(out).toContain('found: false');
 });
+
+test('search_classes miss with an explicit module tells the agent how to widen the search', () => {
+  const msg = buildSearchClassesEmptyMessage({ query: 'RetryTemplate', modulePath: ':worker' });
+  expect(msg).toContain('Only module ":worker" was searched');
+  expect(msg).toContain('Omit modulePath (or pass "*")');
+  expect(buildSearchClassesEmptyMessage({ query: 'X', modulePath: '*' })).not.toContain('Only module');
+  expect(buildSearchClassesEmptyMessage({ query: 'X' })).not.toContain('Only module');
+});

@@ -180,6 +180,7 @@ Tool descriptions help, but a built-in `Bash` tool the agent already trusts will
 ## Dependencies (jvmsrc)
 For any question about a third-party library class, method or version, use the jvmsrc MCP tools
 (search_classes → get_class_structure → get_class_source with methodNames; resolve_dependencies for versions).
+When working inside one module, pass modulePath (':app' or the file you are editing) to get that module's versions.
 Never use javap, unzip/jar on JARs, or ~/.gradle/caches. Code under this repo's src/ → grep/read as usual.
 ```
 
@@ -203,7 +204,7 @@ Set `JVMSRC_HOOK_DISABLE=1` to switch it off temporarily. Other clients have the
 **Check that your client shows the server instructions:** ask the agent *"What instructions does the jvmsrc MCP server give?"*. If it cannot answer, rely on the rule in step 1.
 
 > [!NOTE]
-> **Inputs are forgiving.** `projectRoot` can be omitted (the workspace is used, or set `JVMSRC_PROJECT_ROOT`); `modulePath` accepts `app`, `/app` or `:app`; `className` accepts a simple name, `Outer.Inner`, or a trailing `.class`/`.java`. The first call on a project runs Gradle (typically 5–10s); later calls use the cache. Pass `forceRefresh: true` only after something changed that the build files do not show, such as a SNAPSHOT republish.
+> **Inputs are forgiving.** `projectRoot` can be omitted (the workspace is used, or set `JVMSRC_PROJECT_ROOT`); `modulePath` accepts `app`, `/app`, `:app`, or a file/directory inside the module (omit it, or pass `"*"`, to search all modules); `className` accepts a simple name, `Outer.Inner`, or a trailing `.class`/`.java`. The first call on a project runs Gradle (typically 5–10s); later calls use the cache. Pass `forceRefresh: true` only after something changed that the build files do not show, such as a SNAPSHOT republish.
 
 ---
 

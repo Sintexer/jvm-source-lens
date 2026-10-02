@@ -311,7 +311,7 @@ export const mcpFindInClassSourcePayloadSchema = z.union([
 /** Agent-facing parameter docs. Keep each to one short sentence: they are sent to the model on every turn. */
 const D = {
   projectRoot: 'Project root. Omit to use the workspace.',
-  modulePath: "Gradle path like ':app'. Omit unless an error lists candidates.",
+  modulePath: "Gradle path like ':app', or a file/dir inside the module. Omit (or \"*\") for all modules.",
   className: 'FQN, e.g. com.fasterxml.jackson.databind.ObjectMapper; a unique simple name works.',
   configuration: 'Gradle configuration (default compileClasspath).',
   includeTest: 'Use the test classpath.',

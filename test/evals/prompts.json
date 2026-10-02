@@ -368,5 +368,50 @@
     "prompt": "Which Gradle plugins are applied in app/build.gradle?",
     "expectJvmsrc": false,
     "expectFirstTools": []
+  },
+  {
+    "id": "f01",
+    "category": "filecontext",
+    "prompt": "I'm editing worker/src/main/java/com/acme/worker/Worker.java. What does the ObjectMapper it imports do, and which readValue overloads does it have?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature",
+      "get_class_structure"
+    ],
+    "expectModule": ":worker"
+  },
+  {
+    "id": "f02",
+    "category": "filecontext",
+    "prompt": "I'm editing app/src/main/java/com/acme/app/App.java. It imports RetryTemplate: what constructors does that class have?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature",
+      "get_class_structure"
+    ],
+    "expectModule": ":app"
+  },
+  {
+    "id": "f03",
+    "category": "filecontext",
+    "prompt": "In worker/src/main/java/com/acme/worker/Worker.java there is a call to Lists.newArrayList. Which overloads exist?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature",
+      "get_class_structure"
+    ],
+    "expectModule": ":worker"
+  },
+  {
+    "id": "f04",
+    "category": "filecontext",
+    "prompt": "core/src/main/java/com/acme/core/UserService.java calls StringUtils.isBlank. Show me how that method is implemented.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_source",
+      "get_method_signature",
+      "get_class_structure"
+    ],
+    "expectModule": ":core"
   }
 ]

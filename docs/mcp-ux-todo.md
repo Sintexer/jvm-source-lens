@@ -4,6 +4,20 @@ Running list for the agent-ergonomics checkpoints. Tick or delete items as they 
 
 ## Open
 
+### Added with "pass the module from the start"
+- [ ] **Measure it:** run `bun run eval --filter filecontext` (4 prompts) and then the full set. Targets: module passed/correct ≥ 90%, first-call usable ≥ 95%. If agents still omit the module, strengthen the tool descriptions (costs tokens) or make the first-call hint part of the result footer ("searched all modules; pass modulePath=<module of your file> for that module's versions").
+- [ ] **Eager tokens 2,401 → 2,478** from the longer instruction and the `modulePath` description (6 tools). Re-check against the ~2,000 target when trimming schema noise.
+- [ ] **Relative paths resolve against the project root**, not the agent's cwd; a path relative to another directory will not match and falls back to the Gradle-path rules (then `MODULE_NOT_FOUND` with the module list). Windows case-insensitive path matching is not handled.
+- [ ] **Source sets:** a file under `src/test/...` maps to its module but the tools still use the compile classpath unless `includeTest` is set; consider inferring `includeTest` from `/src/test/` in the path.
+- [ ] **Version-conflict message** no longer repeats the class name in the summary; check the longer error text still reads well in clients.
+
+### Added after real-world feedback (root module empty)
+- [x] **Fixed:** with `modulePath` omitted, `pickResolvedConfiguration` returned `root` whenever it merely had the configuration, so `search_classes` / `search_in_artifact` searched an empty classpath ("0 matches") and the agent fell back to the Gradle cache. Root no longer shadows submodules; omitted `modulePath` = all modules; `modulePath: "*"` / `"all"` is the explicit spelling; empty results name the searched modules, or say that only one module was searched. The eval project's root now applies `java` to keep reproducing the shape.
+- [ ] **Re-run the evals** (`bun run eval --filter multimodule,i01,i07,s01`) now that the eval root has an empty `compileClasspath`.
+- [ ] **Making `modulePath` required was considered and rejected:** the agent cannot know module names before its first call (it would need `resolve_dependencies` first or fail validation), which lowers first-call success. Revisit only if "omitted = all modules" proves too slow on big builds.
+- [ ] **Cost of module-less `search_classes` on large builds:** one class index per module on first use (cached per module afterwards), so a 50-module build indexes 50 modules once. Measure; consider a project-wide index or a module cap.
+- [ ] **Hook coverage:** the agent fell back to `unzip` on the Gradle cache. The Checkpoint 5 hook blocks this in Claude Code if installed; confirm it is enabled in the affected setup.
+
 ### Added after the first full eval
 - [ ] **Re-run the 10 prompts whose first call failed** (`bun run eval --filter d09,i01,i05,i07,i08,i10,m03,m05,s01,s03`) and the full set once more; expected: only genuine-ambiguity prompts (m03, i08-style jackson questions) keep failing strictly. Record in the baseline table.
 - [ ] **Checkpoint 7 (tool consolidation): skipped by data.** Selection recall/precision 100%, first-tool accuracy 97%, so there is no sibling confusion to fix. Revisit only if a different model/client shows it.

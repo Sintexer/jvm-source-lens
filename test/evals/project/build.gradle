@@ -1,3 +1,10 @@
+// The root project applies `java` on purpose: it then has a compileClasspath configuration with an
+// EMPTY classpath, which is what real multi-module builds look like and what once shadowed the
+// submodules when `modulePath` was omitted (the agent saw "0 matches").
+plugins {
+    id 'java'
+}
+
 allprojects {
     repositories {
         mavenCentral()

@@ -41,6 +41,7 @@ export function searchClassesAcrossModules(
   limit: number,
 ): SearchClassesResult {
   const entries: ClassSearchIndexEntry[] = [];
+  const searchedModules: string[] = [];
   const modulesByKey = new Map<string, Set<string>>();
   let meta: Extract<SearchClassesResult, { ok: true }>['indexMeta'] | undefined;
 
@@ -62,6 +63,7 @@ export function searchClassesAcrossModules(
       return { ok: false, error: { code: 'RESOLUTION_FAILED', message: ensured.message } };
     }
     meta ??= ensured.file.meta;
+    searchedModules.push(modulePath);
     for (const e of ensured.file.entries) {
       const key = artifactKey(e);
       const modules = modulesByKey.get(key);
@@ -90,6 +92,7 @@ export function searchClassesAcrossModules(
     totalMatches,
     hits: withModules,
     indexMeta: meta,
+    searchedModules,
   };
 }
 

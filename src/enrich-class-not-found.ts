@@ -1,6 +1,7 @@
 import { ensureClassSearchIndex } from './class-search/ensure-class-search-index.js';
 import { suggestClassNamesBySimpleName } from './class-search/suggest-class-names.js';
 import { listModuleNames } from './extractor/infer-module-path.js';
+import { withoutAllModules } from './extractor/match-module.js';
 import { pickResolvedConfiguration } from './extractor/pick-classpath.js';
 import type { ClassSourceError } from './extractor/class-source-types.js';
 import type { ResolutionOutput } from './resolvers/resolution-output.js';
@@ -37,8 +38,9 @@ export function enrichClassNotFound(
   projectRoot: string,
   output: ResolutionOutput,
   error: ClassNotFoundError,
-  scope: EnrichClassNotFoundScope,
+  rawScope: EnrichClassNotFoundScope,
 ): ClassNotFoundError {
+  const scope = withoutAllModules(rawScope);
   const suggestedModulePaths = computeSuggestedModulePaths(output, scope);
   const suggestions = computeSuggestions(projectRoot, output, error.className, scope);
 

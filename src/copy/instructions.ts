@@ -9,6 +9,8 @@ ClassCastException, version conflicts. Code under this repo's src/ → grep/read
 Flow: search_classes (only if the name is unknown) → get_class_structure → get_class_source with
 methodNames. For version problems start with resolve_dependencies.
 
-Omit projectRoot and modulePath unless an error asks for them. If a call fails, fix the arguments
-as the error says and retry; never fall back to javap/unzip.
+Omit projectRoot. When you are working inside a specific module, pass modulePath (':app', or the
+file you are editing) so you get that module's dependency versions; otherwise omit it to search
+all modules. If a call fails, fix the arguments as the error says and retry; never fall back to
+javap/unzip.
 `;

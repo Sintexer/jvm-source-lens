@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   aggregate,
+  modulePathMatches,
   isFallbackCommand,
   parseTranscript,
   scorePrompt,
@@ -127,6 +128,8 @@ describe('aggregate', () => {
     firstTool: 'search_classes',
     firstCallOk: true,
     firstCallUsable: true,
+    modulePassed: null,
+    moduleCorrect: null,
     firstToolExpected: true,
     fallbackUsed: false,
     webUsed: false,
@@ -161,10 +164,60 @@ test('prompts.json is well-formed and matches the planned mix', async () => {
   const counts = Object.fromEntries(
     [...new Set(prompts.map((p) => p.category))].map((c) => [c, prompts.filter((p) => p.category === c).length]),
   );
-  expect(counts).toEqual({ direct: 10, indirect: 10, multimodule: 8, sloppy: 6, negative: 6 });
+  expect(counts).toEqual({ direct: 10, indirect: 10, multimodule: 8, sloppy: 6, filecontext: 4, negative: 6 });
   expect(new Set(prompts.map((p) => p.id)).size).toBe(prompts.length);
   for (const p of prompts) {
     expect(p.expectJvmsrc).toBe(p.category !== 'negative');
+    expect(p.expectModule !== undefined).toBe(p.category === 'filecontext');
     expect(p.expectFirstTools.length > 0).toBe(p.expectJvmsrc);
   }
+});
+
+describe('module-passing metric', () => {
+  const fileCtx: EvalPrompt = {
+    id: 'f1',
+    category: 'filecontext',
+    prompt: 'x',
+    expectJvmsrc: true,
+    expectFirstTools: ['get_method_signature'],
+    expectModule: ':worker',
+  };
+  const callWith = (input: object) => parseTranscript([use('a', 'mcp__jvmsrc__get_method_signature', input), result('a')]);
+
+  test.each([':worker', 'worker', '/worker', 'worker/src/main/java/com/acme/Worker.java', '/abs/proj/worker/src/X.java'])(
+    'modulePath %j counts as the right module',
+    (modulePath) => {
+      expect(scorePrompt(fileCtx, callWith({ className: 'a.B', modulePath }))).toMatchObject({ modulePassed: true, moduleCorrect: true });
+    },
+  );
+
+  test('a wrong module is passed but not correct', () => {
+    expect(scorePrompt(fileCtx, callWith({ modulePath: ':app' }))).toMatchObject({ modulePassed: true, moduleCorrect: false });
+    expect(modulePathMatches(':workers', ':worker')).toBe(false);
+  });
+
+  test('omitted, empty and wildcard modules count as not passed', () => {
+    for (const input of [{}, { modulePath: '' }, { modulePath: '*' }, { modulePath: 'all' }]) {
+      expect(scorePrompt(fileCtx, callWith(input))).toMatchObject({ modulePassed: false, moduleCorrect: false });
+    }
+  });
+
+  test('never calling jvmsrc is not passing a module', () => {
+    expect(scorePrompt(fileCtx, parseTranscript([use('a', 'Grep')]))).toMatchObject({ modulePassed: false, moduleCorrect: false });
+  });
+
+  test('prompts without a module expectation are not scored on it', () => {
+    expect(scorePrompt(positive, callWith({ modulePath: ':app' }))).toMatchObject({ modulePassed: null, moduleCorrect: null });
+  });
+
+  test('aggregate rates cover only prompts that expect a module', () => {
+    const a = aggregate([
+      scorePrompt(fileCtx, callWith({ modulePath: ':worker' })),
+      scorePrompt(fileCtx, callWith({ modulePath: ':app' })),
+      scorePrompt(fileCtx, callWith({})),
+      scorePrompt(positive, callWith({})),
+    ]);
+    expect(a.modulePassRate).toBeCloseTo(2 / 3);
+    expect(a.moduleCorrectRate).toBeCloseTo(1 / 3);
+  });
 });

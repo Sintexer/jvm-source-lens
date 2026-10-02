@@ -8,7 +8,7 @@ import {
   type InferModulePathOptions,
   type ResolveModuleScopeResult,
 } from './infer-module-path.js';
-import { matchModule } from './match-module.js';
+import { matchModule, withoutAllModules } from './match-module.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
 
 const SEGMENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -29,7 +29,7 @@ export function normalizeClassNameSyntax(raw: string): string {
 
 function existsInScope(output: ResolutionOutput, className: string, scope: Scope): boolean {
   if (scope.modulePath !== undefined && scope.modulePath.length > 0) {
-    const matched = matchModule(scope.modulePath, output.modules);
+    const matched = matchModule(scope.modulePath, output.modules, output.projectRoot);
     return matched.kind === 'match' && probeClassOwner(output, matched.module.name, { className, ...scope }).owner !== null;
   }
   return inferModulePath(output, { className, ...scope }).kind !== 'none';
@@ -85,8 +85,9 @@ export function canonicalizeClassName(
   projectRoot: string,
   output: ResolutionOutput,
   rawClassName: string,
-  scope: Scope,
+  rawScope: Scope,
 ): CanonicalClassName {
+  const scope = withoutAllModules(rawScope);
   const name = normalizeClassNameSyntax(rawClassName);
   const segs = name.split('.');
   if (!segs.every((s) => SEGMENT.test(s))) {

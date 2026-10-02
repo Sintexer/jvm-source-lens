@@ -38,9 +38,15 @@ export function formatSearchClassesText(args: {
   hits: ClassSearchHit[];
   limit: number;
   include?: ClassSearchIncludeSection[];
+  /** Modules searched when no modulePath was given (multi-module build). */
+  searchedModules?: string[];
 }): string {
+  const scope =
+    args.searchedModules !== undefined && args.searchedModules.length > 0
+      ? ` across all modules (${args.searchedModules.join(', ')})`
+      : '';
   const lines: string[] = [
-    `search_classes: ${args.totalMatches} match(es) for ${JSON.stringify(args.query)}; showing ${args.hits.length} (limit ${args.limit})`,
+    `search_classes: ${args.totalMatches} match(es) for ${JSON.stringify(args.query)}${scope}; showing ${args.hits.length} (limit ${args.limit})`,
     '',
   ];
   // Same FQN from different artifact versions (multi-module search): show the version to tell the lines apart.

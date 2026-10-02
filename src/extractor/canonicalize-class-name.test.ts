@@ -153,3 +153,23 @@ describe('resolveClassScopeOrError', () => {
     }
   });
 });
+
+describe('modulePath "*" on class-scoped lookups', () => {
+  const j = jar('star.jar', ['com/star/OnlyHere.class']);
+  const out = output({ ':app': [], ':worker': [artifact('star', j)] });
+
+  test('finds a class that lives in another module, like omitting modulePath', () => {
+    const r = resolveClassScopeOrError(dir, out, { className: 'OnlyHere', modulePath: '*' });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.className).toBe('com.star.OnlyHere');
+      expect(r.modulePath).toBe(':worker');
+    }
+  });
+
+  test('an explicit other module is passed through, so the miss happens in that module (what "*" avoids)', () => {
+    const r = resolveClassScopeOrError(dir, out, { className: 'OnlyHere', modulePath: ':app' });
+    expect(r.ok && r.className).toBe('OnlyHere'); // simple name not resolved inside :app
+    expect(r.ok && r.modulePath).toBe(':app');
+  });
+});

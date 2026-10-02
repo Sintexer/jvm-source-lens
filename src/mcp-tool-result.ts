@@ -565,6 +565,7 @@ export function mcpToolResultFromSearchClasses(
         hits: result.hits,
         limit: result.limit,
         include: query.include,
+        searchedModules: result.searchedModules,
       });
       if (!found) {
         return returnCompactGuided(
