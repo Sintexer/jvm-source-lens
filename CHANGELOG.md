@@ -19,6 +19,19 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 - MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
 - **`src/guided-response/`:** centralized agent recovery copy for CLASS_NOT_FOUND, empty search, decompiled source warnings, and related outcomes.
 
+## [1.18.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.17.1...v1.18.0) (2026-10-02)
+
+
+### Features
+
+* keep resolve_dependencies query output minimal by default ([0c819bd](https://github.com/Sintexer/jvm-source-lens/commit/0c819bdb9ed7c73b53ca2c1d45e110042bf91dc3))
+
+
+### Bug Fixes
+
+* decompile classes from local-file jars without Maven coordinates ([e061189](https://github.com/Sintexer/jvm-source-lens/commit/e0611895c7fc7adb0c04a264b436aedffa13730f))
+* stop inferring Java 17 as the minimum for Gradle 8.8+ ([995565b](https://github.com/Sintexer/jvm-source-lens/commit/995565beef8f5e23bb99be79d7c16a49d0746d95))
+
 ## [1.17.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.17.0...v1.17.1) (2026-10-02)
 
 
