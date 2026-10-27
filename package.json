@@ -67,7 +67,7 @@
     "prepack": "bun run typecheck && bun run build && bun run validate:resources && bun run validate:server-json"
   },
   "devDependencies": {
-    "@types/bun": "1.4.2",
+    "@types/bun": "1.4.4",
     "@types/node": "^26.6.3",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
