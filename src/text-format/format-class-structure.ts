@@ -1,5 +1,5 @@
 import type { ClassStructureKind, ClassStructureMethod, GetClassStructureSuccess } from '../class-structure/types.js';
-import { CONSTRUCTOR_METHOD_NAME, MODIFIER_LEGEND } from '../copy/hints.js';
+import { CONSTRUCTOR_METHOD_NAME } from '../copy/hints.js';
 import { firstJavadocParagraph } from './truncate.js';
 import { formatCompactModifiers } from './format-compact-modifiers.js';
 import { formatClassStructureMethodLine } from './format-method-line.js';
@@ -112,7 +112,6 @@ export function formatClassStructureText(
             `… ${result.fields.length - OVERVIEW_FIELD_LIST_CAP} more field(s); use scope=declared to list all.`,
           );
         }
-        lines.push(MODIFIER_LEGEND);
       } else {
         lines.push(`Fields: ${result.fields.length} (use scope=declared to list)`);
       }
@@ -154,7 +153,6 @@ export function formatClassStructureText(
     }
 
     lines.push('');
-    lines.push(MODIFIER_LEGEND);
     lines.push(formatProvenanceLine(result.provenance));
     lines.push(`sourceAvailable: ${result.sourceAvailable}`);
     return lines.join('\n');
