@@ -67,27 +67,27 @@
     "prepack": "bun run typecheck && bun run build && bun run validate:resources && bun run validate:server-json"
   },
   "devDependencies": {
-    "@types/bun": "1.4.2",
-    "@types/node": "^26.6.3",
+    "@types/bun": "1.4.4",
+    "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@types/cross-spawn": "^6.0.6",
     "commander": "^15.0.0",
     "cross-spawn": "^7.0.6",
     "env-paths": "^4.0.0",
     "fflate": "^0.8.3",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "overrides": {
-    "qs": "6.16.0",
-    "@hono/node-server": "2.1.0",
-    "hono": "4.13.12",
-    "body-parser": "2.3.0",
-    "fast-uri": "3.1.8",
-    "ip-address": "10.7.2"
+    "qs": "6.17.1",
+    "@hono/node-server": "2.1.6",
+    "hono": "4.13.17",
+    "body-parser": "2.4.0",
+    "fast-uri": "3.1.9",
+    "ip-address": "10.7.6"
   }
 }
