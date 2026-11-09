@@ -7,22 +7,67 @@
 [![License: MIT](https://img.shields.io/github/license/Sintexer/jvm-source-lens)](https://github.com/Sintexer/jvm-source-lens/blob/master/LICENSE)
 [![Node](https://img.shields.io/node/v/jvmsrc)](https://www.npmjs.com/package/jvmsrc)
 
-**An MCP server and CLI** that gives your coding agent the one thing it's missing on JVM codebases: **the actual classpath**.
+**An MCP server and CLI** that gives your coding agent the one thing it is missing on JVM codebases: **the actual classpath**.
 
 </div>
 
+Your IDE knows which library version your build uses. Your coding agent does not. It guesses from `~/.gradle/caches` and often reads the wrong JAR.
+`jvmsrc` asks your build tool (Gradle) for the resolved classpath. Then it gives the agent **real source**, **real signatures** and **real structure** for the exact version in use.
+
 ---
 
-### The Problem
-You use an IDE to write Java. Your coding agent doesn't have one.
+## Quick Start
 
-When your agent hits an unfamiliar library type — say, a superclass from a proprietary internal library — it spends **25+ turns** walking `~/.gradle/caches`, opening JARs by hand with `jar tf`, picking one by guesswork, and trying to answer a question your IDE would answer in one keystroke: *does this superclass have a public utility method called X?*
+Requires **Node ≥ 20** and **Java on `PATH`** (for the CFR decompiler and `javap`).
 
-### The Solution
-`jvmsrc` queries your build tool (Gradle) for *this project's* resolved classpath, then hands your agent **real source**, **real signatures**, and **real structure** — for the exact version your build actually uses.
+### 1. Add the MCP server — run in your terminal
 
-* **As an MCP server** – Connect to Claude Code, Cursor, Windsurf, or any other MCP host and equip your agent with six purpose-built classpath tools.
-* **As the `jvmsrc` CLI** – Same engine, scriptable, pipe-friendly, and useful on its own when you just want to read a class.
+```bash
+claude mcp add jvmsrc -- npx -y jvmsrc mcp
+```
+
+<details>
+<summary><strong>Other clients (Cursor, Windsurf, VS Code, any MCP host)</strong></summary>
+
+Add this to the MCP config of your client, then restart the client:
+
+```json
+{
+  "mcpServers": {
+    "jvmsrc": {
+      "command": "npx",
+      "args": ["-y", "jvmsrc", "mcp"]
+    }
+  }
+}
+```
+
+VS Code (`mcp.json`) uses the key `servers` instead of `mcpServers`.
+
+To install the CLI globally, run `npm install -g jvmsrc`. Then use `"command": "jvmsrc"` and `"args": ["mcp"]`.
+`jvmsrc config` prints a paste-ready block with environment hints.
+
+</details>
+
+### 2. Check it works — type in your agent chat, not in the terminal
+
+> *"Use jvmsrc: which methods does `<a library class from your project>` declare?"*
+
+The first call runs Gradle (about 5–10 s). Later calls use the cache.
+
+### 3. Make your agent use it
+
+Agents often prefer `Bash` and `javap` out of habit. Add this rule to `CLAUDE.md`, `AGENTS.md` or your Cursor rules:
+
+```markdown
+## Dependencies (jvmsrc)
+For any question about a third-party library class, method or version, use the jvmsrc MCP tools
+(search_classes → get_class_structure → get_class_source with methodNames; resolve_dependencies for versions).
+When working inside one module, pass modulePath (':app' or the file you are editing) to get that module's versions.
+Never use javap, unzip/jar on JARs, or ~/.gradle/caches. Code under this repo's src/ → grep/read as usual.
+```
+
+Details, and an optional Claude Code hook that blocks the shell fallbacks: [Make your agent use it](#make-your-agent-use-it).
 
 <p align="center">
   <img src="docs/assets/jvmsrc-demo.gif" alt="jvmsrc resolving a Spring class in Claude Code" width="100%" />
@@ -32,108 +77,59 @@ When your agent hits an unfamiliar library type — say, a superclass from a pro
 
 ---
 
-## What it saves, daily
+## Why jvmsrc
 
-On JVM projects with private libraries and no public Javadocs, `jvmsrc` is a force multiplier:
+Question: *"Does `AbstractTradingService` have a public helper we can reuse in our override?"* (a private library, no public Javadoc)
 
-* **~50K tokens saved** per "what's on this external class" investigation — roughly **70%** reduction in cost.
-* **15+ agent panic loops avoided** daily — no grinding through Gradle caches, opening wrong JARs, or giving up.
-* **Unlock delegation** for complex tasks touching internal SDKs that you previously had to do yourself.
+| | Without `jvmsrc` | With `jvmsrc` |
+|:---|:---|:---|
+| **Agent turns** | ~25 | 3 |
+| **How it works** | `find ~/.gradle`, then `jar tf` and `javap` on a JAR it picked by guess | `search_classes` → `get_class_structure` → `get_method_signature` |
+| **Version used** | Wrong (`2.4.1`, the project uses `3.0.0-SNAPSHOT`) | The one Gradle resolved |
+| **Result** | "No helper exists, write your own" | Finds `maskSensitiveFields()`, correct override on the first try |
 
----
+Typical result on JVM projects with private libraries (author's own use, not a benchmark):
 
-## The Difference in Action
+* About **50K tokens saved** per "what is on this external class" question.
+* Far fewer agent loops that walk Gradle caches, open wrong JARs or give up.
+* Tasks that touch internal SDKs become safe to delegate.
 
-### Without `jvmsrc` (The 25-turn blind grind)
+### How it works
 
-> **User:** Override the audit hook from `AbstractTradingService` — is there a public utility method on it we should reuse?
->
-> **Agent:**
-> 1. *Searches workspace for AbstractTradingService.java* ➔ `0 hits`
-> 2. *Runs:* `find ~/.gradle -name "trading-core*"`
-> 3. *Finds 4 versions:* `2.1.0`, `2.3.0`, `2.4.1`, `3.0.0-SNAPSHOT`
-> 4. *Guesses:* Picks `trading-core-2.4.1.jar` (the project actually uses `3.0.0-SNAPSHOT`!)
-> 5. *Runs:* `jar tf` and `javap -p` on the wrong JAR
-> 6. **[22 turns later]** *"I don't see a utility method, you'll have to implement it yourself."*
->
-> **Reality:** `3.0.0-SNAPSHOT` added `maskSensitiveFields()` as a protected helper exactly for this case. The agent didn't hallucinate — it was just blind.
-
-### With `jvmsrc` (The 3-turn instant resolution)
-
-> **User:** Override the audit hook from `AbstractTradingService` — is there a public utility method on it we should reuse?
->
-> **Agent:**
-> 1. `search_classes("AbstractTradingService")` ➔ Finds FQN & exact resolved library.
-> 2. `get_class_structure(scope: "overview")` ➔ Discovers `maskSensitiveFields()` in `3.0.0-SNAPSHOT`.
-> 3. `get_method_signature("maskSensitiveFields")` ➔ Gets accurate signature and generics.
->
-> **Result:** Writes the override correctly on the first try. No cache walking, no guessing, no wrong version.
+1. **Build tool query:** `jvmsrc` asks your build tool (Gradle) for the exact resolved classpath.
+2. **Cache:** it caches the result and watches your build files, so the data stays current.
+3. **Small tools:** it exposes precise tools (signatures, structure, search) instead of full-source dumps. Context stays small.
 
 ---
 
-## How It Works
+## Tools your agent gets
 
-1. **Build Tool Inquiry:** `jvmsrc` queries your active build tool (e.g., Gradle) for the exact resolved classpath configuration.
-2. **Intelligent Caching:** It caches the resolved classpath, tracking changes to build files to stay current.
-3. **Precision AI Tools:** Instead of full-code dumping, it exposes precise, high-granularity tools (signatures, structure, search) to keep context windows small and token usage ultra-low.
+The MCP server runs over stdio (`jvmsrc mcp`). It needs no environment variables by default.
 
----
+| Tool | What it does |
+|:---|:---|
+| **`search_classes`** | Find a class by simple name or glob; returns compact FQN + lib name lists |
+| **`get_class_structure`** | Retrieves class overview (purpose + method names) or declared signatures |
+| **`get_method_signature`**| Fetches real overloads for a method, with parameter names and generics |
+| **`find_in_class_source`**| Performs regex or substring searches inside a resolved class |
+| **`get_class_source`** | Retrieves method bodies or line ranges (used as a last resort) |
+| **`search_in_artifact`** | Greps text across all classes in one resolved dependency JAR |
+| **`resolve_dependencies`**| Analyzes the actual dependency graph this project uses |
 
-## Installation & Quick Start
+> [!TIP]
+> Every source response includes `sourceAvailable`: `true` for real sources (Javadoc, parameter names, generics), `false` for CFR decompilation (structure reliable, names may be synthetic).
 
-### 1. Install CLI
-```bash
-npm install -g jvmsrc
-```
+> [!NOTE]
+> **Multimodule:** omit `modulePath` and jvmsrc auto-picks the unique owning module; on a miss it lists candidate `modulePath`s. **Methods:** `search_classes` matches declared method names when the index has source enrichment; for body text in a known JAR use `search_in_artifact`. `get_class_source` `methodNames` also walks superclasses for unmatched names.
 
-Or use it directly via npx: 
-
-```bash
-npx jvmsrc mcp
-```
-
-> [!IMPORTANT]  
-> Requires **Node ≥ 20** and **Java on `PATH`** (for CFR decompiler + `javap`).
-
-### 2. Add the MCP server
-
-Paste this into your AI assistant config (Cursor, Claude Code, Windsurf, etc.), then restart the host:
-
-```json
-{
-  "mcpServers": {
-    "jvmsrc": {
-      "command": "jvmsrc",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-Optional: `jvmsrc config` (or `jvmsrc config --project /path/to/gradle-project`) prints a paste-ready block plus environment hints. Most users can skip it and copy the snippet above.
-
----
-
-## MCP Server Reference
-
-The MCP server runs over stdio via `jvmsrc mcp`. The default config needs no environment variables:
-
-```json
-{
-  "mcpServers": {
-    "jvmsrc": {
-      "command": "jvmsrc",
-      "args": ["mcp"]
-    }
-  }
-}
-```
+> [!NOTE]
+> **Inputs are forgiving.** `projectRoot` can be omitted (the workspace is used, or set `JVMSRC_PROJECT_ROOT`); `modulePath` accepts `app`, `/app`, `:app`, or a file/directory inside the module (omit it, or pass `"*"`, to search all modules); `className` accepts a simple name, `Outer.Inner`, or a trailing `.class`/`.java`. Pass `forceRefresh: true` only after something changed that the build files do not show, such as a SNAPSHOT republish.
 
 ### Private repository credentials (optional)
 
-Only needed when your Gradle build requires credential env vars for a private Maven/Artifactory/Nexus-style repo. MCP hosts often do **not** inherit your interactive shell, so those vars must be set on the **jvmsrc MCP process** (then restart the server).
+Only needed when your Gradle build requires credential env vars for a private Maven/Artifactory/Nexus-style repo. MCP hosts often do **not** inherit your interactive shell, so set those vars on the **jvmsrc MCP process** (then restart the server).
 
-`REPO_USER` / `REPO_PASS` below are **sample names only** — they are not required by jvmsrc. Use whatever variable names your project’s Gradle scripts document:
+`REPO_USER` / `REPO_PASS` below are **sample names only** — jvmsrc does not require them. Use the variable names your Gradle scripts document:
 
 ```json
 {
@@ -150,41 +146,17 @@ Only needed when your Gradle build requires credential env vars for a private Ma
 }
 ```
 
-Omit the `env` block entirely when the project does not need them.
+Omit the `env` block when the project does not need it.
 
-### Tools your agent gets
+---
 
-| Tool | What it does |
-|:---|:---|
-| **`search_classes`** | Find a class by simple name or glob; returns compact FQN + lib name lists |
-| **`get_class_structure`** | Retrieves class overview (purpose + method names) or declared signatures |
-| **`get_method_signature`**| Fetches real overloads for a method, with parameter names and generics |
-| **`find_in_class_source`**| Performs regex or substring searches inside a resolved class |
-| **`get_class_source`** | Retrieves method bodies or line ranges (used as a last resort) |
-| **`search_in_artifact`** | Greps text across all classes in one resolved dependency JAR |
-| **`resolve_dependencies`**| Analyzes the actual dependency graph this project uses |
+## Make your agent use it
 
-> [!TIP]  
-> Every source response includes `sourceAvailable`: `true` for real sources (Javadoc, parameter names, generics), `false` for CFR decompilation (structure reliable, names may be synthetic).
+Tool descriptions help, but a built-in `Bash` tool the agent already trusts often wins. Two small additions make `jvmsrc` the default for dependency questions.
 
-> [!NOTE]  
-> **Multimodule:** omit `modulePath` and jvmsrc auto-picks the unique owning module; on a miss it lists candidate `modulePath`s. **Methods:** `search_classes` matches declared method names when the index has source enrichment; for body text in a known JAR use `search_in_artifact`. `get_class_source` `methodNames` also walks superclasses for unmatched names.
+**1. Rule in the agent instructions.** Use the block from [Quick Start](#3-make-your-agent-use-it). Many clients do not show MCP server `instructions` at all.
 
-### Make your agent use it
-
-Tool descriptions help, but a built-in `Bash` tool the agent already trusts will often win. Two small additions make `jvmsrc` the default for dependency questions.
-
-**1. Add a rule to your agent's instructions** (`CLAUDE.md`, `AGENTS.md`, Cursor rules) — many clients do not show MCP server `instructions` at all:
-
-```markdown
-## Dependencies (jvmsrc)
-For any question about a third-party library class, method or version, use the jvmsrc MCP tools
-(search_classes → get_class_structure → get_class_source with methodNames; resolve_dependencies for versions).
-When working inside one module, pass modulePath (':app' or the file you are editing) to get that module's versions.
-Never use javap, unzip/jar on JARs, or ~/.gradle/caches. Code under this repo's src/ → grep/read as usual.
-```
-
-**2. (Claude Code) Block the shell fallbacks with a hook.** [`docs/hooks/block-jvm-fallbacks.mjs`](docs/hooks/block-jvm-fallbacks.mjs) denies `javap`, `unzip`/`jar` on JARs, and `~/.gradle/caches` / `~/.m2` access, and tells the agent to use `jvmsrc` instead, so it redirects instead of silently reading the wrong version. Save the script somewhere stable and add to `.claude/settings.json` (project) or `~/.claude/settings.json` (all projects):
+**2. (Claude Code) Hook that blocks shell fallbacks.** [`docs/hooks/block-jvm-fallbacks.mjs`](docs/hooks/block-jvm-fallbacks.mjs) denies `javap`, `unzip`/`jar` on JARs, and `~/.gradle/caches` / `~/.m2` access. It tells the agent to use `jvmsrc` instead. Save the script in a stable place. Add this to `.claude/settings.json` (project) or `~/.claude/settings.json` (all projects):
 
 ```json
 {
@@ -199,12 +171,9 @@ Never use javap, unzip/jar on JARs, or ~/.gradle/caches. Code under this repo's 
 }
 ```
 
-Set `JVMSRC_HOOK_DISABLE=1` to switch it off temporarily. Other clients have their own hook mechanisms; check their current docs before porting.
+Set `JVMSRC_HOOK_DISABLE=1` to switch it off for a while. Other clients have their own hook systems; read their current docs before you port it.
 
 **Check that your client shows the server instructions:** ask the agent *"What instructions does the jvmsrc MCP server give?"*. If it cannot answer, rely on the rule in step 1.
-
-> [!NOTE]
-> **Inputs are forgiving.** `projectRoot` can be omitted (the workspace is used, or set `JVMSRC_PROJECT_ROOT`); `modulePath` accepts `app`, `/app`, `:app`, or a file/directory inside the module (omit it, or pass `"*"`, to search all modules); `className` accepts a simple name, `Outer.Inner`, or a trailing `.class`/`.java`. The first call on a project runs Gradle (typically 5–10s); later calls use the cache. Pass `forceRefresh: true` only after something changed that the build files do not show, such as a SNAPSHOT republish.
 
 ---
 
@@ -269,6 +238,16 @@ Composite builds, Android-only layouts, and exotic configurations are not fully 
 * **Local only** — caches and diagnostics stay on disk; never writes under your project root.
 * **Subprocesses** via argv only (no shell interpolation) — see [SECURITY.md](SECURITY.md).
 * Optional `JVMSRC_ALLOWED_ROOTS` to lock down which projects jvmsrc may resolve.
+* **Files it writes:** the cache, config and log folders only (OS defaults from [`env-paths`](https://www.npmjs.com/package/env-paths); see [Environment Variables](#detailed-reference)). It does **not** edit your agent config, `CLAUDE.md` or hooks. You add those yourself.
+
+**Uninstall**
+
+```bash
+claude mcp remove jvmsrc        # Claude Code. Other clients: delete the "jvmsrc" entry from the MCP config
+npm uninstall -g jvmsrc         # only if you installed it globally
+```
+
+Then delete the jvmsrc cache folder (`JVMSRC_CACHE_ROOT`, or the OS default), the rule block in your agent instructions and the hook entry, if you added them.
 
 </details>
 
