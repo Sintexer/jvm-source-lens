@@ -8,7 +8,8 @@ export type BundledResourceName = (typeof BUNDLED_RESOURCE_NAMES)[number];
 
 const ALLOWED = new Set<string>(BUNDLED_RESOURCE_NAMES);
 
-function findPackageRoot(startDir: string): string {
+/** Walks up from `startDir` to the directory holding the `jvmsrc` package.json; throws if none. */
+export function findPackageRoot(startDir: string): string {
   let dir = path.resolve(startDir);
   for (;;) {
     const pkgPath = path.join(dir, 'package.json');

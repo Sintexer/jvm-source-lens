@@ -19,6 +19,16 @@ function gradleCaptureFromSpawn(s: GradleSpawnResult): GradleProcessCapture {
   };
 }
 
+/** Appends the last non-empty stderr lines so a bare "Gradle exited with code 1" is actionable. */
+export function withStderrTail(message: string, stderr: string | undefined, maxLines = 3): string {
+  const lines = (stderr ?? '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .slice(-maxLines);
+  return lines.length > 0 ? `${message}: ${lines.join(' | ')}` : message;
+}
+
 export type ResolveSourcesJarGradleOptions = {
   inheritStderr?: boolean;
   onBeforeGradle?: () => void;
@@ -59,7 +69,7 @@ export async function resolveSourcesJar(
   if (!spawned.ok) {
     return {
       ok: false,
-      message: spawned.message,
+      message: withStderrTail(spawned.message, spawned.stderr),
       stderr: spawned.stderr,
       gradle: gradleCaptureFromSpawn(spawned),
     };

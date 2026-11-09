@@ -14,3 +14,14 @@ test('sanitizeDiagnosticInput allowlists keys only', () => {
     }),
   ).toEqual({ projectRoot: '/x', className: 'c' });
 });
+
+test('shouldKeepShortStringArraysWhenSanitizingMethodNames', () => {
+  const out = sanitizeDiagnosticInput({ methodNames: ['write', 'flush', 42, 'x'.repeat(500)], other: 1 });
+  expect(out.methodNames).toEqual(['write', 'flush', 'x'.repeat(200)]);
+  expect(out.other).toBeUndefined();
+});
+
+test('shouldCapArrayLengthWhenMethodNamesHuge', () => {
+  const names = Array.from({ length: 50 }, (_, i) => `m${i}`);
+  expect((sanitizeDiagnosticInput({ methodNames: names }).methodNames as string[]).length).toBe(20);
+});

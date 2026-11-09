@@ -26,7 +26,7 @@ import type {
   JavapFieldInfo,
   JavapMethodWithName,
 } from './class-structure/types.js';
-import type { ArtifactCoordinates, ClassSourceError, ClassSourceLookupOptions } from './extractor/class-source-types.js';
+import type { ClassSourceError, ClassSourceLookupOptions } from './extractor/class-source-types.js';
 import { findClasspathOwningClass } from './extractor/find-external-class-jar.js';
 import { resolveClassScopeOrError } from './extractor/canonicalize-class-name.js';
 import {
@@ -35,8 +35,7 @@ import {
 } from './extractor/read-java-source-from-classpath.js';
 import { enrichIfClassNotFound } from './enrich-class-not-found.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
-import type { GradleProcessCapture } from './resolvers/base.js';
-import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
+import { createSourcesJarResolver } from './sources-jar-resolver.js';
 import type { ResolutionOutput } from './resolvers/resolution-output.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 
@@ -59,22 +58,6 @@ function wantsSection(include: ClassStructureIncludeSection[] | undefined, secti
     return section === 'fields';
   }
   return include.includes(section);
-}
-
-function coordinatesKey(c: ArtifactCoordinates): string {
-  return `${c.group}:${c.name}:${c.version ?? ''}`;
-}
-
-function subprocessFromGradle(g: GradleProcessCapture | undefined) {
-  if (!g) {
-    return undefined;
-  }
-  return {
-    command: g.command,
-    exitCode: g.exitCode,
-    stdout: g.stdout,
-    stderr: g.stderr,
-  };
 }
 
 function enrichClassStructureError(
@@ -310,55 +293,16 @@ export async function getClassStructure(
     includeTest: opts.includeTest,
   };
 
-  const sourcesJarCache = new Map<string, string | null>();
-  const resolveSourcesJarFn = async (coordinates: ArtifactCoordinates): Promise<string | null> => {
-    const key = coordinatesKey(coordinates);
-    if (sourcesJarCache.has(key)) {
-      return sourcesJarCache.get(key) ?? null;
-    }
-    const result = await resolveSourcesJar(opts.projectRoot, coordinates);
-    if (!result.ok) {
-      throw Object.assign(new Error(result.message), {
-        code: 'SOURCES_RESOLVE_FAILED' as const,
-        stderr: result.stderr,
-        coordinates,
-        gradle: result.gradle,
-      });
-    }
-    const path = result.sourcesJarPath;
-    sourcesJarCache.set(key, path);
-    return path;
-  };
+  const resolveSourcesJarFn = createSourcesJarResolver({
+    projectRoot: opts.projectRoot,
+    operation: 'get_class_structure',
+    input: { className, modulePath: opts.modulePath, includeTest: opts.includeTest },
+  });
 
-  let sourceRead: TryReadJavaSourceFromClasspathResult;
-  try {
-    sourceRead = await tryReadJavaSourceFromClasspath(resolved.output, {
-      ...lookupOpts,
-      resolveSourcesJar: resolveSourcesJarFn,
-    });
-  } catch (e) {
-    const err = e as {
-      code?: string;
-      message?: string;
-      stderr?: string;
-      coordinates?: ArtifactCoordinates;
-      gradle?: GradleProcessCapture;
-    };
-    if (err.code === 'SOURCES_RESOLVE_FAILED') {
-      return classStructureFail(
-        opts,
-        className,
-        {
-          code: 'SOURCES_RESOLVE_FAILED',
-          message: err.message ?? 'Failed to resolve sources JAR',
-          stderr: err.stderr,
-          coordinates: err.coordinates!,
-        },
-        subprocessFromGradle(err.gradle),
-      );
-    }
-    throw e;
-  }
+  const sourceRead = await tryReadJavaSourceFromClasspath(resolved.output, {
+    ...lookupOpts,
+    resolveSourcesJar: resolveSourcesJarFn,
+  });
 
   if (!sourceRead.ok) {
     return classStructureFail(opts, className, enrichClassStructureError(opts, resolved.output, sourceRead.error));

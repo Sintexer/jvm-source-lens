@@ -6,6 +6,7 @@ import { mapPublicFailureToDiagnostic, type PublicFailureCode } from './map-fail
 import { appendNdjsonLine } from './rolling-log.js';
 import { resolveGlobalLogRoot, ensureLogTree } from './log-root.js';
 import { redactSecretsInString, sanitizeDiagnosticInput } from './sanitize-input.js';
+import { SESSION_ID } from './session.js';
 import { tailText } from './text-tail.js';
 import { FailureSeverity, DIAGNOSTIC_FILE_SEVERITIES } from './failure-severity.js';
 
@@ -51,7 +52,11 @@ export function recordFailureDiagnostic(params: RecordFailureParams): RecordFail
     return {};
   }
 
-  const mapped = mapPublicFailureToDiagnostic(params.publicCode, params.message);
+  const mapped = mapPublicFailureToDiagnostic(
+    params.publicCode,
+    params.message,
+    params.subprocess?.stderr,
+  );
   const severity = params.forceSeverity ?? mapped.severity;
   const errorCode = params.forceErrorCode ?? mapped.errorCode;
   const includeJavaVersion =
@@ -67,6 +72,7 @@ export function recordFailureDiagnostic(params: RecordFailureParams): RecordFail
     timestamp: new Date().toISOString(),
     severity,
     toolVersion: readToolVersionFromPackage(),
+    sessionId: SESSION_ID,
     operation: params.operation,
     input: sanitizeDiagnosticInput({
       ...params.input,

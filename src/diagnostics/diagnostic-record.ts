@@ -12,6 +12,8 @@ export type DiagnosticRecord = {
   timestamp: string;
   severity: FailureSeverity;
   toolVersion: string;
+  /** Process-scoped id; matches `sessionId` in `calls.log` so failures can be grouped per session. */
+  sessionId?: string;
 
   operation: string;
   input: Record<string, unknown>;

@@ -89,3 +89,21 @@ test('search_classes miss with an explicit module tells the agent how to widen t
   expect(buildSearchClassesEmptyMessage({ query: 'X', modulePath: '*' })).not.toContain('Only module');
   expect(buildSearchClassesEmptyMessage({ query: 'X' })).not.toContain('Only module');
 });
+
+test('shouldHintIncludeTestWhenPackageHasTestSegment', () => {
+  const msg = buildClassNotFoundMessage({
+    className: 'deltix.algorithm.base.test.market.L2Market',
+    searchedArtifactCount: 3,
+    includeTest: false,
+  });
+  expect(msg).toContain('looks like a test type');
+});
+
+test('shouldMentionProjectOwnSourcesWhenFqnNotFound', () => {
+  const msg = buildClassNotFoundMessage({
+    className: 'com.example.Foo',
+    searchedArtifactCount: 3,
+    includeTest: true,
+  });
+  expect(msg).toContain("project's own");
+});

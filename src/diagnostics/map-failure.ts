@@ -3,6 +3,23 @@ import { FailureSeverity, type FailureSeverity as FailureSeverityT } from './fai
 
 export type PublicFailureCode = ClassSourceError['code'] | 'INVALID_PROJECT_ROOT' | 'CACHE_WRITE_FAILED';
 
+/** Gradle failures with a known, user-fixable cause (checked before the generic JDK heuristic). */
+function classifyGradleFailure(blob: string): string | null {
+  if (/git lfs pointer|org\.gradle\.wrapper\.GradleWrapperMain/i.test(blob)) {
+    return 'WRAPPER_BROKEN';
+  }
+  if (/credentials .*not defined/i.test(blob)) {
+    return 'BUILD_CREDENTIALS_MISSING';
+  }
+  if (/task 'jvmsrc\w+' not found/i.test(blob)) {
+    return 'INIT_SCRIPT_TASK_MISSING';
+  }
+  if (/requires at least jvm runtime version/i.test(blob)) {
+    return 'JVM_VERSION_MISMATCH';
+  }
+  return null;
+}
+
 export type MapFailureResult = { severity: FailureSeverityT; errorCode: string };
 
 /**
@@ -11,6 +28,8 @@ export type MapFailureResult = { severity: FailureSeverityT; errorCode: string }
 export function mapPublicFailureToDiagnostic(
   publicCode: PublicFailureCode,
   message: string,
+  /** Subprocess stderr, when available; lets Gradle failures be classified by cause. */
+  stderr?: string,
 ): MapFailureResult {
   const m = message.toLowerCase();
 
@@ -41,6 +60,12 @@ export function mapPublicFailureToDiagnostic(
       if (/failed to start gradle/i.test(m)) {
         return { severity: FailureSeverity.ENV_ERROR, errorCode: 'GRADLE_SPAWN_FAILED' };
       }
+      {
+        const specific = classifyGradleFailure(`${message}\n${stderr ?? ''}`);
+        if (specific) {
+          return { severity: FailureSeverity.ENV_ERROR, errorCode: specific };
+        }
+      }
       if (/\bjava\b.*not found|JAVA_HOME|spawn.*java/i.test(message)) {
         return { severity: FailureSeverity.ENV_ERROR, errorCode: 'JAVA_NOT_FOUND' };
       }
@@ -69,8 +94,8 @@ export function mapPublicFailureToDiagnostic(
     case 'FIND_SOURCE_TOO_LARGE':
       return { severity: FailureSeverity.USER_ERROR, errorCode: 'FIND_SOURCE_TOO_LARGE' };
     case 'SOURCE_OUTPUT_TOO_LARGE':
-      // File-persisted so `jvmsrc diagnostics last` surfaces agent full-source blow-ups.
-      return { severity: FailureSeverity.INTERNAL, errorCode: 'SOURCE_OUTPUT_TOO_LARGE' };
+      // Caller error (agent asked for an unscoped huge file), not a jvmsrc bug.
+      return { severity: FailureSeverity.USER_ERROR, errorCode: 'SOURCE_OUTPUT_TOO_LARGE' };
     default:
       return { severity: FailureSeverity.INTERNAL, errorCode: 'UNKNOWN_FAILURE' };
   }

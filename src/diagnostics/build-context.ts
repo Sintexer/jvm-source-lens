@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { findPackageRoot } from '../bundled-resources.js';
 import { resolveGlobalCacheRoot } from '../cache/paths.js';
 import type { DiagnosticRecord } from './diagnostic-record.js';
 
@@ -59,12 +60,11 @@ export function buildDiagnosticContextSync(opts: BuildDiagnosticContextOptions):
   };
 }
 
-/** Resolve package version from repo `package.json` (same pattern as `cli.ts`). */
+/** Package version, found by walking up to the `jvmsrc` package.json (works from `src/` and bundled `dist/`). */
 export function readToolVersionFromPackage(): string {
   try {
     const here = path.dirname(fileURLToPath(import.meta.url));
-    const pkgPath = path.resolve(here, '..', '..', 'package.json');
-    const raw = fs.readFileSync(pkgPath, 'utf8');
+    const raw = fs.readFileSync(path.join(findPackageRoot(here), 'package.json'), 'utf8');
     const v = JSON.parse(raw) as { version?: string };
     return v.version ?? '0.0.0';
   } catch {

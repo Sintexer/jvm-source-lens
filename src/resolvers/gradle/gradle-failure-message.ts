@@ -41,9 +41,16 @@ function authHint(blob: string): string {
   return '';
 }
 
+function credentialsHint(blob: string): string {
+  return /credentials .*not defined/i.test(blob)
+    ? 'Hint: the build needs repository credentials that are not defined — set them in ~/.gradle/gradle.properties or the env vars the build reads.'
+    : '';
+}
+
 function javaHint(blob: string): string {
   const lower = blob.toLowerCase();
   const isJdkRelated =
+    /requires at least jvm runtime version/i.test(blob) ||
     /\bJAVA_HOME\b/.test(blob) ||
     /unsupported class file/i.test(blob) ||
     /invalid source release/i.test(lower) ||
@@ -58,6 +65,7 @@ function javaHint(blob: string): string {
   // Try to extract the required Java version from the error message so we can give
   // a more specific hint (e.g. "Java 17 is required" rather than a generic suggestion).
   const versionMatch =
+    blob.match(/requires at least JVM runtime version (\d+)/i) ??
     blob.match(/[Jj]ava\s+(\d+)/) ??
     blob.match(/[Ll]anguage[Vv]ersion[.\s(]*(\d+)/) ??
     blob.match(/[Rr]elease\s+(\d+)/) ??
@@ -110,6 +118,10 @@ export function formatGradleUserMessage(p: FormatGradleUserMessageParams): strin
   const auth = authHint(blob);
   if (auth) {
     return appendHint(p.message, auth);
+  }
+  const credentials = credentialsHint(blob);
+  if (credentials) {
+    return appendHint(p.message, credentials);
   }
   const java = javaHint(blob);
   if (java) {

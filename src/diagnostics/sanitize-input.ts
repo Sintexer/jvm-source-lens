@@ -15,6 +15,9 @@ export function redactSecretsInString(value: string): string {
   return out;
 }
 
+const MAX_ARRAY_ITEMS = 20;
+const MAX_ARRAY_ITEM_CHARS = 200;
+
 const ALLOWED_INPUT_KEYS = new Set([
   'projectRoot',
   'className',
@@ -59,6 +62,14 @@ export function sanitizeDiagnosticInput(raw: Record<string, unknown> | undefined
     }
     if (typeof v === 'number' || typeof v === 'boolean') {
       out[k] = v;
+      continue;
+    }
+    if (Array.isArray(v)) {
+      // e.g. `methodNames`: keep short strings (names are not secrets) so retry patterns are analyzable.
+      out[k] = v
+        .filter((x): x is string => typeof x === 'string')
+        .slice(0, MAX_ARRAY_ITEMS)
+        .map((x) => redactSecretsInString(x.slice(0, MAX_ARRAY_ITEM_CHARS)));
       continue;
     }
     out[k] = '[omitted]';

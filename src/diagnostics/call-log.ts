@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ensureLogTree, resolveGlobalLogRoot } from './log-root.js';
 import { appendNdjsonLine } from './rolling-log.js';
+import { SESSION_ID as sessionId } from './session.js';
 import { sanitizeDiagnosticInput } from './sanitize-input.js';
 
 export const CALL_LOG_FILE_NAME = 'calls.log';
@@ -26,8 +26,6 @@ export type CallLogRecord = {
   textChars: number;
 };
 
-/** One MCP server process ≈ one agent session. */
-const sessionId = randomUUID();
 let nextSeq = 0;
 
 function str(v: unknown): string | null {

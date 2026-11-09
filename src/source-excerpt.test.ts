@@ -87,3 +87,30 @@ describe('applySourceExcerpt', () => {
     }
   });
 });
+
+describe('applySourceExcerpt constructor alias and hints', () => {
+  const src = `package q;
+public class Foo {
+  public Foo(int x) {}
+  public void alpha() {}
+  public void beta() {}
+}
+`;
+
+  test('shouldMatchConstructorWhenSimpleClassNameRequested', () => {
+    const r = applySourceExcerpt(src, 'q.Foo', true, { methodNames: ['Foo'] });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.excerpt) {
+      expect(r.excerpt.matchedMethodNames).toEqual(['Foo']);
+      expect(r.source).toContain('public Foo(int x)');
+    }
+  });
+
+  test('shouldListDeclaredMethodNamesWhenNoMethodMatches', () => {
+    const r = applySourceExcerpt(src, 'q.Foo', true, { methodNames: ['gamma'] });
+    expect(r.ok).toBe(false);
+    if (!r.ok && r.error.code === 'EXCERPT_NOT_FOUND') {
+      expect(r.error.message).toContain('Declared methods: <init>, alpha, beta');
+    }
+  });
+});

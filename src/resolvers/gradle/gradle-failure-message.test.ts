@@ -75,3 +75,29 @@ describe('formatGradleUserMessage', () => {
     expect(m).toContain('JDK');
   });
 });
+
+describe('formatGradleUserMessage JVM runtime mismatch', () => {
+  test('shouldHintRequiredVersionNotCurrentJvmWhenBuildNeedsNewerJava', () => {
+    const m = formatGradleUserMessage({
+      task: 'jvmsrcResolve',
+      kind: 'exit',
+      message: 'Gradle exited with code 1',
+      stderr: 'Dependency requires at least JVM runtime version 25. This build uses a Java 17 JVM.',
+      command: ['/tmp/gradlew'],
+      usedWrapper: true,
+    });
+    expect(m).toContain('requires Java 25');
+  });
+
+  test('shouldHintCredentialsWhenBuildReportsMissingCredentials', () => {
+    const m = formatGradleUserMessage({
+      task: 'jvmsrcResolve',
+      kind: 'exit',
+      message: 'Gradle exited with code 1',
+      stderr: 'ERROR: Credentials to access nexus.example.com repo are NOT defined!',
+      command: ['/tmp/gradlew'],
+      usedWrapper: true,
+    });
+    expect(m).toContain('credentials');
+  });
+});

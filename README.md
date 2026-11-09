@@ -280,6 +280,7 @@ jvmsrc mcp                                                     # run as MCP serv
 * **JDK mismatch debugging:** Run `jvmsrc doctor java -p /path/to/project`
 * **After upgrading jvmsrc:** Restart your MCP host
 * **Stale classpath:** Run `jvmsrc resolve --force-refresh`
+* **Tool-usage analysis:** Set `JVMSRC_CALL_LOG=1` in the MCP server `env`; calls are logged to `calls.log` next to the failure log (macOS: `~/Library/Logs/jvmsrc/`)
 
 </details>
 

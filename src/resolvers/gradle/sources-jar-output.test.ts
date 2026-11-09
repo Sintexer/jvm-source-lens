@@ -18,3 +18,15 @@ describe('parseSourcesJarJson', () => {
     }
   });
 });
+
+import { withStderrTail } from './resolve-sources-jar.js';
+
+test('shouldAppendLastStderrLinesWhenStderrPresent', () => {
+  expect(withStderrTail('Gradle exited with code 1', 'a\n\nb\nc\nd\n')).toBe(
+    'Gradle exited with code 1: b | c | d',
+  );
+});
+
+test('shouldKeepMessageWhenStderrEmpty', () => {
+  expect(withStderrTail('Gradle exited with code 1', '')).toBe('Gradle exited with code 1');
+});

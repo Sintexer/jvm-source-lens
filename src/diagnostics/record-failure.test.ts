@@ -68,3 +68,22 @@ test('relative JVMSRC_LOG_DIR skips write without throwing', () => {
     }),
   ).toEqual({});
 });
+
+test('shouldIncludeSessionIdWhenRecordingFailure', async () => {
+  const { recordFailureDiagnostic } = await import('./record-failure.js');
+  const { resolveGlobalLogRoot } = await import('./log-root.js');
+  const { SESSION_ID } = await import('./session.js');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  recordFailureDiagnostic({
+    operation: 'get_class_source',
+    publicCode: 'CLASS_NOT_FOUND',
+    message: 'session-id-test',
+    projectRoot: '/tmp/x',
+    buildSystem: null,
+  });
+  const root = resolveGlobalLogRoot();
+  if (!root.ok) throw new Error('no log root');
+  const last = fs.readFileSync(path.join(root.path, 'current.log'), 'utf8').trim().split('\n').at(-1)!;
+  expect(JSON.parse(last).sessionId).toBe(SESSION_ID);
+});

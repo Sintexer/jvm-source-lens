@@ -196,6 +196,18 @@ function validateLineRange(startLine?: number, endLine?: number): string | null 
  * Applies optional method and/or line-range excerpts to full compilation-unit source.
  * Returns the original string unchanged when `request` is null/empty.
  */
+const DECLARED_METHODS_HINT_CAP = 15;
+
+function declaredMethodsHint(names: string[]): string {
+  const distinct = [...new Set(names)];
+  if (distinct.length === 0) {
+    return '';
+  }
+  const shown = distinct.slice(0, DECLARED_METHODS_HINT_CAP);
+  const more = distinct.length > shown.length ? `, … (+${distinct.length - shown.length})` : '';
+  return ` Declared methods: ${shown.join(', ')}${more}.`;
+}
+
 export function applySourceExcerpt(
   source: string,
   className: string,
@@ -231,8 +243,11 @@ export function applySourceExcerpt(
         },
       };
     }
+    const simpleClassName = className.slice(Math.max(className.lastIndexOf('.'), className.lastIndexOf('$')) + 1);
     for (const name of requestedMethodNames) {
-      const hits = collected.filter((s) => s.jvmMethodName === name);
+      // Agents often pass the class name for a constructor; the JVM name is `<init>`.
+      const lookupName = name === simpleClassName ? '<init>' : name;
+      const hits = collected.filter((s) => s.jvmMethodName === lookupName);
       if (hits.length === 0) {
         unmatched.push(name);
         continue;
@@ -247,7 +262,9 @@ export function applySourceExcerpt(
         ok: false,
         error: {
           code: 'EXCERPT_NOT_FOUND',
-          message: `No matching method(s) in ${className}: ${unmatched.join(', ')}`,
+          message:
+            `No matching method(s) in ${className}: ${unmatched.join(', ')}.` +
+            declaredMethodsHint(collected.map((c) => c.jvmMethodName)),
           className,
           requestedMethodNames,
           unmatchedMethodNames: unmatched,

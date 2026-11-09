@@ -20,6 +20,11 @@ function looksLikeSimpleName(className: string): boolean {
   return !className.includes('.');
 }
 
+function looksLikeTestType(className: string): boolean {
+  const segments = className.split('.');
+  return /Test$|Tests$|IT$|Spec$/.test(segments.pop() ?? '') || segments.includes('test');
+}
+
 /** Heuristic: lowercase-leading camelCase often means a method, not a type. */
 export function looksLikeMethodQuery(query: string): boolean {
   const q = query.trim();
@@ -69,7 +74,12 @@ export function buildClassNotFoundMessage(ctx: ClassNotFoundContext): string {
   } else if (!ctx.modulePath) {
     parts.push('In multimodule builds, pass modulePath (e.g. ":app") to scope the classpath.');
   }
-  if (!ctx.includeTest && /Test$|Tests$|IT$|Spec$/.test(ctx.className.split('.').pop() ?? '')) {
+  if (!looksLikeSimpleName(ctx.className)) {
+    parts.push(
+      "The class may belong to the project's own sources (not yet compiled) rather than a dependency; jvmsrc only reads dependency JARs and module source roots.",
+    );
+  }
+  if (!ctx.includeTest && looksLikeTestType(ctx.className)) {
     parts.push('This looks like a test type — retry with includeTest: true to use testCompileClasspath and src/test/java.');
   } else if (!ctx.includeTest) {
     parts.push('For test-only types, retry with includeTest: true.');

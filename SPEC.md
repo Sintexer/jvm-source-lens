@@ -684,6 +684,10 @@ On Linux, **`XDG_STATE_HOME`** (not **`XDG_CACHE_HOME`**) matches the usual dist
 
 **MCP call log (opt-in):** with **`JVMSRC_CALL_LOG=1`** the MCP server appends one NDJSON line per tool call to **`calls.log`** in the same log root (same rotation policy, 5 MiB + 3 backups). Fields: `timestamp`, `sessionId` (one per server process), `seq`, `firstCallOfSession`, `tool`, `input` (allowlisted + redacted, same rules as failure diagnostics), `durationMs`, `isError`, `errorCategory`, `code`, `textChars`. Result text is never logged. Off by default.
 
+**Failure records** carry `toolVersion` and `sessionId` (same value as in `calls.log`) so failures group per session. Gradle failures are classified by stderr into granular `errorCode`s: `WRAPPER_BROKEN` (Git LFS pointer JAR, missing `GradleWrapperMain`), `BUILD_CREDENTIALS_MISSING`, `INIT_SCRIPT_TASK_MISSING`, `JVM_VERSION_MISMATCH` (all `env_error`). `SOURCE_OUTPUT_TOO_LARGE` is a `user_error`. `methodNames` is logged as a capped (20 × 200 chars) string array.
+
+**Sources-JAR failures are non-fatal:** when `jvmsrcResolveSources` fails, jvmsrc records a `SOURCES_GRADLE_FAILED` diagnostic (message includes the last stderr lines) and falls back to CFR decompilation / bytecode (`sourceAvailable: false`) instead of returning `SOURCES_RESOLVE_FAILED`.
+
 **Rotation and retention** (planned defaults):
 
 | Policy | Value |

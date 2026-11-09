@@ -1,11 +1,11 @@
 import { createCliProgressReporter } from './cli-progress.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import { enrichIfClassNotFound } from './enrich-class-not-found.js';
-import type { ArtifactCoordinates, ClassSourceLookupResult } from './extractor/class-source-types.js';
+import type { ClassSourceLookupResult } from './extractor/class-source-types.js';
 import { extractExternalClassSource } from './extractor/extract-external-class-source.js';
 import { resolveClassScopeOrError } from './extractor/canonicalize-class-name.js';
-import type { GradleProcessCapture, ResolveOptions } from './resolvers/base.js';
-import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
+import type { ResolveOptions } from './resolvers/base.js';
+import { createSourcesJarResolver } from './sources-jar-resolver.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 import { capSourceText, checkUnscopedFullSourceSize } from './output-limits.js';
 import {
@@ -40,18 +40,6 @@ export type GetClassSourceOptions = {
   /** CLI-only: progress labels and Gradle verbose stderr. */
   cli?: GetClassSourceCliOptions;
 };
-
-function subprocessFromGradle(g: GradleProcessCapture | undefined) {
-  if (!g) {
-    return undefined;
-  }
-  return {
-    command: g.command,
-    exitCode: g.exitCode,
-    stdout: g.stdout,
-    stderr: g.stderr,
-  };
-}
 
 function commonInput(opts: GetClassSourceOptions, className: string): Record<string, unknown> {
   return {
@@ -142,10 +130,6 @@ function capClassSourceSuccess(
   };
 }
 
-function coordinatesKey(c: ArtifactCoordinates): string {
-  return `${c.group}:${c.name}:${c.version ?? ''}`;
-}
-
 /**
  * Resolves the project (with resolution cache), then looks up Java source for
  * an external dependency class on the selected classpath configuration.
@@ -213,77 +197,28 @@ export async function getClassSource(
     const effectiveModulePath = moduleScope.modulePath;
     className = moduleScope.className;
 
-    const sourcesJarCache = new Map<string, string | null>();
+    const resolveSourcesJarFn = createSourcesJarResolver({
+      projectRoot: opts.projectRoot,
+      operation: 'get_class_source',
+      input: commonInput(opts, className),
+      gradle: verboseGradle
+        ? { inheritStderr: true }
+        : progressEnabled
+          ? {
+              onBeforeGradle: () => reporter.update('Resolving sources JAR (Gradle)…'),
+              onAfterGradle: () => reporter.finishPhase(),
+            }
+          : undefined,
+    });
 
-    const resolveSourcesJarFn = async (coordinates: ArtifactCoordinates): Promise<string | null> => {
-      const key = coordinatesKey(coordinates);
-      if (sourcesJarCache.has(key)) {
-        return sourcesJarCache.get(key) ?? null;
-      }
-      const gradleHooks =
-        verboseGradle
-          ? { inheritStderr: true as const }
-          : progressEnabled
-            ? {
-                onBeforeGradle: () => reporter.update('Resolving sources JAR (Gradle)…'),
-                onAfterGradle: () => reporter.finishPhase(),
-              }
-            : undefined;
-      const result = await resolveSourcesJar(opts.projectRoot, coordinates, gradleHooks);
-      if (!result.ok) {
-        throw Object.assign(new Error(result.message), {
-          code: 'SOURCES_RESOLVE_FAILED' as const,
-          stderr: result.stderr,
-          coordinates,
-          gradle: result.gradle,
-        });
-      }
-      const path = result.sourcesJarPath;
-      sourcesJarCache.set(key, path);
-      return path;
-    };
-
-    let extracted: ClassSourceLookupResult;
-    try {
-      extracted = await extractExternalClassSource(resolved.output, {
-        className,
-        modulePath: effectiveModulePath,
-        configuration: opts.configuration,
-        includeTest: opts.includeTest,
-        resolveSourcesJar: resolveSourcesJarFn,
-        onBeforeDecompile: progressEnabled ? () => reporter.update('Decompiling with CFR…') : undefined,
-      });
-    } catch (e) {
-      const err = e as {
-        code?: string;
-        message?: string;
-        stderr?: string;
-        coordinates?: ArtifactCoordinates;
-        gradle?: GradleProcessCapture;
-      };
-      if (err.code === 'SOURCES_RESOLVE_FAILED') {
-        const diag = recordFailureDiagnostic({
-          operation: 'get_class_source',
-          publicCode: 'SOURCES_RESOLVE_FAILED',
-          message: err.message ?? 'Failed to resolve sources JAR',
-          projectRoot: opts.projectRoot,
-          buildSystem: 'gradle',
-          input: commonInput(opts, className),
-          subprocess: subprocessFromGradle(err.gradle),
-        });
-        return {
-          ok: false,
-          error: {
-            code: 'SOURCES_RESOLVE_FAILED',
-            message: err.message ?? 'Failed to resolve sources JAR',
-            stderr: err.stderr,
-            coordinates: err.coordinates!,
-          },
-          ...diag,
-        };
-      }
-      throw e;
-    }
+    const extracted: ClassSourceLookupResult = await extractExternalClassSource(resolved.output, {
+      className,
+      modulePath: effectiveModulePath,
+      configuration: opts.configuration,
+      includeTest: opts.includeTest,
+      resolveSourcesJar: resolveSourcesJarFn,
+      onBeforeDecompile: progressEnabled ? () => reporter.update('Decompiling with CFR…') : undefined,
+    });
 
     if (!extracted.ok) {
       const e = enrichIfClassNotFound(opts.projectRoot, resolved.output, extracted.error, {
