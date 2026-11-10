@@ -1,5 +1,4 @@
-import crypto from 'node:crypto';
-import fs from 'node:fs';
+import { sha256File } from '../cache/sha256-file.js';
 import type { ArtifactCoordinates, DecompiledProvenance } from '../extractor/class-source-types.js';
 import {
   getDecompiledCacheFilePath,
@@ -73,8 +72,7 @@ export async function decompileExternalClass(
   // Compute JAR content hash so SNAPSHOT/local-Maven republications get distinct cache entries.
   let jarContentHash: string | undefined;
   try {
-    const jarBytes = fs.readFileSync(opts.jarPath);
-    jarContentHash = crypto.createHash('sha256').update(jarBytes).digest('hex');
+    jarContentHash = sha256File(opts.jarPath);
   } catch {
     // If the JAR can't be read for hashing, proceed without a hash (legacy path).
   }

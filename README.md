@@ -191,7 +191,7 @@ Set `JVMSRC_HOOK_DISABLE=1` to switch it off for a while. Other clients have the
 
 ## Target Audience
 
-Primarily **Java + Spring Boot** projects on Gradle. Other JVM languages (Kotlin, Scala) and Android work today on a best-effort basis and are on the roadmap as first-class targets — see [ROADMAP.md](ROADMAP.md).
+Primarily **Java + Spring Boot** projects on Gradle. Other JVM languages (Kotlin, Scala) and Android work today on a best-effort basis and are on the roadmap as first-class targets — see [PLAN.md](PLAN.md).
 
 *If you're on Maven or Bazel, it's planned but not shipping yet. Star the repo or open an issue and I'll prioritize accordingly.*
 
@@ -227,7 +227,7 @@ Early software; the supported path is narrow:
 | Classpaths | Standard JVM + Kotlin MPP `jvm*` configurations when Gradle exposes them |
 | Output | **Java-shaped** `.java` text (sources JAR, inter-project `src`, or CFR) |
 
-Composite builds, Android-only layouts, and exotic configurations are not fully validated. See [ROADMAP.md](ROADMAP.md).
+Composite builds, Android-only layouts, and exotic configurations are not fully validated. See [PLAN.md](PLAN.md).
 
 </details>
 
@@ -298,6 +298,9 @@ jvmsrc mcp                                                     # run as MCP serv
 | `JVMSRC_PROJECT_ROOT` | Default project root for MCP tools when `projectRoot` is omitted and the client sends no workspace roots (falls back to the working directory) |
 | `JVMSRC_MAX_SOURCE_OUTPUT_CHARS` | Max source body size (default 524288) |
 | `JVMSRC_GRADLE_TIMEOUT_MS` | Gradle timeout |
+| `JVMSRC_USE_SYSTEM_GRADLE` | `1` = run `gradle` on `PATH`, not the project's `./gradlew` (see [SECURITY.md](SECURITY.md#gradle-wrapper-trust)) |
+| `JVMSRC_MAX_JAR_BYTES` | Max size of a JAR read into memory (default 524288000 = 500 MB); larger JARs return `ZIP_READ_ERROR` |
+| `JVMSRC_REGEX_TIMEOUT_MS` | Wall-clock limit for regex mode in `find_in_class_source` / `search_in_artifact` (default 2000) |
 | `JVMSRC_CFR_PATH` | Custom CFR JAR |
 
 Defaults follow [`env-paths`](https://www.npmjs.com/package/env-paths) conventions per OS. Full layout: [SPEC.md](SPEC.md) §6.
@@ -326,7 +329,7 @@ When `JVMSRC_JAVA_HOME` is not set, jvmsrc auto-discovers local JDKs from common
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Build, test, PR notes |
 | [RELEASING.md](RELEASING.md) | Branching, semver, npm releases |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
-| [ROADMAP.md](ROADMAP.md) | Status and planned work |
+| [PLAN.md](PLAN.md) | Status and checkpoint plan |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 
 ## Building from Source

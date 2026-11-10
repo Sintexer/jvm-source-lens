@@ -1,9 +1,13 @@
+import { RegexMatchRunner, type RegexMatchOutcome } from './regex-match-runner.js';
+
 export const DEFAULT_FIND_CONTEXT_LINES = 3;
 export const DEFAULT_FIND_MAX_HITS = 20;
 export const MAX_FIND_MAX_HITS = 100;
 export const MAX_FIND_QUERY_LENGTH = 500;
 /** Upper bound on compilation-unit size scanned for find-in-source (bytes). */
 export const MAX_FIND_SOURCE_BYTES = 8 * 1024 * 1024;
+/** Extra `exec` calls allowed beyond `maxHits` before a regex scan stops (zero-length matches). */
+const REGEX_EXTRA_ITERATIONS = 10_000;
 
 export type ClassSourceTextSearchHit = {
   /** 1-based line of match start. */
@@ -174,7 +178,7 @@ function searchRegex(
 
   const hits: ClassSourceTextSearchHit[] = [];
   let totalMatches = 0;
-  const maxIterations = maxHits + 10_000;
+  const maxIterations = maxHits + REGEX_EXTRA_ITERATIONS;
   let iterations = 0;
 
   let m: RegExpExecArray | null;
@@ -209,10 +213,10 @@ function searchRegex(
   return { hits, totalMatches, truncated: totalMatches > hits.length };
 }
 
-export function searchClassSourceText(
+function validateSearch(
   source: string,
   options: ClassSourceTextSearchOptions,
-): ClassSourceTextSearchResult | { error: ClassSourceTextSearchError } {
+): { error: ClassSourceTextSearchError } | { contextLines: number; maxHits: number } {
   const query = options.query;
   if (query.length === 0) {
     return { error: { code: 'FIND_QUERY_INVALID', message: 'query must be non-empty' } };
@@ -237,17 +241,85 @@ export function searchClassSourceText(
     };
   }
 
-  const contextLines = clampContextLines(options.contextLines);
-  const maxHits = clampMaxHits(options.maxHits);
+  return {
+    contextLines: clampContextLines(options.contextLines),
+    maxHits: clampMaxHits(options.maxHits),
+  };
+}
+
+/**
+ * Synchronous search. Regex mode runs on the calling thread with no time limit; prefer
+ * {@link searchClassSourceTextAsync} for patterns from untrusted callers.
+ */
+export function searchClassSourceText(
+  source: string,
+  options: ClassSourceTextSearchOptions,
+): ClassSourceTextSearchResult | { error: ClassSourceTextSearchError } {
+  const v = validateSearch(source, options);
+  if ('error' in v) {
+    return v;
+  }
   const { lines, lineStarts } = buildLineIndex(source);
 
   if (options.regex) {
-    const r = searchRegex(source, lines, lineStarts, query, contextLines, maxHits);
-    if ('error' in r) {
-      return r;
-    }
-    return r;
+    return searchRegex(source, lines, lineStarts, options.query, v.contextLines, v.maxHits);
   }
 
-  return searchLiteral(source, lines, lineStarts, query, contextLines, maxHits);
+  return searchLiteral(source, lines, lineStarts, options.query, v.contextLines, v.maxHits);
+}
+
+/**
+ * Same result as {@link searchClassSourceText}, but regex mode runs in a worker with a
+ * `JVMSRC_REGEX_TIMEOUT_MS` deadline. Pass `runner` to reuse one worker across many sources.
+ */
+export async function searchClassSourceTextAsync(
+  source: string,
+  options: ClassSourceTextSearchOptions,
+  runner?: RegexMatchRunner,
+): Promise<ClassSourceTextSearchResult | { error: ClassSourceTextSearchError }> {
+  if (!options.regex) {
+    return searchClassSourceText(source, options);
+  }
+  const v = validateSearch(source, options);
+  if ('error' in v) {
+    return v;
+  }
+  try {
+    new RegExp(options.query, 'g');
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { error: { code: 'FIND_QUERY_INVALID', message: `Invalid regex: ${msg}` } };
+  }
+
+  const ownRunner = runner === undefined ? new RegexMatchRunner() : null;
+  const active = runner ?? ownRunner!;
+  let outcome: RegexMatchOutcome;
+  try {
+    outcome = await active.match({
+      source,
+      pattern: options.query,
+      maxHits: v.maxHits,
+      maxIterations: v.maxHits + REGEX_EXTRA_ITERATIONS,
+    });
+  } finally {
+    await ownRunner?.close();
+  }
+
+  if (!outcome.ok) {
+    const message =
+      outcome.reason === 'timeout'
+        ? `Regex timed out after ${outcome.timeoutMs} ms (JVMSRC_REGEX_TIMEOUT_MS). ` +
+          'Simplify the pattern (avoid nested quantifiers such as (a+)+) or search with regex: false.'
+        : `Invalid regex: ${outcome.message}`;
+    return { error: { code: 'FIND_QUERY_INVALID', message } };
+  }
+
+  const { lines, lineStarts } = buildLineIndex(source);
+  const hits = outcome.ranges.map(([start, end]) =>
+    hitFromRange(source, lines, lineStarts, start, end, v.contextLines),
+  );
+  if (outcome.capped) {
+    return { hits, totalMatches: Math.max(outcome.totalMatches, hits.length), truncated: true };
+  }
+  return { hits, totalMatches: outcome.totalMatches, truncated: outcome.totalMatches > hits.length };
 }

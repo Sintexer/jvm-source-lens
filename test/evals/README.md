@@ -61,3 +61,15 @@ Compare runs by diffing `summary.json`; re-run `--rescore` after changing `scori
 - One run per prompt is noisy; repeat (`--filter`, several runs) before concluding anything from a few percentage points.
 - Claude Code may load MCP tools lazily through `ToolSearch`; then only tool names and descriptions are searched, which is exactly what the shortened descriptions optimise for.
 - Results depend on the model and the client; record both next to any number you quote.
+
+## Results
+
+Add one row for each full run. Write the model and the client version in the row.
+
+| Date | Setup | Recall | First-call success | First-tool acc. | Fallback | Notes |
+|---|---|---|---|---|---|---|
+| 2026-10-01 | Full baseline, 40 prompts, Claude Code 2.1.286, default model, jvmsrc + read-only Bash | 100% (34/34; 0/6 negatives) | 71% strict / 82% usable | 97% | 0% | Precision 100%, 1.8 calls/task. 12 of 60 calls had errors: 9 `MODULE_AMBIGUOUS`, 2 `SOURCE_OUTPUT_TOO_LARGE` on find, 1 `DECOMPILE_FAILED` (nested class). The fixes that followed are not measured yet |
+
+"Usable" includes answers to questions that are really ambiguous, when the answer is ready for a retry. An example is one class with different versions in different modules.
+
+Eager tokens (`bun run measure:tokens`, `chars / 4`): 4,283 at v1.16.0 → 2,401 after the copy rewrite → 2,478 after `modulePath` guidance. The target is ≤ 2,000 ([PLAN.md](../../PLAN.md), checkpoint 3).

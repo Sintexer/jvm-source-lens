@@ -9,13 +9,14 @@ import { resolveWithResolutionCache } from './resolve-with-cache.js';
 import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
 import type { ResolvedArtifact, ResolutionOutput } from './resolvers/resolution-output.js';
 import {
-  searchClassSourceText,
+  searchClassSourceTextAsync,
   type ClassSourceTextSearchHit,
   DEFAULT_FIND_CONTEXT_LINES,
   DEFAULT_FIND_MAX_HITS,
   MAX_FIND_MAX_HITS,
 } from './class-source-text-search.js';
 import { listFqnsFromJarClassEntries } from './class-search/jar-class-fqns.js';
+import { RegexMatchRunner } from './regex-match-runner.js';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -332,50 +333,55 @@ export async function searchInArtifactFromOutput(
   let totalHitCount = 0;
   let truncated = false;
   let classesScanned = 0;
+  const runner = regex ? new RegexMatchRunner() : undefined;
 
-  for (const fqn of allFqns) {
-    if (totalHitCount >= maxHits) {
-      truncated = true;
-      break;
-    }
-
-    const sourceResult = await fetchClassSource(fqn, artifact, sourcesJarPath);
-    classesScanned++;
-
-    if (sourceResult === null) continue;
-
-    const remaining = maxHits - totalHitCount;
-    const searchResult = searchClassSourceText(sourceResult.source, {
-      query: opts.query,
-      contextLines,
-      maxHits: remaining,
-      regex,
-    });
-
-    if ('error' in searchResult) {
-      if (searchResult.error.code === 'FIND_QUERY_INVALID') {
-        return { ok: false, error: { code: 'FIND_QUERY_INVALID', message: searchResult.error.message } };
+  try {
+    for (const fqn of allFqns) {
+      if (totalHitCount >= maxHits) {
+        truncated = true;
+        break;
       }
-      // FIND_SOURCE_TOO_LARGE for a single class: skip silently
-      continue;
-    }
 
-    totalMatches += searchResult.totalMatches;
+      const sourceResult = await fetchClassSource(fqn, artifact, sourcesJarPath);
+      classesScanned++;
 
-    if (searchResult.hits.length > 0) {
-      classHits.push({
-        className: fqn,
-        sourceAvailable: sourceResult.sourceAvailable,
-        totalMatches: searchResult.totalMatches,
-        hits: searchResult.hits,
-      });
-      totalHitCount += searchResult.hits.length;
-    }
+      if (sourceResult === null) continue;
 
-    if (searchResult.truncated) {
-      truncated = true;
-      break;
+      const remaining = maxHits - totalHitCount;
+      const searchResult = await searchClassSourceTextAsync(
+        sourceResult.source,
+        { query: opts.query, contextLines, maxHits: remaining, regex },
+        runner,
+      );
+
+      if ('error' in searchResult) {
+        // Invalid pattern or regex timeout: the same failure would repeat for every class.
+        if (searchResult.error.code === 'FIND_QUERY_INVALID') {
+          return { ok: false, error: { code: 'FIND_QUERY_INVALID', message: searchResult.error.message } };
+        }
+        // FIND_SOURCE_TOO_LARGE for a single class: skip silently
+        continue;
+      }
+
+      totalMatches += searchResult.totalMatches;
+
+      if (searchResult.hits.length > 0) {
+        classHits.push({
+          className: fqn,
+          sourceAvailable: sourceResult.sourceAvailable,
+          totalMatches: searchResult.totalMatches,
+          hits: searchResult.hits,
+        });
+        totalHitCount += searchResult.hits.length;
+      }
+
+      if (searchResult.truncated) {
+        truncated = true;
+        break;
+      }
     }
+  } finally {
+    await runner?.close();
   }
 
   // Mark truncated if we didn't finish all FQNs

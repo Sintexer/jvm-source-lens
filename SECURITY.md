@@ -28,12 +28,23 @@ Include steps to reproduce, impact, and affected versions. We aim to acknowledge
 
 | Process | When | Input |
 |---------|------|--------|
-| `gradlew` / `gradle` | Resolution, sources JAR fetch | Fixed task names + bundled init script path |
+| `gradlew` / `gradle` | Resolution, sources JAR fetch | Fixed task names + bundled init script path (see [Gradle wrapper trust](#gradle-wrapper-trust)) |
 | `java` (CFR) | Decompile when no sources JAR | JAR path from Gradle resolution |
 | `javap` | Signatures / structure fallback | Class name + classpath from resolution |
 | `sh` (Unix only) | Run non-executable `gradlew` | Wrapper script path only — not user-controlled |
 
 Subprocesses use an **argv array** via `cross-spawn` / `Bun.spawn` with **`shell: false`** (never `/bin/sh -c …` with interpolated user input). See [src/spawn-child.ts](src/spawn-child.ts).
+
+### Gradle wrapper trust
+
+Resolution runs the project's own `./gradlew`, which starts `gradle/wrapper/gradle-wrapper.jar` and downloads the distribution named in `gradle/wrapper/gradle-wrapper.properties`. These files come from the repository and run with your user rights. The project's `build.gradle(.kts)`, `settings.gradle(.kts)` and plugins also run, as in any Gradle build.
+
+For a repository you do not trust:
+
+- Check `distributionUrl` and set `distributionSha256Sum` in `gradle-wrapper.properties`, and verify `gradle-wrapper.jar` (for example with [gradle/actions/wrapper-validation](https://github.com/gradle/actions)).
+- Or set **`JVMSRC_USE_SYSTEM_GRADLE=1`** so jvmsrc runs `gradle` from your `PATH` and does not run the project's wrapper.
+
+`JVMSRC_USE_SYSTEM_GRADLE` does not make the build safe: the build scripts still run. Use jvmsrc only on projects you would build yourself.
 
 ### Untrusted bytecode
 
@@ -60,3 +71,4 @@ Runtime dependencies are pinned in **`bun.lock`**. CI runs `bun install --frozen
 - Prefer **`npx -y jvmsrc@<version> mcp`** with a pinned version in MCP config for reproducibility.
 - Set **`JVMSRC_ALLOWED_ROOTS`** in shared/CI environments when MCP agents can pass arbitrary paths.
 - Override **`JVMSRC_CFR_PATH`** only with JARs your organization has reviewed.
+- Set **`JVMSRC_USE_SYSTEM_GRADLE=1`** when agents can point jvmsrc at repositories whose Gradle wrapper you have not reviewed.

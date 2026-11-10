@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { checkJarSize } from '../extractor/jar-size-guard.js';
 
 const EOCD_SIG = 0x06054b50;
 const CD_HEADER_SIG = 0x02014b50;
@@ -47,6 +48,10 @@ function classEntryToFqn(entryName: string): string | null {
  * Lists top-level `.class` FQNs from a JAR by parsing the ZIP central directory only (no inflate).
  */
 export function listFqnsFromJarClassEntries(jarAbsPath: string): { ok: true; fqns: string[] } | { ok: false; message: string } {
+  const size = checkJarSize(jarAbsPath);
+  if (!size.ok) {
+    return { ok: false, message: size.message };
+  }
   let buf: Buffer;
   try {
     buf = readFileSync(jarAbsPath);

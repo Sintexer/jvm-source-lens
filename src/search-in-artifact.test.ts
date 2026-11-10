@@ -338,6 +338,44 @@ public class Hello {
     expect(result.error.code).toBe('FIND_QUERY_INVALID');
   });
 
+  test('shouldStopWholeScanWhenRegexTimesOutOnFirstClass', async () => {
+    const saved = process.env.JVMSRC_REGEX_TIMEOUT_MS;
+    process.env.JVMSRC_REGEX_TIMEOUT_MS = '200';
+    try {
+      const evil = 'a'.repeat(40) + '!';
+      const sourcesJar = makeJar({
+        'com/example/A.java': evil,
+        'com/example/B.java': evil,
+        'com/example/C.java': evil,
+      });
+      const binaryJar = makeJar({
+        'com/example/A.class': '\xca\xfe\xba\xbe',
+        'com/example/B.class': '\xca\xfe\xba\xbe',
+        'com/example/C.class': '\xca\xfe\xba\xbe',
+      });
+      const output = makeOutput(makeArtifact({ jarPath: binaryJar, sourcesJarPath: sourcesJar }));
+      const started = Date.now();
+
+      const result = await searchInArtifactFromOutput(output, {
+        selector: { jarPath: binaryJar },
+        query: '(a+)+$',
+        regex: true,
+      });
+
+      expect(Date.now() - started).toBeLessThan(400 + 300);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('FIND_QUERY_INVALID');
+      expect(result.error.message).toContain('timed out');
+    } finally {
+      if (saved === undefined) {
+        delete process.env.JVMSRC_REGEX_TIMEOUT_MS;
+      } else {
+        process.env.JVMSRC_REGEX_TIMEOUT_MS = saved;
+      }
+    }
+  });
+
   test('returns ARTIFACT_NOT_FOUND when selector misses', async () => {
     const binaryJar = makeJar({ 'com/example/X.class': '\xca\xfe\xba\xbe' });
     const artifact = makeArtifact({ jarPath: binaryJar });

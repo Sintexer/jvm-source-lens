@@ -121,6 +121,10 @@ export function classifyClassSourceError(
           `Use get_method_signature to list overload names, or omit excerpt params for the full file.`,
       );
     case 'FIND_QUERY_INVALID':
+      // A timeout message already says what to do. The generic hint only fits a bad pattern.
+      if (error.message.includes('timed out')) {
+        return envelope(error, 'validation', true, 'Regex timed out', error.message);
+      }
       return envelope(
         error,
         'validation',

@@ -1,5 +1,10 @@
-import { describe, expect, test } from 'bun:test';
-import { buildLineIndex, searchClassSourceText } from './class-source-text-search.js';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import {
+  buildLineIndex,
+  searchClassSourceText,
+  searchClassSourceTextAsync,
+} from './class-source-text-search.js';
+import { RegexMatchRunner } from './regex-match-runner.js';
 
 const sample = `package q;
 
@@ -68,6 +73,87 @@ describe('searchClassSourceText', () => {
     expect(r.hits.length).toBe(2);
     expect(r.truncated).toBe(true);
     expect(r.totalMatches).toBe(3);
+  });
+});
+
+describe('searchClassSourceTextAsync', () => {
+  let savedTimeout: string | undefined;
+
+  beforeEach(() => {
+    savedTimeout = process.env.JVMSRC_REGEX_TIMEOUT_MS;
+  });
+
+  afterEach(() => {
+    if (savedTimeout === undefined) {
+      delete process.env.JVMSRC_REGEX_TIMEOUT_MS;
+    } else {
+      process.env.JVMSRC_REGEX_TIMEOUT_MS = savedTimeout;
+    }
+  });
+
+  test('regex mode returns the same hits as the sync search', async () => {
+    const opts = { query: 'needle|throw new \\w+', regex: true, contextLines: 1, maxHits: 5 };
+
+    const r = await searchClassSourceTextAsync(sample, opts);
+
+    expect(r).toEqual(searchClassSourceText(sample, opts));
+    if (!('error' in r)) {
+      expect(r.hits.length).toBeGreaterThan(1);
+    }
+  });
+
+  test('literal mode does not need a worker', async () => {
+    const r = await searchClassSourceTextAsync('aaa', { query: 'a', maxHits: 2 });
+    expect(r).toEqual(searchClassSourceText('aaa', { query: 'a', maxHits: 2 }));
+  });
+
+  test('invalid regex returns FIND_QUERY_INVALID', async () => {
+    const r = await searchClassSourceTextAsync(sample, { query: '(', regex: true });
+    expect('error' in r && r.error.code).toBe('FIND_QUERY_INVALID');
+  });
+
+  test('zero-length matches are skipped', async () => {
+    const r = await searchClassSourceTextAsync('ab', { query: 'x*', regex: true });
+    expect(r).toEqual({ hits: [], totalMatches: 0, truncated: false });
+  });
+
+  test('regex truncates at maxHits', async () => {
+    const r = await searchClassSourceTextAsync('aaa', { query: 'a', regex: true, maxHits: 2 });
+    expect('error' in r).toBe(false);
+    if ('error' in r) {
+      return;
+    }
+    expect(r.hits.length).toBe(2);
+    expect(r.truncated).toBe(true);
+    expect(r.totalMatches).toBe(3);
+  });
+
+  test('shouldReturnFindQueryInvalidWhenRegexBacktracksPastDeadline', async () => {
+    process.env.JVMSRC_REGEX_TIMEOUT_MS = '200';
+    const started = Date.now();
+
+    const r = await searchClassSourceTextAsync('a'.repeat(40) + '!', { query: '(a+)+$', regex: true });
+
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect('error' in r).toBe(true);
+    if ('error' in r) {
+      expect(r.error.code).toBe('FIND_QUERY_INVALID');
+      expect(r.error.message).toContain('timed out');
+      expect(r.error.message).toContain('JVMSRC_REGEX_TIMEOUT_MS');
+    }
+  });
+
+  test('a shared runner recovers after a timeout', async () => {
+    const runner = new RegexMatchRunner(200);
+    try {
+      const slow = await searchClassSourceTextAsync('a'.repeat(40) + '!', { query: '(a+)+$', regex: true }, runner);
+      expect('error' in slow).toBe(true);
+
+      const fast = await searchClassSourceTextAsync(sample, { query: 'needle', regex: true }, runner);
+      expect('error' in fast).toBe(false);
+    } finally {
+      await runner.close();
+    }
   });
 });
 

@@ -138,7 +138,7 @@ Examples: `feat: add JVMSRC_ALLOWED_ROOTS`, `fix: cap MCP source output size`.
 
 1. `bun test`, `bun run typecheck`, `bun run prepack`
 2. Commit **`bun.lock`** with any `package.json` dependency change (`bun install`)
-3. Update [SPEC.md](SPEC.md) / [README.md](README.md) / [ROADMAP.md](ROADMAP.md) as needed
+3. Update [SPEC.md](SPEC.md) / [README.md](README.md) / [PLAN.md](PLAN.md) as needed
 
 CI: `bun install --frozen-lockfile`, `bun audit`, `bun test`, `bun run prepack`, `bun run verify:publish`.
 

@@ -7,6 +7,7 @@ import type {
 } from './extractor/class-source-types.js';
 import {
   searchClassSourceText,
+  searchClassSourceTextAsync,
   type ClassSourceTextSearchHit,
 } from './class-source-text-search.js';
 import { buildFindInClassNoMatchMessage } from './copy/empty-messages.js';
@@ -134,8 +135,15 @@ export async function findInClassSource(
   if (!sourceResult.ok) {
     return sourceResult;
   }
+  return searchExtractedSource(sourceResult, opts);
+}
 
-  const search = searchClassSourceText(sourceResult.source, {
+/** Searches an already-extracted compilation unit; regex mode runs under the regex deadline. */
+export async function searchExtractedSource(
+  extracted: Extract<ClassSourceLookupResult, { ok: true }>,
+  opts: Pick<FindInClassSourceOptions, 'query' | 'contextLines' | 'maxHits' | 'regex'>,
+): Promise<FindInClassSourceResult> {
+  const search = await searchClassSourceTextAsync(extracted.source, {
     query: opts.query,
     contextLines: opts.contextLines,
     maxHits: opts.maxHits,
@@ -146,5 +154,5 @@ export async function findInClassSource(
     return { ok: false, error: mapSearchError(search.error) };
   }
 
-  return successFromSource(sourceResult, opts.query, Boolean(opts.regex), search);
+  return successFromSource(extracted, opts.query, Boolean(opts.regex), search);
 }

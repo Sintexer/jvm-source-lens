@@ -1,3 +1,5 @@
+import { parsePositiveIntEnv } from './config/env-int.js';
+
 /** Default max UTF-16 code units returned for a single class source body (CLI/MCP/library). */
 export const DEFAULT_MAX_SOURCE_OUTPUT_CHARS = 512 * 1024;
 
@@ -9,18 +11,6 @@ export type CapSourceTextResult = {
   truncated: boolean;
   originalLength: number;
 };
-
-function parsePositiveIntEnv(name: string, fallback: number): number {
-  const raw = process.env[name]?.trim();
-  if (!raw) {
-    return fallback;
-  }
-  const n = Number.parseInt(raw, 10);
-  if (!Number.isFinite(n) || n <= 0) {
-    return fallback;
-  }
-  return n;
-}
 
 export function maxSourceOutputChars(): number {
   return parsePositiveIntEnv('JVMSRC_MAX_SOURCE_OUTPUT_CHARS', DEFAULT_MAX_SOURCE_OUTPUT_CHARS);

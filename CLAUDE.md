@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **JVM Source Lens** (`jvmsrc`) — a CLI + MCP server that resolves a JVM project's actual classpath by invoking the build tool (Gradle first), then extracts Java source for a fully-qualified class (sources JAR preferred, CFR decompilation fallback planned).
 
-User-facing overview: [README.md](README.md). Authoritative spec: [SPEC.md](SPEC.md). Implementation status: [ROADMAP.md](ROADMAP.md). Update **SPEC** when behavior or schemas change; update **README** for install/usage; check off **ROADMAP** when shipping features.
+User-facing overview: [README.md](README.md). Authoritative spec: [SPEC.md](SPEC.md). Plan and status: [PLAN.md](PLAN.md). Update **SPEC** when behavior or schemas change; update **README** for install/usage; check off **PLAN** steps when shipping features and follow its checkpoint rules.
 
 ## Toolchain
 

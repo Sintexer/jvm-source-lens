@@ -46,6 +46,10 @@ export function listBuildInputRelativePaths(projectRoot: string): string[] {
       return;
     }
     for (const ent of entries) {
+      // Symlinks can form loops or point outside the project; never follow them.
+      if (ent.isSymbolicLink()) {
+        continue;
+      }
       const joined = path.join(dir, ent.name);
       if (ent.isDirectory()) {
         if (SKIP_DIR_NAMES.has(ent.name)) {

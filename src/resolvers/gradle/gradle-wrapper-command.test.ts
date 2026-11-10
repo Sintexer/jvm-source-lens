@@ -4,23 +4,77 @@ import os from 'node:os';
 import path from 'node:path';
 import { resolveGradleWrapperCommand } from './gradle-wrapper-command.js';
 
+function restoreEnv(name: string, saved: string | undefined): void {
+  if (saved === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = saved;
+  }
+}
+
 describe('resolveGradleWrapperCommand', () => {
   let savedPlatform: string | undefined;
+  let savedUseSystemGradle: string | undefined;
   let tmpDir: string;
 
   afterEach(() => {
-    if (savedPlatform === undefined) {
-      delete process.env.JVMSRC_TEST_PLATFORM;
-    } else {
-      process.env.JVMSRC_TEST_PLATFORM = savedPlatform;
-    }
+    restoreEnv('JVMSRC_TEST_PLATFORM', savedPlatform);
+    restoreEnv('JVMSRC_USE_SYSTEM_GRADLE', savedUseSystemGradle);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   function setup(): void {
     savedPlatform = process.env.JVMSRC_TEST_PLATFORM;
+    savedUseSystemGradle = process.env.JVMSRC_USE_SYSTEM_GRADLE;
+    delete process.env.JVMSRC_USE_SYSTEM_GRADLE;
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-gw-'));
   }
+
+  function writeExecutableWrapper(): string {
+    const unix = path.join(tmpDir, 'gradlew');
+    fs.writeFileSync(unix, '#!/bin/sh\n', { mode: 0o755 });
+    return unix;
+  }
+
+  test('shouldUseGradleOnPathWhenUseSystemGradleIsSet', () => {
+    setup();
+    process.env.JVMSRC_TEST_PLATFORM = 'linux';
+    writeExecutableWrapper();
+    process.env.JVMSRC_USE_SYSTEM_GRADLE = '1';
+
+    const r = resolveGradleWrapperCommand(tmpDir);
+
+    expect(r).toEqual({ useWrapper: false, command: ['gradle'] });
+  });
+
+  test('shouldIgnoreLfsPointerWhenUseSystemGradleIsSet', () => {
+    setup();
+    process.env.JVMSRC_TEST_PLATFORM = 'linux';
+    writeExecutableWrapper();
+    const jarDir = path.join(tmpDir, 'gradle', 'wrapper');
+    fs.mkdirSync(jarDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(jarDir, 'gradle-wrapper.jar'),
+      'version https://git-lfs.github.com/spec/v1\noid sha256:abc123\nsize 43453\n',
+    );
+    process.env.JVMSRC_USE_SYSTEM_GRADLE = '1';
+
+    const r = resolveGradleWrapperCommand(tmpDir);
+
+    expect(r.lfsPointerJar).toBeUndefined();
+    expect(r.useWrapper).toBe(false);
+  });
+
+  test('shouldUseWrapperWhenUseSystemGradleIsNotExactlyOne', () => {
+    setup();
+    process.env.JVMSRC_TEST_PLATFORM = 'linux';
+    const unix = writeExecutableWrapper();
+    process.env.JVMSRC_USE_SYSTEM_GRADLE = 'true';
+
+    const r = resolveGradleWrapperCommand(tmpDir);
+
+    expect(r).toEqual({ useWrapper: true, command: [unix] });
+  });
 
   test('win32 prefers gradlew.bat (no cmd.exe in argv)', () => {
     setup();

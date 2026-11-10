@@ -1,8 +1,8 @@
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
+import { sha256File } from './sha256-file.js';
 
 /**
  * Returns the Gradle user home directory — the root of Gradle's managed artifact cache.
@@ -73,8 +73,7 @@ export function computeLocalArtifactDigest(output: ResolutionOutput): string {
   for (const jarPath of paths) {
     let fileHash: string;
     try {
-      const buf = fs.readFileSync(jarPath);
-      fileHash = createHash('sha256').update(buf).digest('hex');
+      fileHash = sha256File(jarPath);
     } catch {
       fileHash = 'absent';
     }

@@ -115,6 +115,26 @@ describe('computeBuildInputsDigest', () => {
     expect(d2.length).toBe(64);
   });
 
+  test('walk skips symlinked directories so a symlink loop terminates and the digest is stable', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-symlink-'));
+    try {
+      writeGradleStubs(dir);
+      fs.mkdirSync(path.join(dir, 'a', 'b'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'a', 'build.gradle'), '// a\n', 'utf8');
+      fs.symlinkSync('../..', path.join(dir, 'a', 'b', 'loop'), 'dir');
+      fs.symlinkSync(path.join(dir, 'build.gradle'), path.join(dir, 'a', 'b', 'build.gradle'));
+
+      const rels = listBuildInputRelativePaths(dir);
+
+      expect(rels).toContain('a/build.gradle');
+      expect(rels.some((r) => r.includes('loop/'))).toBe(false);
+      expect(rels).not.toContain('a/b/build.gradle');
+      expect(computeBuildInputsDigest(dir)).toBe(computeBuildInputsDigest(dir));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('gradle.properties is tracked and digest changes when it changes', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-gp-'));
     writeGradleStubs(dir);

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { unzipSync } from 'fflate';
 import type { ClassSourceError } from './class-source-types.js';
+import { checkJarSize } from './jar-size-guard.js';
 
 function normalizeZipEntryName(name: string): string {
   return name.replaceAll('\\', '/').replace(/^\//, '');
@@ -26,6 +27,10 @@ function zipReadError(jarPath: string, entryRelPath: string, message: string): C
  */
 export function readZipEntryUtf8(jarAbsPath: string, entryRelPath: string): ReadZipUtf8Result {
   const want = normalizeZipEntryName(entryRelPath);
+  const size = checkJarSize(jarAbsPath);
+  if (!size.ok) {
+    return { ok: false, reason: 'error', error: zipReadError(jarAbsPath, want, size.message) };
+  }
   let raw: Uint8Array;
   try {
     raw = readFileSync(jarAbsPath);
@@ -67,6 +72,10 @@ export type ZipEntryExistsResult =
 
 export function zipEntryExists(jarAbsPath: string, entryRelPath: string): ZipEntryExistsResult {
   const want = normalizeZipEntryName(entryRelPath);
+  const size = checkJarSize(jarAbsPath);
+  if (!size.ok) {
+    return { ok: false, error: zipReadError(jarAbsPath, want, size.message) };
+  }
   let raw: Uint8Array;
   try {
     raw = readFileSync(jarAbsPath);

@@ -28,7 +28,7 @@ function enrichScopeError(
 
 /**
  * Like {@link getMethodSignatures} but **only** `javap -private -verbose` on a classpath that contains
- * the `.class` — no sources JAR / `src/` fallback (see SPEC §7.2, ROADMAP inspection split).
+ * the `.class` — no sources JAR / `src/` fallback (see SPEC §7.2).
  */
 export async function getMethodSignaturesBytecode(
   className: string,

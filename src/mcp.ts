@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -1129,4 +1129,25 @@ export async function startMcpServer(): Promise<void> {
   const server = createMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
+}
+
+/** True when this file is the process entry (`bun run dev:mcp`, `node dist/mcp.js`). */
+function isDirectExecution(): boolean {
+  const main = (import.meta as ImportMeta & { main?: boolean }).main;
+  if (typeof main === 'boolean') {
+    return main;
+  }
+  const entry = process.argv[1];
+  if (entry === undefined || entry.length === 0) {
+    return false;
+  }
+  try {
+    return import.meta.url === pathToFileURL(entry).href;
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectExecution()) {
+  await startMcpServer();
 }

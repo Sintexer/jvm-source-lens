@@ -88,8 +88,13 @@ function isGitLfsPointer(jarPath: string): boolean {
 /**
  * Which Gradle executable to run for a project root: wrapper script or `gradle` on PATH.
  * Does not embed platform shell commands (`cmd.exe`, etc.) — spawn layer uses cross-spawn.
+ * `JVMSRC_USE_SYSTEM_GRADLE=1` skips the project's wrapper (see SECURITY.md).
  */
 export function resolveGradleWrapperCommand(projectRoot: string): GradleWrapperCommand {
+  if (process.env.JVMSRC_USE_SYSTEM_GRADLE?.trim() === '1') {
+    return { useWrapper: false, command: ['gradle'] };
+  }
+
   const root = path.resolve(projectRoot);
 
   for (const name of wrapperCandidateNames()) {

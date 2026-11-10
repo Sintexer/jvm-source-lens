@@ -1,6 +1,6 @@
 # JVM Source Lens — technical specification
 
-Authoritative reference for **`jvmsrc`** behavior, schemas, and contracts. For installation and everyday use, see [README.md](README.md). Implementation status: [ROADMAP.md](ROADMAP.md).
+Authoritative reference for **`jvmsrc`** behavior, schemas, and contracts. For installation and everyday use, see [README.md](README.md). Plan and status: [PLAN.md](PLAN.md).
 
 If you work on a Java-style codebase (Java, Kotlin, Scala, Groovy) with agents or automation, agents often need the truth about a dependency: what version is *actually* on the classpath, what does a class look like, and can you read real source or only bytecode? **JVM Source Lens** answers that by **asking Gradle** for the resolved graph, then opening the right jar or subproject. Nothing gets written into your project for resolution — the tool injects an init script from the package instead of touching your tree. When there is no sources jar, the bundled CFR build still gives you readable Java.
 
@@ -217,6 +217,8 @@ src/
 Resolution is performed by injecting the bundled [`resources/analyzer-init.gradle`](resources/analyzer-init.gradle) with Gradle’s `--init-script` flag. Only the **absolute path** to that file is external; nothing is written under the target project’s tree for resolution itself.
 
 The Node implementation prefers **`./gradlew`** when present (correct Gradle version for the repo), otherwise **`gradle`** on `PATH`. It passes **`-PjvmsrcWrapper=true|false`** so the emitted JSON records whether the wrapper was used (`buildSystem.wrapper`).
+
+**Wrapper trust:** `./gradlew` and `gradle/wrapper/gradle-wrapper.jar` come from the scanned project and run with the user's rights. **`JVMSRC_USE_SYSTEM_GRADLE=1`** (exact value `1`) skips the wrapper and always runs **`gradle`** on `PATH` (`buildSystem.wrapper: false`). The project's build scripts still run in both modes. See [SECURITY.md](SECURITY.md#gradle-wrapper-trust).
 
 **Configuration cache:** v1 always passes **`--no-configuration-cache`**. The bundled task resolves every submodule in one root task that walks `allprojects` at execution time; that pattern is incompatible with Gradle’s configuration cache until a future redesign (e.g. per-project tasks). Real-world projects with configuration cache enabled in `gradle.properties` still work because this flag disables CC for this invocation only.
 
@@ -544,7 +546,7 @@ Gradle invocation is expensive (often ~5–10 seconds; less when the Gradle daem
 
 **Cache key:** SHA-256 digest over the content of all build-relevant files in the project (sorted paths, stable manifest — see implementation `computeBuildInputsDigest`):
 
-- `build.gradle` / `build.gradle.kts` (all submodules; common output directories such as `build/`, `.gradle/`, and `node_modules/` are excluded from the walk)
+- `build.gradle` / `build.gradle.kts` (all submodules; common output directories such as `build/`, `.gradle/`, and `node_modules/` are excluded from the walk; symlinked files and directories are never followed)
 - `gradle.properties` (root and per-submodule; commonly holds dependency version variables)
 - `settings.gradle` / `settings.gradle.kts` (project root)
 - `gradle/libs.versions.toml` (version catalog, if present)
@@ -754,6 +756,14 @@ Once a **`ResolutionOutput`** is loaded (from cache or a fresh Gradle run), the 
 **Current `jvmsrc get` / library behavior:** **Step 1 (`origin: interproject`)** is implemented: before **`origin: external`** JAR edges, the extractor reads **the selected module's own** **`src/main/java/...`** and, when **`includeTest`** is **`true`**, **`src/test/java/...`**, then sibling **`<interproject.modulePath>/src/...`** trees (Gradle does not list the querying module as an inter-project edge on its own classpath). Omitting **`configuration`** and enabling **`includeTest`** selects **`testCompileClasspath`** or **`jvmTestCompileClasspath`** (Kotlin MPP) when present in **`ResolutionOutput`**. A hit returns original **`.java`** with **`sourceAvailable: true`** and **`provenance.kind: "interproject"`** (`moduleName`, coordinates, **`moduleRoot`**, **`absoluteSourcePath`**). **`get_method_signature`** and **`get_class_structure`** prefer the same classpath-ordered **`.java`** read (**inter-project disk**, then **sources JAR** / on-demand **`jvmsrcResolveSources`**) and parse declarations before **`javap -private -verbose`**; **`javap`** still backs overload metadata when only bytecode exists (external artifacts without sources, or unparsable source), and drives inheritance whenever bytecode for a supertype/interface is available (with source fallback when **`javap`** cannot run because **`build/classes/**`** is missing). **Steps 2–4** still apply to **`origin: external`** (prefer **`-sources.jar`**, **`jvmsrcResolveSources`**, global **`decompiled/`**, CFR **`sourceAvailable: false`**).
 
 **Stable `code` values** on failures: **`RESOLUTION_FAILED`**, **`SOURCES_RESOLVE_FAILED`**, **`INVALID_FQN`**, **`MODULE_NOT_FOUND`**, **`CONFIGURATION_NOT_FOUND`**, **`MODULE_AMBIGUOUS`**, **`ZIP_READ_ERROR`**, **`CLASS_NOT_FOUND`**, **`DECOMPILE_FAILED`**, **`SIGNATURE_EXTRACT_FAILED`**, **`EXCERPT_REQUEST_INVALID`**, **`EXCERPT_NOT_FOUND`**, **`FIND_QUERY_INVALID`**, **`FIND_SOURCE_TOO_LARGE`**, **`SOURCE_OUTPUT_TOO_LARGE`**. **`SIGNATURE_EXTRACT_FAILED`** covers **javap** failures for **`get_method_signature`** (per-method) and **`get_class_structure`** (whole-class disassembly; `methodName` may be omitted in the error object). Excerpt failures apply when **`get_class_source`** / CLI **`get`** is called with **`methodNames`** / **`methodName`** and/or **`startLine`** / **`endLine`**. Find-in-source failures apply to **`find_in_class_source`** / CLI **`find-in-class`**. **`SOURCE_OUTPUT_TOO_LARGE`** applies when **`get_class_source`** / CLI **`get`** is asked for **unscoped full source** larger than **`JVMSRC_MAX_FULL_SOURCE_CHARS`** (default 64 KiB); agents must pass **`methodNames`** or a line range (or raise the env). Soft truncation via **`JVMSRC_MAX_SOURCE_OUTPUT_CHARS`** still applies to excerpted responses.
+
+**Resource limits (no new codes):**
+
+| Setting | Default | Effect |
+|---|---|---|
+| **`JVMSRC_MAX_JAR_BYTES`** | 524288000 (500 MB) | JARs read fully into memory (sources-JAR entry reads, class presence checks, class-search / `search_in_artifact` listing) are checked with `stat` first. A larger JAR fails with **`ZIP_READ_ERROR`**; `message` names the size, the limit and the setting. JAR content hashes are streamed and have no limit. |
+| **`JVMSRC_REGEX_TIMEOUT_MS`** | 2000 | Regex mode of **`find_in_class_source`** / **`search_in_artifact`** runs in a worker thread. When the scan does not finish in time, the worker is terminated and the tool returns **`FIND_QUERY_INVALID`** with a `message` that contains `timed out`. `search_in_artifact` stops at the first timeout. Literal mode has no deadline. The library export `searchClassSourceText` stays synchronous and has no deadline. |
+| **`JVMSRC_USE_SYSTEM_GRADLE`** | unset | `1` = run `gradle` on `PATH`, not `./gradlew` (§5.2). |
 
 **Module-path auto-infer and did-you-mean (class-scoped tools):** When **`modulePath`** is omitted on **`get_class_source`**, **`get_class_structure`**, **`get_method_signature`**, and **`find_in_class_source`**, the tool probes every module in **`ResolutionOutput.modules[]`** for the class (via the same classpath search used for a normal lookup) instead of silently defaulting to the root module. A **unique** owning module is used transparently (no extra round trip). **Multiple** owning modules return **`MODULE_AMBIGUOUS`** (**`modulePaths`** lists every candidate; retry with one of them). **No** owning module falls through to **`CLASS_NOT_FOUND`**, enriched with **`suggestedModulePaths`** (every module name, so the agent can retry scoped to a specific module) and, when a class-search index is available for the searched module(s), **`suggestions`** — up to 5 case-insensitive exact simple-name matches (excluding the exact miss) ranked the same way as **`search_classes`**, for a "did you mean" nudge. Both fields are optional and omitted when empty; an explicit **`modulePath`** always skips probing and is used as-is (no inference, no ambiguity).
 
@@ -967,7 +977,7 @@ Primary intent for **`get_method_signature`** / **`get_class_structure`**: **IDE
 | `get_class_source` | **Implemented** | Returns Java source (original **`interproject`** / **sources JAR** or CFR-decompiled bytecode) for a **fully-qualified** class name. Tool arguments: **`className`**, **`projectRoot`**, optional **`modulePath`**, **`configuration`**, **`includeTest`**, **`forceRefresh`** (same semantics as CLI `get`). Optional excerpt: **`methodNames`** (array; use **`<init>`** for constructors; all overloads included) and/or **`methodName`** (merged into **`methodNames`**) and/or **`startLine`** / **`endLine`** (1-based inclusive; both required for line slices). Omit excerpt params for the full compilation unit (refused with **`SOURCE_OUTPUT_TOO_LARGE`** when over **`JVMSRC_MAX_FULL_SOURCE_CHARS`**, default 64 KiB — stderr **`[jvmsrc] FATAL`** + file diagnostic). **Found:** **`isError: false`**, **`found: true`**, **`source`**, **`sourceAvailable`**, **`provenance`**, optional **`excerpt`** metadata (`matchedMethodNames`, `unmatchedMethodNames`, `lineNumbersReliable` — **`false`** when **`sourceAvailable: false`**). When one or more requested **`methodNames`** are absent from the class's own compilation unit, jvmsrc walks superclasses/interfaces on the classpath (same hierarchy BFS and visit cap as **`get_class_structure`**; sources JAR / inter-project preferred, bytecode-only or JDK supertypes are traversed for header only and skipped for body extraction) before giving up; bodies found this way are appended to **`source`** behind a `// declaringClass: <fqn>` comment and listed in **`excerpt.inheritedExcerpts[]`** (`methodName`, `declaringClass`), and count toward **`matchedMethodNames`**. If nothing matches anywhere, **`EXCERPT_NOT_FOUND`**'s **`message`** states that superclasses/interfaces were also searched. **Not on classpath (successful scan):** **`isError: false`**, **`found: false`**, **`querySucceeded: true`** — do not retry as a transient failure. **Failures:** **`isError: true`** with **`errorCategory`**, **`isRetryable`**, **`message`** (agent-directed next step), stable **`code`** (§7), and domain **`error`** (including **`EXCERPT_*`** for bad or unmatched excerpt requests). **Happy-path success** (`found: true`, data returned): **`structuredContent`** when **`full: true`** includes **`found`**, **`querySucceeded`**, **`errorCategory: null`** only (no **`message`**); compact text is payload only (no **`---`** footer). **Empty results** (e.g. **`CLASS_NOT_FOUND`**, **`search_classes`** zero hits, **`find_in_class_source`** no match, **`methodFound: false`**) include **`message`** plus the same outcome fields; compact mode appends them in a **`---`** footer. |
 | `get_method_signature` | **Implemented** | **Overload listing** (§7.2). **Default:** **source-first** classpath **`.java`** when parseable; else **`javap -private -verbose`**. Optional **`bytecodeOnly: true`**: **javap only** (no sources/**`src/`** fallback); **`sourceAvailable`** always **`false`**. Arguments: **`className`**, **`methodName`**, **`projectRoot`**, optional **`modulePath`**, **`configuration`**, **`includeTest`**, **`forceRefresh`**, **`bytecodeOnly`**. Optional **`include`**: `parameters`, `exceptions`, `jvmDescriptor`, `provenance`, `all` — expand `full=true` JSON per overload beyond default `declarationLine`-only. **`JVMSRC_JAVAP_*`** env (§6.2). **Class present, no matching overloads:** **`isError: false`**, **`found: false`**, **`methodFound: false`**, **`querySucceeded: true`**. **Class absent:** **`found: false`** with **`CLASS_NOT_FOUND`**. |
 | `get_class_structure` | **Implemented** | **IDE-shaped API browse** (§7.2). **Default compact:** plain text; optional **`scope`**: `overview` \| `declared` \| `effective` (declaration-line method lists). Field-heavy overview lists fields (see §8.1.4). **`full: true`:** JSON projected by `scope` — default `overview` shape: `declaredMethodNames[]`, slim `provenance` (`libName`+`kind`), no method objects (capped **`fields[]`** when field-heavy). Optional **`include`**: `signatures` / `inherited` (full method objects; implied by `scope=declared/effective`), `fields`, `hierarchy`, `annotations`, `provenance` (full provenance), `all`. Does not run CFR. **`sourceAvailable`** when primary type came from original source. |
-| `search_classes` | **Implemented** (index v3) | **Classpath discovery** when the FQN is unknown (§12.3). Arguments: **`query`** (non-empty), **`projectRoot`**, optional **`modulePath`**, **`configuration`**, **`includeTest`**, **`forceRefresh`**, **`limit`** (default 50, max 200), optional **`include`** (response projection; see §8.1.4). Resolves or loads cached Gradle output, builds or reuses **`class-search-index.json`** in the resolution cache bucket (with **`jar-fqn-cache.json`** stat-based reuse for unchanged JAR paths). **Default hits:** **`className`**, **`libName`** (artifactId for external JARs; inter-project module name for **`interproject`**). Optional **`include`:** **`simpleName`**, **`score`**, **`origin`**, **`coordinates`**, **`location`** (`jarPath` / `moduleRoot` / `interprojectModuleName`), **`scope`** (`moduleName`, `configurationName`), **`indexMeta`** (index build stats at payload root), **`all`** (full per-hit fields plus **`indexMeta`**). **Substring query:** case-insensitive; whitespace-separated tokens are **AND**'d over index **`searchText`** (FQN, simple name, plus source enrichment when available). **Glob query:** **`*`** / **`?`** apply to **FQN and simple name only** (no AND split). **Index:** external and **`local-file`** JAR **`.class`** names (ZIP central directory) plus source enrichment as above; inter-project **`src/main/java`** and **`src/test/java`** when **`includeTest`**. **Module omit:** config-scoped auto-pick (§5.4 / §7). **Success:** **`isError: false`**, **`ok: true`**, **`found`** (`false` when **`totalMatches === 0`**), **`querySucceeded: true`**, **`totalMatches`**, **`hitCount`**, **`hits[]`**; **`indexMeta`** only when requested via **`include`**. When **`totalMatches === 0`**, also **`message`** (agent-directed; multi-word queries explain AND semantics). **Failures:** same envelope as **`resolve_dependencies`** or validation (**`MODULE_NOT_FOUND`**, **`CONFIGURATION_NOT_FOUND`**, **`MODULE_AMBIGUOUS`**). |
+| `search_classes` | **Implemented** (index v3) | **Classpath discovery** when the FQN is unknown. Arguments: **`query`** (non-empty), **`projectRoot`**, optional **`modulePath`**, **`configuration`**, **`includeTest`**, **`forceRefresh`**, **`limit`** (default 50, max 200), optional **`include`** (response projection; see §8.1.4). Resolves or loads cached Gradle output, builds or reuses **`class-search-index.json`** in the resolution cache bucket (with **`jar-fqn-cache.json`** stat-based reuse for unchanged JAR paths). **Default hits:** **`className`**, **`libName`** (artifactId for external JARs; inter-project module name for **`interproject`**). Optional **`include`:** **`simpleName`**, **`score`**, **`origin`**, **`coordinates`**, **`location`** (`jarPath` / `moduleRoot` / `interprojectModuleName`), **`scope`** (`moduleName`, `configurationName`), **`indexMeta`** (index build stats at payload root), **`all`** (full per-hit fields plus **`indexMeta`**). **Substring query:** case-insensitive; whitespace-separated tokens are **AND**'d over index **`searchText`** (FQN, simple name, plus source enrichment when available). **Glob query:** **`*`** / **`?`** apply to **FQN and simple name only** (no AND split). **Index:** external and **`local-file`** JAR **`.class`** names (ZIP central directory) plus source enrichment as above; inter-project **`src/main/java`** and **`src/test/java`** when **`includeTest`**. **Module omit:** config-scoped auto-pick (§5.4 / §7). **Success:** **`isError: false`**, **`ok: true`**, **`found`** (`false` when **`totalMatches === 0`**), **`querySucceeded: true`**, **`totalMatches`**, **`hitCount`**, **`hits[]`**; **`indexMeta`** only when requested via **`include`**. When **`totalMatches === 0`**, also **`message`** (agent-directed; multi-word queries explain AND semantics). **Failures:** same envelope as **`resolve_dependencies`** or validation (**`MODULE_NOT_FOUND`**, **`CONFIGURATION_NOT_FOUND`**, **`MODULE_AMBIGUOUS`**). |
 | `resolve_dependencies` | **Implemented** | Returns dependency graph for the whole project (all `modules[]`). Tool arguments: optional **`projectRoot`**, **`forceRefresh`** (same semantics as CLI `resolve` / §6.1), and **`query`** (whitespace-separated tokens, AND-ed, case-insensitive over `group:name:version`): when set, the compact text is **only** the matching external artifacts as `group:name  version (N modules)` (module summary omitted), flagging libraries that resolve to several versions (`⚠ N versions`); inter-project edges are skipped; output is capped at 60 libraries. Default is counts only, to avoid flooding agent context on large builds. Optional **`modules`** (with `query`): `all` names every module per version; otherwise a comma-separated list of module paths/prefixes (e.g. `:services`) restricts scope and names modules (capped at 25 per version). Hidden: **`include`** (response projection). **Default `full=true` JSON:** summary — `schemaVersion`, `resolvedAt`, `buildSystem`, `projectRoot`, `moduleCount`, per-module config counts, `errors[]`. Optional **`include`**: `artifacts`/`coordinates` → per-config `artifacts[]`; `jarPaths` → artifact paths; `all` → full `ResolutionOutput`. **Compact text:** unchanged module/config count summary. **Failures:** **`isError: true`** with **`errorCategory`**, **`isRetryable`**, **`message`**, **`code: RESOLUTION_FAILED`**, and domain **`error`**. Use before batch **`get_class_source`** calls to warm the resolution cache without per-class Gradle runs. |
 
 **Failure diagnostics:** tool error payloads **may** include **`diagnosticId`** and **`hint`** (e.g. **`jvmsrc diagnostics show …`**) when a full diagnostic file is written, so agents can surface an opaque id to the developer without embedding subprocess output.
@@ -1184,8 +1194,6 @@ Agents must treat **original source** and **decompiled bytecode** differently: p
 
 ## 11. MVP Scope
 
-**Implementation checklist and priorities:** [ROADMAP.md](ROADMAP.md) (developers: check boxes there when features land).
-
 The following represents the minimum build that validates the architecture end-to-end:
 
 1. `DependencyResolver` interface + `detectResolver()` registry
@@ -1198,106 +1206,9 @@ The following represents the minimum build that validates the architecture end-t
 8. MCP server entry point; **`get_class_source`**, **`find_in_class_source`**, **`resolve_dependencies`**, **`search_classes`**, **`get_method_signature`** (optional **`bytecodeOnly`**), and **`get_class_structure`** are implemented (§8.2). **`origin: interproject`** classes load from depended **`src/...`** **`.java`** for **`get`** and for **source-first** structure/signature tools before falling back to **`javap`** on **`build/classes/**`** when needed. **`get_class_structure`** enriches declared members from that source when present; optional **`include`** slices (`hierarchy`, `fields`, `annotations`) are documented in §8.2.
 9. Structured error responses (unsupported project, class not found, version conflict)
 
-**Near-term interface goals** — priority order tracks **agent use-case frequency** (full breakdown in §12):
-
-| Priority | Item | Section |
-|---|---|---|
-| High | `get_method_signature` / `get_method_signature_bytecode` MCP tools (IDE-first vs javap-only; §7.2) — **implemented** (§8.2) | §8.2, §12 |
-| High | `get_class_structure` MCP tool (metadata; **inherited** API on the type) — **implemented** (§8.2) | §8.2, §12 |
-| High | `sourceAvailable` on all source-bearing MCP/CLI/library responses | §7.1 |
-| Medium | Enrich `get_class_structure` (optional `include`: hierarchy, fields, annotations) — **implemented** (§8.2); parameter-level annotations deferred | §12 |
-| Medium | `forceRefresh` on `resolve_dependencies` + `--force-refresh` on CLI | §6.1, §8.1 — **done** for MCP and CLI |
-| Medium | **`search_classes`** / class search index (capability discovery; index-backed) | §12 — **implemented** (§8.2 index v3: FQN + **`local-file`** JARs + source-derived method / field / Javadoc **`searchText`**; **`jar-fqn-cache.json`** reuse; globs still FQN/simple only) |
-| Medium | Structured failure diagnostics + **`jvmsrc diagnostics`** CLI | §6.3, §8.1.3 |
-| Low | `jvmsrc config` MCP snippet generator — **implemented** (§8.1.2) | §8.1.2 |
-| Low | `JVMSRC_CFR_PATH` / `JVM_ORACLE_CFR_PATH` CFR JAR override — **implemented** | §9.3 |
-| Future | `get_implementors` (inverted index; post–v2) | §12 |
-
-Maven resolver is explicitly out of scope for v1 but the architecture accommodates it as a drop-in addition.
-
 ---
 
 ## 12. Future Work
 
-### 12.1 Resolver and toolchain
+Planned work, priorities and checkpoints are in [PLAN.md](PLAN.md). This spec describes shipped behavior only.
 
-| Item | Notes |
-|---|---|
-| `MavenResolver` | Parse `pom.xml`, invoke `mvn dependency:resolve`, same interface |
-| `BazelResolver` | Use Bazel query API |
-| Decompiler alternatives | Pluggable decompiler interface; allow Procyon or Fernflower as alternatives to CFR |
-
-### 12.2 Agent use-case interface expansion
-
-Analysis of how agents use JVM dependencies in practice suggests several query patterns. **`get_class_source`** alone covers a minority of calls; the items below expand MCP coverage. Priorities follow **estimated operation frequency** (not a promise of exact percentages).
-
-#### P0 — include in MVP (see also §11)
-
-| Tool / requirement | Approx. use-case share | Notes |
-|---|---|---|
-| **`get_method_signature` / `get_method_signature_bytecode`** | ~30% | **Shipped:** **`get_method_signature`** is overload metadata **source-first**, then **`javap -verbose`** when needed; **`get_method_signature_bytecode`** is **`javap`** only (no **`src/`** fallback) for JVM-descriptor workflows (§7.2, §8.2). |
-| **`get_class_structure`** | ~20% | Browse API when the class is known; **includes inherited** public/protected instance methods (§8.2). |
-
-#### P1 — first release after MVP
-
-**Enrich `get_class_structure`** (~22% combined across three sub-cases) using **optional response sections** (e.g. `include: ['hierarchy', 'fields', 'annotations']`) so one parser backs one tool:
-
-- **Type hierarchy** (~10%) — superclass and interfaces, recursively; substitutability checks.
-- **Fields** (~8%) — names, types, visibility, `final`; for DTOs and construction.
-- **Annotations** (~4%) — by target (class, method, field, parameter) with values; Spring, JPA, Jackson.
-
-#### P2 — v2
-
-| Item | Approx. share | Notes |
-|---|---|---|
-| **`search_classes(query)`** | ~7% | Capability discovery when FQN is unknown. **Shipped:** index format v2 adds **full-text** **`searchText`** from sources when available (methods, fields, Javadoc `/** */` from inter-project `.java` and from `-sources.jar` when `sourcesJarPath` is set), in addition to class names; substring queries use the full blob; globs still match FQN/simple name only. |
-| **Enum constants** | ~2% | No new tool: when `kind === "enum"`, **`get_class_structure`** should expose constants in the fields array with Javadoc where available. |
-| **Compact / full response modes** | — | **Shipped:** default **plain text**; MCP **`full: true`** / CLI **`--full`** for JSON. **`get_class_structure`** **`scope`** for discovery vs declared API ([ROADMAP](ROADMAP.md)). |
-
-#### P3 — future / post–v2
-
-| Item | Approx. share | Notes |
-|---|---|---|
-| **`get_implementors(interfaceName)`** | ~1% | Templates from existing implementations. Requires **inverted index** (interface → implementors) over resolved JARs; high cost, low frequency. Defer until simpler tools and adoption justify index maintenance. |
-
-#### Internal architecture note
-
-**Today:** **`get_method_signature`** and **`get_class_structure`** default to **IDE-like** behavior (§7.2): classpath-ordered **`.java`** plus **`parseJavaTypeMetadata`**, with **`javap -private -verbose`** when bytecode is needed or sources are missing. Default MCP payloads omit **`javap`**-oriented fields on source-derived rows where practical; full bytecode fidelity is available via **`get_method_signature_bytecode`**.
-
-**Direction:** optional refactor — share one cached **`ClassStructure`**-style parse per class where worthwhile:
-
-**Target (optional refactor):** projections over a single in-memory parse per class where it pays off:
-
-```text
-parse class (once, cached)
-  └── ClassStructure
-        ├── get_class_source       → full text (source JAR or CFR)
-        ├── get_class_structure    → metadata (+ optional sections in P1)
-        ├── get_method_signature   → one method slice (all overloads)
-        ├── get_method_signature_bytecode → javap-only overload slice
-        └── further projections
-```
-
-**`search_classes`** (P2) and **`get_implementors`** (P3) are **not** projections of one parse — they depend on **resolution-wide indexing** and dedicated index maintenance.
-
-#### Coverage summary (illustrative)
-
-| Tool | Role | Approx. ops covered | Target |
-|---|---|---|---|
-| `get_class_source` | Full source | ~15% | MVP (done) |
-| `get_method_signature` | Method contract (IDE-first) | ~25% | MVP (**done** — source-first + javap fallback) |
-| `get_method_signature_bytecode` | Method contract (javap-only) | ~5% | MVP (**done**) |
-| `get_class_structure` (enriched over releases) | Browse API, hierarchy, fields, annotations | ~42% | MVP + P1 |
-| `search_classes` | Discovery | ~7% | v3 (**done** — index v3 + JAR FQN sidecar cache) |
-| `get_implementors` | Implementation templates | ~1% | Future |
-| **Total** | | **~88%** | |
-
-### 12.3 Class search and disambiguation (index)
-
-| Item | Notes |
-|---|---|
-| Class search by simple name or glob | Accept `MyClass`, `com.foo.*Bar`, or `*Repository` in addition to FQN; resolve against an index built from `ResolutionOutput` + classpath scan; return **ranked candidates** (FQN, module, artifact coordinates). Evolves toward **`search_classes`** (§12.2 P2) when full-text / Javadoc indexing lands. Medium effort, medium impact on autonomy. |
-
-### 12.4 Failure diagnostics (operator UX)
-
-**Implemented:** structured diagnostic logging (**§6.3**) plus **`jvmsrc diagnostics`** (**§8.1.3**) so operators can inspect Gradle/CFR/environment issues from retained subprocess tails and context without burdening agents. See **[ROADMAP.md](ROADMAP.md)** P1 — failure diagnostics.
