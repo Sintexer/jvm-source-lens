@@ -5,6 +5,11 @@ on:
     branches:
       - master
   workflow_dispatch:
+    inputs:
+      publish_mcp:
+        description: Publish server.json to the MCP registry only (skip npm)
+        type: boolean
+        default: false
 
 concurrency:
   group: release-please-${{ github.ref }}
@@ -52,10 +57,34 @@ jobs:
       - run: bun run setup:cfr
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        # A re-run happens after npm already has the version. `npm view` lags, so a
+        # duplicate publish is also success when the version is then visible.
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if npm view "jvmsrc@${version}" version >/dev/null 2>&1; then
+            echo "jvmsrc@${version} is already on npm"
+            exit 0
+          fi
+          if ! npm publish --provenance --access public; then
+            echo "npm publish failed; checking whether the version is already public"
+            npm view "jvmsrc@${version}" version
+          fi
 
       - name: Validate server.json matches package.json
         run: bun run validate:server-json
+
+  publish-mcp:
+    needs: [release-please, publish-npm]
+    if: >-
+      always() &&
+      (needs.publish-npm.result == 'success' ||
+       (github.event_name == 'workflow_dispatch' && inputs.publish_mcp))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
 
       - name: Install mcp-publisher
         run: |
@@ -65,4 +94,18 @@ jobs:
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
-        run: ./mcp-publisher publish
+        # npm publish returns before the registry can see the new version.
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            log="$(mktemp)"
+            if ./mcp-publisher publish 2>&1 | tee "$log"; then
+              exit 0
+            fi
+            if grep -Eqi "already exists|already published" "$log"; then
+              echo "this version is already on the MCP registry"
+              exit 0
+            fi
+            echo "attempt ${attempt} failed; waiting for npm to show the version"
+            sleep 30
+          done
+          exit 1

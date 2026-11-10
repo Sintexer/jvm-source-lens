@@ -18,7 +18,9 @@
 
 **npm CI:** [Trusted publishing](https://docs.npmjs.com/trusted-publishers) on package **jvmsrc** — repo `Sintexer/jvm-source-lens`, workflow `release-please.yml`, no `NPM_TOKEN` on publish. `package.json` `repository.url` must be `https://github.com/Sintexer/jvm-source-lens.git`.
 
-**MCP Registry CI:** After npm publish, `publish-npm` runs [`mcp-publisher`](https://github.com/modelcontextprotocol/registry) (`login github-oidc` → `publish`) using [server.json](server.json). Requires `id-token: write` (already set). `package.json` `mcpName` must match `server.json` `name` (`io.github.Sintexer/jvmsrc`). No extra secrets for OIDC. If publish fails with package validation, confirm the new npm version is live and `mcpName` is on that tarball.
+**MCP Registry CI:** Job `publish-mcp` runs after `publish-npm`. It uses [`mcp-publisher`](https://github.com/modelcontextprotocol/registry) (`login github-oidc` → `publish`) with [server.json](server.json). It needs `id-token: write`. `package.json` `mcpName` must match `server.json` `name` (`io.github.Sintexer/jvmsrc`). No extra secrets for OIDC. npm takes a few minutes to show a new version, so the job retries for about 5 minutes. A re-run of `publish-npm` skips `npm publish` when that version is already public.
+
+**Registry publish failed, npm already has the version:** do not re-run the release job. `npm publish` then fails with "cannot publish over" the existing version. Wait until `npm view jvmsrc@<version> version` prints the version. Then run this workflow with **Run workflow** and **Publish server.json to the MCP registry only** checked. That runs `publish-mcp` and does not publish to npm.
 
 **Pre-release check:** `bun run setup:cfr && bun run prepack && npm pack --dry-run`
 
