@@ -4,6 +4,18 @@ All notable changes to **jvmsrc** are documented in this file.
 
 This file is updated by **[Release Please](https://github.com/googleapis/release-please)** when a release PR merges to `master`. Contributors use **Conventional Commits** on PRs to `master` — see [RELEASING.md](RELEASING.md).
 
+## [1.19.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.18.1...v1.19.0) (2026-11-10)
+
+
+### Features
+
+* show resolution notes for simple-name and lifted projectRoot inputs ([cfcff72](https://github.com/Sintexer/jvm-source-lens/commit/cfcff7290bc15472dd7e90ac8171e7448fc465cc))
+
+
+### Bug Fixes
+
+* **security:** block large jar unzip and regex injection ([e858ec9](https://github.com/Sintexer/jvm-source-lens/commit/e858ec9a2ebd9ce6e6beac1ad3e83200eee3e023))
+
 ## [1.18.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.18.0...v1.18.1) (2026-11-09)
 
 
