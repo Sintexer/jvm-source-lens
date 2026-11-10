@@ -4,6 +4,13 @@ All notable changes to **jvmsrc** are documented in this file.
 
 This file is updated by **[Release Please](https://github.com/googleapis/release-please)** when a release PR merges to `master`. Contributors use **Conventional Commits** on PRs to `master` — see [RELEASING.md](RELEASING.md).
 
+## [1.19.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.19.0...v1.19.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **ci:** add a retry for mcp publication action ([d9be686](https://github.com/Sintexer/jvm-source-lens/commit/d9be68616d22e1ebd7cc7b49562a9f9dc2353d24))
+
 ## [1.19.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.18.1...v1.19.0) (2026-11-10)
 
 
