@@ -147,7 +147,6 @@ describe('resolveModuleScopeOrError', () => {
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.modulePath).toBe(':lib');
-      expect(r.inferred).toBe(true);
     }
   });
 

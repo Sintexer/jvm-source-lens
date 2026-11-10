@@ -4,21 +4,6 @@ All notable changes to **jvmsrc** are documented in this file.
 
 This file is updated by **[Release Please](https://github.com/googleapis/release-please)** when a release PR merges to `master`. Contributors use **Conventional Commits** on PRs to `master` — see [RELEASING.md](RELEASING.md).
 
-## Unreleased
-
-### Breaking changes
-
-- **MCP / CLI default responses are plain text**, not JSON. Scripts and agents that parsed `structuredContent` on every success must pass **`full: true`** (MCP) or **`jvmsrc resolve --full`** / **`--json`** (CLI) for structured JSON.
-- **`get_class_structure`:** default compact text uses **`scope: overview`** (class purpose + method names). Use **`scope: declared`** for declaration lines, **`full: true`** for the previous JSON payload.
-- **MCP guided envelope:** agent-directed **`message`** on failures and empty results only (not happy-path success). Removed **`description`** on MCP payloads. **`search_classes`** adds **`found: false`** when **`totalMatches === 0`**. Compact mode appends a **`---`** footer with **`message`**, **`found`**, **`querySucceeded`**, **`errorCategory`** when guidance is present; success responses are payload text only.
-- **Removed agent skill:** dropped **`jvmsrc init`**, bundled **`SKILL.md`**, and **`src/cli-skill-install.ts`**. Use **`jvmsrc config`** + MCP **`JVMSRC_INSTRUCTIONS`** / guided **`message`** responses instead.
-
-### Features
-
-- Compact text formatters (`src/text-format/`): declaration-line method listings, resolution summary, search hits, etc.
-- MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
-- **`src/guided-response/`:** centralized agent recovery copy for CLASS_NOT_FOUND, empty search, decompiled source warnings, and related outcomes.
-
 ## [1.18.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.18.0...v1.18.1) (2026-11-09)
 
 
@@ -55,6 +40,12 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 * bump versions ([d312683](https://github.com/Sintexer/jvm-source-lens/commit/d31268343fcfaeaf1ead835a4287d3ac34c09f2c))
 * implement better descriptions for mcp and work with falky input ([0fc2088](https://github.com/Sintexer/jvm-source-lens/commit/0fc2088d7c7f91ad97ee75fa2d0bf4e593c99914))
 * update installation readme ([9e759e4](https://github.com/Sintexer/jvm-source-lens/commit/9e759e4e173b33a0a1f59bf01939eb2085c8fc04))
+
+### Breaking changes (documented after release)
+
+- **`get_class_structure`:** `scope: 'full'` was removed. Use `scope: declared` or `scope: effective`; pass `full: true` for the structured JSON payload.
+- **`projectRoot`:** a subdirectory of a Gradle project now resolves to the build root (nearest `gradlew` / `settings.gradle(.kts)`), not the given directory. `projectRoot` is optional on all MCP tools.
+- **`INVALID_FQN`:** also returned for a simple `className` that matches several classes. The `message` lists the candidates (`Retry with className set to one of these`).
 
 ## [1.16.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.15.0...v1.16.0) (2026-09-08)
 
@@ -183,6 +174,19 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 
 * cover test class path resolution ([659fec5](https://github.com/Sintexer/jvm-source-lens/commit/659fec54909376f5e2165c39b227491b3c6d1474))
 * fix linter error in tests ([1c15228](https://github.com/Sintexer/jvm-source-lens/commit/1c15228d0f78a4cc21d143c2657c81a823874430))
+
+### Breaking changes (documented after release)
+
+- **MCP / CLI default responses are plain text**, not JSON. Scripts and agents that parsed `structuredContent` on every success must pass **`full: true`** (MCP) or **`jvmsrc resolve --full`** / **`--json`** (CLI) for structured JSON.
+- **`get_class_structure`:** default compact text uses **`scope: overview`** (class purpose + method names). Use **`scope: declared`** for declaration lines, **`full: true`** for the previous JSON payload.
+- **MCP guided envelope:** agent-directed **`message`** on failures and empty results only (not happy-path success). Removed **`description`** on MCP payloads. **`search_classes`** adds **`found: false`** when **`totalMatches === 0`**. Compact mode appends a **`---`** footer with **`message`**, **`found`**, **`querySucceeded`**, **`errorCategory`** when guidance is present; success responses are payload text only.
+- **Removed agent skill:** dropped **`jvmsrc init`**, bundled **`SKILL.md`**, and **`src/cli-skill-install.ts`**. Use **`jvmsrc config`** + MCP **`JVMSRC_INSTRUCTIONS`** / guided **`message`** responses instead.
+
+### Feature details
+
+- Compact text formatters (`src/text-format/`): declaration-line method listings, resolution summary, search hits, etc.
+- MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
+- **`src/guided-response/`:** centralized agent recovery copy for CLASS_NOT_FOUND, empty search, decompiled source warnings, and related outcomes.
 
 ## [1.6.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.5.0...v1.6.0) (2026-05-19)
 

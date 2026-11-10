@@ -13,6 +13,7 @@ import type { ResolutionResult } from './resolvers/base.js';
 import type { ResolutionOutput } from './resolvers/resolution-output.js';
 import type { GetMethodSignatureResult } from './get-method-signatures.js';
 import { isSyntheticJvmDescriptor } from './class-structure/parse-java-type-metadata.js';
+import { normalizeClassNameSyntax } from './extractor/canonicalize-class-name.js';
 import type {
   ClassStructureMethod,
   ClassStructureProvenance,
@@ -793,6 +794,32 @@ function mcpNotFoundResult(
       : (basePayload satisfies McpClassSourceNotFoundPayload | McpClassStructureNotFoundPayload);
 
   return returnFullGuided(text, payload, env);
+}
+
+/** `resolved "Foo" -> com.x.Foo` when the class-scoped tool answered for a different name than the caller gave. */
+export function classNameNote(requested: string, result: { ok: boolean; className?: string }): string | undefined {
+  if (!result.ok || result.className === undefined) {
+    return undefined;
+  }
+  const normalized = normalizeClassNameSyntax(requested);
+  return normalized === result.className ? undefined : `resolved ${JSON.stringify(normalized)} -> ${result.className}`;
+}
+
+/** Appends one `note:` line (and `notes` in structured JSON) for input the tool reinterpreted. */
+export function withResolutionNotes(result: CallToolResult, notes: Array<string | undefined>): CallToolResult {
+  const kept = notes.filter((n): n is string => n !== undefined && n.length > 0);
+  if (kept.length === 0) {
+    return result;
+  }
+  const line = `note: ${kept.join('; ')}`;
+  const content = result.content.map((c, i) =>
+    i === result.content.length - 1 && c.type === 'text' ? { ...c, text: `${c.text.trimEnd()}\n${line}` } : c,
+  );
+  return {
+    ...result,
+    content,
+    ...(result.structuredContent !== undefined ? { structuredContent: { ...result.structuredContent, notes: kept } } : {}),
+  };
 }
 
 function pickDiag(r: { diagnosticId?: string; hint?: string }): { diagnosticId: string; hint?: string } | undefined {

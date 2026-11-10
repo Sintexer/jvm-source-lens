@@ -73,10 +73,8 @@ export function findGradleRoot(start: string): string | null {
   }
 }
 
-export type ProjectRootSource = 'argument' | 'workspace-root' | 'env' | 'cwd';
-
 export type ResolvedProjectRoot =
-  | { ok: true; path: string; source: ProjectRootSource; note?: string }
+  | { ok: true; path: string; note?: string }
   | { ok: false; message: string };
 
 export type ResolveProjectRootOptions = {
@@ -98,21 +96,19 @@ function liftToGradleRoot(start: string): { path: string; found: boolean } {
   return { path: start, found: found !== null && found === start };
 }
 
-function discoverFromWorkspace(
-  opts: ResolveProjectRootOptions,
-): { path: string; source: ProjectRootSource } | null {
-  const candidates: { dir: string; source: ProjectRootSource }[] = [
-    ...(opts.workspaceRoots ?? []).map((dir) => ({ dir, source: 'workspace-root' as const })),
-    ...(envProjectRoot() ? [{ dir: path.resolve(envProjectRoot()!), source: 'env' as const }] : []),
-    { dir: process.cwd(), source: 'cwd' },
+function discoverFromWorkspace(opts: ResolveProjectRootOptions): string | null {
+  const candidates = [
+    ...(opts.workspaceRoots ?? []),
+    ...(envProjectRoot() ? [path.resolve(envProjectRoot()!)] : []),
+    process.cwd(),
   ];
-  for (const c of candidates) {
-    if (!isDirectory(c.dir)) {
+  for (const dir of candidates) {
+    if (!isDirectory(dir)) {
       continue;
     }
-    const lifted = liftToGradleRoot(c.dir);
+    const lifted = liftToGradleRoot(dir);
     if (lifted.found) {
-      return { path: lifted.path, source: c.source };
+      return lifted.path;
     }
   }
   return null;
@@ -147,8 +143,7 @@ export function resolveProjectRoot(
           'Retry with projectRoot set to the absolute path of the directory containing gradlew or settings.gradle(.kts).',
       };
     }
-    const allowed = assertProjectRootAllowed(found.path);
-    return allowed.ok ? { ok: true, path: allowed.path, source: found.source } : allowed;
+    return assertProjectRootAllowed(found);
   }
 
   const bases = [
@@ -170,7 +165,7 @@ export function resolveProjectRoot(
       message:
         (exists ? `Project path is not a directory: ${shown}.` : `Project path does not exist: ${shown}.`) +
         (hint !== null
-          ? ` A Gradle project was found at ${hint.path}; retry with projectRoot=${JSON.stringify(hint.path)} or omit projectRoot.`
+          ? ` A Gradle project was found at ${hint}; retry with projectRoot=${JSON.stringify(hint)} or omit projectRoot.`
           : ' Pass the absolute path of the directory containing gradlew or settings.gradle(.kts).'),
     };
   }
@@ -184,9 +179,8 @@ export function resolveProjectRoot(
     return {
       ok: true,
       path: lifted.path,
-      source: 'argument',
       note: `projectRoot ${resolved} is inside the Gradle project at ${lifted.path}; using that.`,
     };
   }
-  return { ok: true, path: resolved, source: 'argument' };
+  return { ok: true, path: resolved };
 }

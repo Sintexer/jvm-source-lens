@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { ClassSourceError } from './extractor/class-source-types.js';
 import {
+  classNameNote,
+  withResolutionNotes,
   mcpToolResultFromClassSource,
   mcpToolResultFromClassStructure,
   mcpToolResultFromProjectRootError,
@@ -352,4 +354,63 @@ test('success full=true includes structured JSON', () => {
   expect(sc.found).toBe(true);
   expect(sc.source).toContain('class T');
   expect(sc.message).toBeUndefined();
+});
+
+const okSource = {
+  ok: true as const,
+  source: 'class Outer {}',
+  sourceAvailable: true,
+  className: 'com.example.Outer',
+  provenance: {
+    kind: 'sourcesJar' as const,
+    coordinates: { group: 'g', name: 'a', version: '1' },
+    jarPath: '/tmp/a-sources.jar',
+  },
+};
+
+test('classNameNote reports a simple name resolved to an FQN', () => {
+  expect(classNameNote('Outer', okSource)).toBe('resolved "Outer" -> com.example.Outer');
+  expect(classNameNote('com/example/Outer.class', okSource)).toBeUndefined();
+  expect(classNameNote('com.example.Outer', okSource)).toBeUndefined();
+  expect(classNameNote('Outer', { ok: false })).toBeUndefined();
+});
+
+test('withResolutionNotes appends one note line in compact mode', () => {
+  const r = withResolutionNotes(mcpToolResultFromClassSource(okSource, query), [
+    'resolved "Outer" -> com.example.Outer',
+    undefined,
+    'projectRoot /p/app is inside the Gradle project at /p; using that.',
+  ]);
+  const text = (r.content[0] as { text: string }).text;
+  expect(text.trimEnd().split('\n').at(-1)).toBe(
+    'note: resolved "Outer" -> com.example.Outer; projectRoot /p/app is inside the Gradle project at /p; using that.',
+  );
+  expect(r.structuredContent).toBeUndefined();
+});
+
+test('withResolutionNotes adds notes to structuredContent in full mode', () => {
+  const r = withResolutionNotes(mcpToolResultFromClassSource(okSource, { ...query, full: true }), ['resolved "Outer" -> com.example.Outer']);
+  expect((r.structuredContent as { notes?: string[] }).notes).toEqual(['resolved "Outer" -> com.example.Outer']);
+});
+
+test('withResolutionNotes leaves the result unchanged without notes', () => {
+  const before = mcpToolResultFromClassSource(okSource, query);
+  expect(withResolutionNotes(before, [undefined])).toEqual(before);
+});
+
+test('MODULE_AMBIGUOUS text names the class once when the message already names it', () => {
+  const r = mcpToolResultFromClassSource(
+    {
+      ok: false,
+      error: {
+        code: 'MODULE_AMBIGUOUS',
+        message: 'Class "com.example.Foo" was found on 2 modules (:app, :core).',
+        className: 'com.example.Foo',
+        modulePaths: [':app', ':core'],
+      },
+    },
+    query,
+  );
+  const text = (r.content[0] as { text: string }).text;
+  expect(text.split('com.example.Foo').length - 1).toBe(1);
 });

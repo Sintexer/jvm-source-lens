@@ -21,6 +21,9 @@ The plan replaces `ROADMAP.md`, `docs/mcp-ux-todo.md` and `docs/mcp-ux-baseline.
 
 Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGELOG up to 1.18.0).
 
+Done, release pending: checkpoints 1 and 2 (one release each).
+
+
 | # | Checkpoint | Why at this position | Size |
 |---|---|---|---|
 | 1 | Security hardening | Open promises from the 2026-05 audit | S |
@@ -40,7 +43,7 @@ Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGEL
 
 ---
 
-## Checkpoint 1 — Security hardening
+## Checkpoint 1 — Security hardening (done)
 
 **Goal:** close all open audit items. There is no change to the public API.
 
@@ -51,16 +54,16 @@ Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGEL
 
 **Done when:** the four tests pass and the app works as before on the eval project.
 
-## Checkpoint 2 — Contract and docs debt
+## Checkpoint 2 — Contract and docs debt (done)
 
 **Goal:** make the docs agree with the current behavior. Remove small rough edges that are visible to agents.
 
-- [ ] SPEC §7: document the `MODULE_NOT_FOUND` "matches several modules" variant. Add `JVMSRC_PROJECT_ROOT` to the configuration table.
-- [ ] `MODULE_AMBIGUOUS` text: do not repeat the class name when the message already names it.
-- [ ] Resolution notes: show one footer line for "resolved `Foo` → `com.x.Foo`" (`resolvedFrom`) and for a lifted `projectRoot` (`note` from `resolveProjectRoot`). If a value is not useful, remove that field.
-- [ ] Cache cleanup: delete the orphaned single-slot `class-search-index.json` from a bucket when the bucket loads.
-- [ ] Copy drift: compare README, `server.json`, CONTRIBUTING and the hook docs with the current MCP tool descriptions. Fix old wording (for example "regex or substring searches", "projectRoot is required").
-- [ ] CHANGELOG: make sure that it lists these breaking changes: `scope: 'full'` was removed, a subdirectory `projectRoot` now resolves to the build root, and `INVALID_FQN` is reused for the simple-name pick list. Add the missing ones to the next release note.
+- [x] SPEC §7: document the `MODULE_NOT_FOUND` "matches several modules" variant. Add `JVMSRC_PROJECT_ROOT` to the configuration table.
+- [x] `MODULE_AMBIGUOUS` text: do not repeat the class name when the message already names it.
+- [x] Resolution notes: show one footer line for "resolved `Foo` → `com.x.Foo`" (`resolvedFrom`) and for a lifted `projectRoot` (`note` from `resolveProjectRoot`). If a value is not useful, remove that field.
+- [x] Cache cleanup: delete the orphaned single-slot `class-search-index.json` from a bucket when the bucket loads.
+- [x] Copy drift: compare README, `server.json`, CONTRIBUTING and the hook docs with the current MCP tool descriptions. Fix old wording (for example "regex or substring searches", "projectRoot is required").
+- [x] CHANGELOG: make sure that it lists these breaking changes: `scope: 'full'` was removed, a subdirectory `projectRoot` now resolves to the build root, and `INVALID_FQN` is reused for the simple-name pick list. Add the missing ones to the next release note.
 
 **Done when:** a reviewer can read SPEC §7 and §8.2 and find no difference from the tool output on the eval project.
 

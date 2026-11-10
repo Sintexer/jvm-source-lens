@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { JVMSRC_INSTRUCTIONS } from './instructions.js';
 import { MCP_TOOL_COPY } from './tool-descriptions.js';
 
@@ -11,6 +13,15 @@ test('agent-facing copy never mentions parameters that are no longer advertised'
     expect(text).not.toMatch(/\binclude\b/);
     expect(text).not.toContain('methodName singular');
   }
+});
+
+test('README tool table lists every MCP tool and no stale wording', () => {
+  const readme = readFileSync(path.join(import.meta.dir, '../../README.md'), 'utf8');
+  for (const name of Object.keys(MCP_TOOL_COPY)) {
+    expect(readme).toContain(`| **\`${name}\`**`);
+  }
+  expect(readme).not.toContain('regex or substring searches');
+  expect(readme).not.toMatch(/projectRoot[^.\n]{0,20}\brequired\b/);
 });
 
 test('descriptions stay short (selection signal, not a manual)', () => {

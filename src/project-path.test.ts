@@ -46,6 +46,12 @@ describe('project root discovery', () => {
   fs.mkdirSync(sub, { recursive: true });
   fs.mkdirSync(plain, { recursive: true });
   fs.writeFileSync(path.join(project, 'settings.gradle.kts'), '');
+  const workspaceProject = path.join(tmp, 'workspace-proj');
+  const envProject = path.join(tmp, 'env-proj');
+  for (const p of [workspaceProject, envProject]) {
+    fs.mkdirSync(p, { recursive: true });
+    fs.writeFileSync(path.join(p, 'settings.gradle'), '');
+  }
 
   const prevCwd = process.cwd();
   const prevEnv = process.env.JVMSRC_PROJECT_ROOT;
@@ -63,21 +69,19 @@ describe('project root discovery', () => {
   test('subdirectory argument is lifted to the Gradle root', () => {
     const r = resolveProjectRoot(sub);
     expect(r.ok && r.path).toBe(project);
+    expect(r.ok && r.note).toBe(`projectRoot ${sub} is inside the Gradle project at ${project}; using that.`);
   });
 
   test('omitted input prefers workspace roots, then env, then cwd', () => {
-    process.chdir(plain);
-    delete process.env.JVMSRC_PROJECT_ROOT;
-    expect(resolveProjectRoot(undefined, { workspaceRoots: [sub] })).toMatchObject({
-      ok: true,
-      path: project,
-      source: 'workspace-root',
-    });
-    process.env.JVMSRC_PROJECT_ROOT = project;
-    expect(resolveProjectRoot(undefined)).toMatchObject({ ok: true, path: project, source: 'env' });
-    delete process.env.JVMSRC_PROJECT_ROOT;
     process.chdir(sub);
-    expect(resolveProjectRoot(undefined)).toMatchObject({ ok: true, path: project, source: 'cwd' });
+    process.env.JVMSRC_PROJECT_ROOT = envProject;
+    expect(resolveProjectRoot(undefined, { workspaceRoots: [workspaceProject] })).toMatchObject({
+      ok: true,
+      path: workspaceProject,
+    });
+    expect(resolveProjectRoot(undefined)).toMatchObject({ ok: true, path: envProject });
+    delete process.env.JVMSRC_PROJECT_ROOT;
+    expect(resolveProjectRoot(undefined)).toMatchObject({ ok: true, path: project });
   });
 
   test('relative argument resolves against workspace roots', () => {

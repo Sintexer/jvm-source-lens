@@ -15,7 +15,7 @@ const SEGMENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const MAX_PICK_LIST = 10;
 
 export type CanonicalClassName =
-  | { ok: true; className: string; /** The input this name was derived from, when it changed meaningfully. */ resolvedFrom?: string }
+  | { ok: true; className: string }
   | { ok: false; error: ClassSourceError };
 
 type Scope = Pick<InferModulePathOptions, 'modulePath' | 'configuration' | 'includeTest'>;
@@ -102,7 +102,7 @@ export function canonicalizeClassName(
     for (let i = segs.length - 1; i >= 1 && /^[A-Z]/.test(segs[i - 1]!); i--) {
       const candidate = `${segs.slice(0, i).join('.')}$${segs.slice(i).join('$')}`;
       if (existsInScope(output, candidate, scope)) {
-        return { ok: true, className: candidate, resolvedFrom: name };
+        return { ok: true, className: candidate };
       }
     }
 
@@ -113,7 +113,7 @@ export function canonicalizeClassName(
         .map((b) => (rest ? `${b}$${rest}` : b))
         .filter((c) => !rest || existsInScope(output, c, scope));
       if (candidates.length === 1) {
-        return { ok: true, className: candidates[0]!, resolvedFrom: name };
+        return { ok: true, className: candidates[0]! };
       }
       if (candidates.length > 1) {
         const shown = candidates.slice(0, MAX_PICK_LIST);
@@ -136,7 +136,7 @@ export function canonicalizeClassName(
 }
 
 export type ResolveClassScopeResult =
-  | (Extract<ResolveModuleScopeResult, { ok: true }> & { className: string; resolvedFrom?: string })
+  | (Extract<ResolveModuleScopeResult, { ok: true }> & { className: string })
   | Extract<ResolveModuleScopeResult, { ok: false }>;
 
 /** {@link canonicalizeClassName} followed by {@link resolveModuleScopeOrError}; the success result carries the canonical class name. */
@@ -153,5 +153,5 @@ export function resolveClassScopeOrError(
   if (!scope.ok) {
     return scope;
   }
-  return { ...scope, className: canon.className, resolvedFrom: canon.resolvedFrom };
+  return { ...scope, className: canon.className };
 }

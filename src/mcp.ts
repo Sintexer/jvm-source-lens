@@ -9,6 +9,8 @@ import * as z from 'zod';
 import { getClassSource } from './get-class-source.js';
 import { mergeSourceExcerptInputs } from './source-excerpt.js';
 import {
+  classNameNote,
+  withResolutionNotes,
   mcpToolResultFromClassSource,
   mcpToolResultFromFindInClassSource,
   mcpToolResultFromMethodSignature,
@@ -849,7 +851,10 @@ export function createMcpServer(): McpServer {
                 }
               : undefined,
         });
-        return mcpToolResultFromClassSource(result, query);
+        return withResolutionNotes(mcpToolResultFromClassSource(result, query), [
+          classNameNote(args.className, result),
+          root.note,
+        ]);
       } catch (e) {
         return mcpToolResultFromUnexpectedError(e);
       }
@@ -894,7 +899,10 @@ export function createMcpServer(): McpServer {
           maxHits: args.maxHits,
           regex: Boolean(args.regex),
         });
-        return mcpToolResultFromFindInClassSource(result, query);
+        return withResolutionNotes(mcpToolResultFromFindInClassSource(result, query), [
+          classNameNote(args.className, result),
+          root.note,
+        ]);
       } catch (e) {
         return mcpToolResultFromUnexpectedError(e);
       }
@@ -921,7 +929,10 @@ export function createMcpServer(): McpServer {
           forceRefresh: Boolean(args.forceRefresh),
           diagnosticOperation: 'resolve_dependencies',
         });
-        return mcpToolResultFromResolutionResult(result, root.path, hidden.full, hidden.include as never, args.query, args.modules);
+        return withResolutionNotes(
+          mcpToolResultFromResolutionResult(result, root.path, hidden.full, hidden.include as never, args.query, args.modules),
+          [root.note],
+        );
       } catch (e) {
         if (e instanceof UnsupportedProjectError) {
           return mcpToolResultFromProjectRootError(e.message, root.path);
@@ -966,7 +977,7 @@ export function createMcpServer(): McpServer {
           forceRefresh: Boolean(args.forceRefresh),
           limit: args.limit,
         });
-        return mcpToolResultFromSearchClasses(result, queryCtx);
+        return withResolutionNotes(mcpToolResultFromSearchClasses(result, queryCtx), [root.note]);
       } catch (e) {
         if (e instanceof UnsupportedProjectError) {
           return mcpToolResultFromProjectRootError(e.message, root.path);
@@ -1002,6 +1013,7 @@ export function createMcpServer(): McpServer {
           forceRefresh: Boolean(args.forceRefresh),
         };
         const results: CallToolResult[] = [];
+        let resolvedClassName: string | undefined;
         for (const methodName of methodNames) {
           const query: MethodSignatureQueryContext = {
             projectRoot: root.path,
@@ -1015,9 +1027,10 @@ export function createMcpServer(): McpServer {
           const result = Boolean(args.bytecodeOnly)
             ? await getMethodSignaturesBytecode(args.className, methodName, opts)
             : await getMethodSignatures(args.className, methodName, opts);
+          resolvedClassName ??= classNameNote(args.className, result);
           results.push(mcpToolResultFromMethodSignature(result, query));
         }
-        return combineToolResults(results);
+        return withResolutionNotes(combineToolResults(results), [resolvedClassName, root.note]);
       } catch (e) {
         return mcpToolResultFromUnexpectedError(e);
       }
@@ -1063,7 +1076,10 @@ export function createMcpServer(): McpServer {
           include: coreInclude.length > 0 ? coreInclude : undefined,
           scope: args.scope,
         });
-        return mcpToolResultFromClassStructure(result, query);
+        return withResolutionNotes(mcpToolResultFromClassStructure(result, query), [
+          classNameNote(args.className, result),
+          root.note,
+        ]);
       } catch (e) {
         return mcpToolResultFromUnexpectedError(e);
       }
@@ -1112,7 +1128,7 @@ export function createMcpServer(): McpServer {
           includeTest: Boolean(args.includeTest),
           forceRefresh: Boolean(args.forceRefresh),
         });
-        return mcpToolResultFromSearchInArtifact(result, query);
+        return withResolutionNotes(mcpToolResultFromSearchInArtifact(result, query), [root.note]);
       } catch (e) {
         if (e instanceof UnsupportedProjectError) {
           return mcpToolResultFromProjectRootError(e.message, root.path);

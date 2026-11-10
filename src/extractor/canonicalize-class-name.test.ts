@@ -95,9 +95,9 @@ describe('canonicalizeClassName', () => {
     expect(canon(single, 'com.example.Outer$Inner')).toBe('com.example.Outer$Inner');
   });
 
-  test('unique simple name is resolved and reports resolvedFrom', () => {
+  test('unique simple name is resolved', () => {
     const r = canonicalizeClassName(dir, single, 'Outer', {});
-    expect(r).toEqual({ ok: true, className: 'com.example.Outer', resolvedFrom: 'Outer' });
+    expect(r).toEqual({ ok: true, className: 'com.example.Outer' });
   });
 
   test('simple nested name without package', () => {

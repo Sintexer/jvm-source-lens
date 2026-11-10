@@ -252,6 +252,23 @@ describe('resolution cache read/write', () => {
     expect(fs.existsSync(path.join(globalCachePath(), 'decompiled'))).toBe(true);
   });
 
+  test('read deletes the orphaned single-slot class-search-index.json and keeps hashed indexes', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-orphan-'));
+    writeGradleStubs(dir);
+    const w = writeCachedResolution(dir, minimalResolutionOutput(dir), computeBuildInputsDigest(dir));
+    expect(w.ok).toBe(true);
+    const bucket = bucketDirFor(canonicalProjectRoot(dir));
+    const orphan = path.join(bucket, 'class-search-index.json');
+    const hashed = path.join(bucket, 'class-search-index.0123456789ab.json');
+    fs.writeFileSync(orphan, '{}\n', 'utf8');
+    fs.writeFileSync(hashed, '{}\n', 'utf8');
+
+    expect(readCachedResolution(dir).ok).toBe(true);
+
+    expect(fs.existsSync(orphan)).toBe(false);
+    expect(fs.existsSync(hashed)).toBe(true);
+  });
+
   test('read misses after build.gradle changes (hash mismatch)', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-inv-'));
     writeGradleStubs(dir);

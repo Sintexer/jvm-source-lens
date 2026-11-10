@@ -111,7 +111,7 @@ The MCP server runs over stdio (`jvmsrc mcp`). It needs no environment variables
 | **`search_classes`** | Find a class by simple name or glob; returns compact FQN + lib name lists |
 | **`get_class_structure`** | Retrieves class overview (purpose + method names) or declared signatures |
 | **`get_method_signature`**| Fetches real overloads for a method, with parameter names and generics |
-| **`find_in_class_source`**| Performs regex or substring searches inside a resolved class |
+| **`find_in_class_source`**| Greps one known class's source for a string or identifier (literal; regex optional) |
 | **`get_class_source`** | Retrieves method bodies or line ranges (used as a last resort) |
 | **`search_in_artifact`** | Greps text across all classes in one resolved dependency JAR |
 | **`resolve_dependencies`**| Analyzes the actual dependency graph this project uses |
@@ -123,7 +123,7 @@ The MCP server runs over stdio (`jvmsrc mcp`). It needs no environment variables
 > **Multimodule:** omit `modulePath` and jvmsrc auto-picks the unique owning module; on a miss it lists candidate `modulePath`s. **Methods:** `search_classes` matches declared method names when the index has source enrichment; for body text in a known JAR use `search_in_artifact`. `get_class_source` `methodNames` also walks superclasses for unmatched names.
 
 > [!NOTE]
-> **Inputs are forgiving.** `projectRoot` can be omitted (the workspace is used, or set `JVMSRC_PROJECT_ROOT`); `modulePath` accepts `app`, `/app`, `:app`, or a file/directory inside the module (omit it, or pass `"*"`, to search all modules); `className` accepts a simple name, `Outer.Inner`, or a trailing `.class`/`.java`. Pass `forceRefresh: true` only after something changed that the build files do not show, such as a SNAPSHOT republish.
+> **Inputs are forgiving.** `projectRoot` can be omitted (the workspace is used, or set `JVMSRC_PROJECT_ROOT`); `modulePath` accepts `app`, `/app`, `:app`, or a file/directory inside the module (omit it, or pass `"*"`, to search all modules); `className` accepts a simple name, `Outer.Inner`, or a trailing `.class`/`.java`. When jvmsrc reinterprets an input (simple name to FQN, subdirectory to Gradle root), the result ends with a `note:` line. Pass `forceRefresh: true` only after something changed that the build files do not show, such as a SNAPSHOT republish.
 
 ### Private repository credentials (optional)
 
@@ -211,7 +211,7 @@ Primarily **Java + Spring Boot** projects on Gradle. Other JVM languages (Kotlin
 | **Gradle** | Supported — multimodule included |
 | Maven, Bazel | Planned ([SPEC.md](SPEC.md)) |
 
-Point `-p` / `projectRoot` at the Gradle root (`settings.gradle(.kts)` or root `build.gradle(.kts)`). Uses `./gradlew` when present, else `gradle` on `PATH`. Maven-only trees get an explicit unsupported error.
+`-p` / `projectRoot` can be the Gradle root or any directory inside it; jvmsrc walks up to the nearest `gradlew` / `settings.gradle(.kts)`. MCP tools can omit `projectRoot`. Uses `./gradlew` when present, else `gradle` on `PATH`. Maven-only trees get an explicit unsupported error.
 
 </details>
 
@@ -297,6 +297,7 @@ jvmsrc mcp                                                     # run as MCP serv
 | `JVMSRC_ALLOWED_ROOTS` | Allowed `projectRoot` prefixes |
 | `JVMSRC_PROJECT_ROOT` | Default project root for MCP tools when `projectRoot` is omitted and the client sends no workspace roots (falls back to the working directory) |
 | `JVMSRC_MAX_SOURCE_OUTPUT_CHARS` | Max source body size (default 524288) |
+| `JVMSRC_MAX_FULL_SOURCE_CHARS` | Unscoped full-file `get_class_source` larger than this is refused with `SOURCE_OUTPUT_TOO_LARGE` (default 65536) |
 | `JVMSRC_GRADLE_TIMEOUT_MS` | Gradle timeout |
 | `JVMSRC_USE_SYSTEM_GRADLE` | `1` = run `gradle` on `PATH`, not the project's `./gradlew` (see [SECURITY.md](SECURITY.md#gradle-wrapper-trust)) |
 | `JVMSRC_MAX_JAR_BYTES` | Max size of a JAR read into memory (default 524288000 = 500 MB); larger JARs return `ZIP_READ_ERROR` |

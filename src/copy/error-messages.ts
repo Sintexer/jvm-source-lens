@@ -68,17 +68,19 @@ export function classifyClassSourceError(
       );
     }
     case 'MODULE_AMBIGUOUS': {
-      const subject =
-        error.className !== undefined && error.className.length > 0
-          ? `Class ${JSON.stringify(error.className)}`
-          : 'Classpath scope';
+      const named = error.className !== undefined && error.className.length > 0;
+      const subject = named && !error.message.includes(error.className!) ? `Class ${JSON.stringify(error.className)}` : null;
       return envelope(
         error,
         'validation',
         true,
         error.message.includes('resolves to different artifacts')
           ? 'Different dependency versions per module.'
-          : `${subject} is ambiguous across ${error.modulePaths.length} modules.`,
+          : subject !== null
+            ? `${subject} is ambiguous across ${error.modulePaths.length} modules.`
+            : named
+              ? 'Ambiguous module scope.'
+              : `Classpath scope is ambiguous across ${error.modulePaths.length} modules.`,
         error.message.includes('Retry with modulePath=')
           ? error.message
           : `${error.message} Candidates: ${error.modulePaths.map((m) => JSON.stringify(m)).join(', ')}. ` +

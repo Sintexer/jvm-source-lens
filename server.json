@@ -41,6 +41,12 @@
           "isRequired": false
         },
         {
+          "name": "JVMSRC_PROJECT_ROOT",
+          "description": "Optional default project root when projectRoot is omitted and the client sends no workspace roots.",
+          "format": "string",
+          "isRequired": false
+        },
+        {
           "name": "JVMSRC_CACHE_ROOT",
           "description": "Optional absolute path for resolution and decompile caches (default: OS cache dir).",
           "format": "string",
@@ -59,8 +65,32 @@
           "isRequired": false
         },
         {
+          "name": "JVMSRC_MAX_FULL_SOURCE_CHARS",
+          "description": "Max characters for an unscoped full-file get_class_source before it is refused (default 65536).",
+          "format": "string",
+          "isRequired": false
+        },
+        {
           "name": "JVMSRC_GRADLE_TIMEOUT_MS",
           "description": "Gradle resolution subprocess timeout in milliseconds.",
+          "format": "string",
+          "isRequired": false
+        },
+        {
+          "name": "JVMSRC_USE_SYSTEM_GRADLE",
+          "description": "Set to 1 to run gradle on PATH instead of the project's ./gradlew.",
+          "format": "string",
+          "isRequired": false
+        },
+        {
+          "name": "JVMSRC_MAX_JAR_BYTES",
+          "description": "Max size of a JAR read into memory (default 524288000).",
+          "format": "string",
+          "isRequired": false
+        },
+        {
+          "name": "JVMSRC_REGEX_TIMEOUT_MS",
+          "description": "Wall-clock limit for regex searches in milliseconds (default 2000).",
           "format": "string",
           "isRequired": false
         },

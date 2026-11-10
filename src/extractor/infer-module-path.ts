@@ -163,7 +163,7 @@ export function inferModulePath(
 }
 
 export type ResolveModuleScopeResult =
-  | { ok: true; modulePath: string; inferred: boolean }
+  | { ok: true; modulePath: string }
   | { ok: false; error: ClassSourceError };
 
 /**
@@ -178,7 +178,7 @@ export function resolveModuleScopeOrError(
   const inferred = inferModulePath(output, opts);
   switch (inferred.kind) {
     case 'use':
-      return { ok: true, modulePath: inferred.modulePath, inferred: inferred.inferred };
+      return { ok: true, modulePath: inferred.modulePath };
     case 'ambiguous': {
       const listed = inferred.providers.map((p) => `${p.modulePath} (${p.label})`).join(', ');
       const retry = inferred.providers.map((p) => `modulePath=${JSON.stringify(p.modulePath)}`).join(' or ');

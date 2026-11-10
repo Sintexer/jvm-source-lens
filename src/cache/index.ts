@@ -131,6 +131,15 @@ function readTextIfExists(filePath: string): string | null {
   }
 }
 
+/** Indexes are now one file per scope (`class-search-index.<hash>.json`); nothing reads the old single slot. */
+function removeLegacyClassSearchIndex(bucketDir: string): void {
+  try {
+    fs.unlinkSync(path.join(bucketDir, 'class-search-index.json'));
+  } catch {
+    /* absent or not removable: harmless */
+  }
+}
+
 export function readCachedResolution(projectRoot: string): CachedResolutionRead {
   const canonical = canonicalProjectRoot(projectRoot);
   const bucketRes = getProjectResolutionCacheDir(canonical);
@@ -138,6 +147,7 @@ export function readCachedResolution(projectRoot: string): CachedResolutionRead 
     return { ok: false, reason: bucketRes.message };
   }
   const bucketDir = bucketRes.dir;
+  removeLegacyClassSearchIndex(bucketDir);
   const hashPath = path.join(bucketDir, 'resolution.hash');
   const jsonPath = path.join(bucketDir, 'resolution.json');
   const localHashPath = path.join(bucketDir, 'local-artifact.hash');
