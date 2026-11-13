@@ -53,9 +53,24 @@ export function escapeCfrJarFilter(className: string): string {
   return className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Binary name of the outermost type: `com.foo.Outer$Inner` → `com.foo.Outer`. */
+export function outermostBinaryName(className: string): string {
+  const dollar = className.indexOf('$');
+  return dollar < 0 ? className : className.slice(0, dollar);
+}
+
+/**
+ * Anchored CFR `--jarfilter` for the outermost type and its `$` nested types.
+ * `ImmutableList` matches `ImmutableList` and `ImmutableList$Builder`, not `ImmutableListMultimap`.
+ */
+export function cfrJarFilter(className: string): string {
+  return `^${escapeCfrJarFilter(outermostBinaryName(className))}(?:\\$.*)?$`;
+}
+
 /**
  * Decompiles one class from a JAR via CFR
- * (`java -jar cfr.jar <jar> --jarfilter <escaped-fqn> --silent true`).
+ * (`java -jar cfr.jar <jar> --jarfilter <anchored outermost type> --silent true`).
+ * The filter matches that type and its `$` nested types, and does not match a longer prefix.
  *
  * CFR's second positional argument is a *method* name, not a class — do not pass the FQN there
  * or CFR decompiles the entire JAR.
@@ -89,7 +104,7 @@ export async function runCfrDecompile(opts: CfrDecompileOptions): Promise<CfrDec
     cfrJar,
     opts.jarPath,
     '--jarfilter',
-    escapeCfrJarFilter(opts.className),
+    cfrJarFilter(opts.className),
     '--silent',
     'true',
   ];

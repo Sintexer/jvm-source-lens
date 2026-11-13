@@ -68,6 +68,36 @@ describe('local module test sources', () => {
     }
   });
 
+  test('extractExternalClassSource slices a nested type in the queried module', async () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-local-'));
+    const javaPath = path.join(dir, 'src/main/java/com/app/Outer.java');
+    fs.mkdirSync(path.dirname(javaPath), { recursive: true });
+    fs.writeFileSync(javaPath, 'package com.app;\npublic class Outer {\n  public static class Inner { int n; }\n}\n');
+
+    const output: ResolutionOutput = {
+      schemaVersion: '1.1',
+      resolvedAt: '2020-01-01T00:00:00Z',
+      buildSystem: { type: 'gradle', version: '8.0', wrapper: true },
+      projectRoot: dir,
+      modules: [
+        {
+          name: ':app',
+          path: dir,
+          configurations: [{ name: 'compileClasspath', scope: 'compile', artifacts: [] }],
+        },
+      ],
+      errors: [],
+    };
+
+    const r = await extractExternalClassSource(output, { className: 'com.app.Outer$Inner', modulePath: ':app' });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.provenance.kind === 'interproject') {
+      expect(r.source).toContain('class Inner');
+      expect(r.provenance.nestedIn).toBe('com.app.Outer');
+      expect(r.provenance.sourceRelativePath).toBe('com/app/Outer.java');
+    }
+  });
+
   test('pickResolvedConfiguration falls back to jvmTestCompileClasspath', () => {
     const output: ResolutionOutput = {
       schemaVersion: '1.1',

@@ -3,7 +3,7 @@
  * existing login, no API key) against test/evals/project, records transcripts, and prints the metrics
  * from the UX plan. NOT part of CI: it spends tokens and needs network + Gradle.
  *
- *   bun run eval                           # all 40 prompts, jvmsrc + Read/Grep/Glob/Bash
+ *   bun run eval                           # all 48 prompts, jvmsrc + Read/Grep/Glob/Bash
  *   bun run eval --filter negative         # a category or prompt id; comma-separate several (d01,i05,m03)
  *   bun run eval --mode competing          # also allow WebSearch/WebFetch
  *   bun run eval --with-hook               # install docs/hooks/block-jvm-fallbacks.mjs

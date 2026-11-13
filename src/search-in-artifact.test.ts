@@ -410,6 +410,59 @@ public class Hello {
     // Either found=true (CFR worked) or found=true with 0 hits (class skipped). Must not throw.
     expect(result.ok).toBe(true);
   });
+
+  test('skips a nested class whose enclosing source was already scanned', async () => {
+    const sourcesJar = makeJar({
+      'com/example/Outer.java': `package com.example;
+public class Outer {
+  public static class Builder {
+    public void build() { int ONLY_IN_BUILDER = 1; }
+  }
+}
+`,
+    });
+    const binaryJar = makeJar({
+      'com/example/Outer.class': '\xca\xfe\xba\xbe',
+      'com/example/Outer$Builder.class': '\xca\xfe\xba\xbe',
+      'com/example/Outer$1.class': '\xca\xfe\xba\xbe',
+    });
+    const output = makeOutput(makeArtifact({ jarPath: binaryJar, sourcesJarPath: sourcesJar }));
+
+    const result = await searchInArtifactFromOutput(output, {
+      selector: { jarPath: binaryJar },
+      query: 'ONLY_IN_BUILDER',
+    });
+
+    expect(result.ok && result.found).toBe(true);
+    if (!result.ok || !result.found) return;
+    expect(result.hits.map((h) => h.className)).toEqual(['com.example.Outer']);
+    expect(result.classesScanned).toBe(1);
+  });
+
+  test('scans a nested class that has its own source file', async () => {
+    const sourcesJar = makeJar({
+      'com/example/Outer.java': 'package com.example;\npublic class Outer {}\n',
+      'com/example/Outer$Builder.java': `package com.example;
+public class Builder {
+  public void build() { int OWN_FILE = 1; }
+}
+`,
+    });
+    const binaryJar = makeJar({
+      'com/example/Outer.class': '\xca\xfe\xba\xbe',
+      'com/example/Outer$Builder.class': '\xca\xfe\xba\xbe',
+    });
+    const output = makeOutput(makeArtifact({ jarPath: binaryJar, sourcesJarPath: sourcesJar }));
+
+    const result = await searchInArtifactFromOutput(output, {
+      selector: { jarPath: binaryJar },
+      query: 'OWN_FILE',
+    });
+
+    expect(result.ok && result.found).toBe(true);
+    if (!result.ok || !result.found) return;
+    expect(result.hits.map((h) => h.className)).toEqual(['com.example.Outer$Builder']);
+  });
 });
 
 // ---------------------------------------------------------------------------

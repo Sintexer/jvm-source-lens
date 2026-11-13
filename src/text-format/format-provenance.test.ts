@@ -34,4 +34,16 @@ describe('formatProvenanceLine', () => {
       }),
     ).toBe('Provenance: interproject :core');
   });
+
+  test('names the enclosing type when nestedIn is set', () => {
+    expect(
+      formatProvenanceLine({
+        kind: 'sourcesJar',
+        coordinates: { group: 'com.example', name: 'lib', version: '1.0' },
+        jarPath: '/tmp/lib-sources.jar',
+        nestedIn: 'com.example.Outer',
+        sourceRelativePath: 'com/example/Outer.java',
+      }),
+    ).toBe('Provenance: com.example:lib:1.0 (sourcesJar); nested in com.example.Outer');
+  });
 });

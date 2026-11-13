@@ -1,10 +1,12 @@
 import path from 'node:path';
 import { decompileExternalClass } from './decompiler/decompile-external-class.js';
+import { outermostBinaryName } from './decompiler/spawn-cfr.js';
 import type { ArtifactCoordinates, ClassSourceError } from './extractor/class-source-types.js';
 import { isClasspathBinaryJarArtifact } from './extractor/class-source-types.js';
-import { fqnToZipRelPaths } from './extractor/fqn-paths.js';
+import { fqnToSourceCandidates, fqnToZipRelPaths } from './extractor/fqn-paths.js';
+import { anonymousOrLocalClassError } from './extractor/nested-class-source.js';
 import { pickResolvedConfiguration } from './extractor/pick-classpath.js';
-import { readZipEntryUtf8 } from './extractor/zip-entry.js';
+import { readZipEntryUtf8, zipEntryExists } from './extractor/zip-entry.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
 import type { ResolvedArtifact, ResolutionOutput } from './resolvers/resolution-output.js';
@@ -186,14 +188,20 @@ async function fetchClassSource(
   fqn: string,
   artifact: ResolvedArtifact,
   sourcesJarPath: string | null,
-): Promise<{ source: string; sourceAvailable: boolean } | null> {
-  // Try sources JAR first (fast, no Java process)
+): Promise<{
+  source: string;
+  sourceAvailable: boolean;
+  sourceRelPath?: string;
+  decompiledOuter?: string;
+} | null> {
+  // Try sources JAR first (fast, no Java process). Exact `Outer$Inner.java` only;
+  // the enclosing file is searched with the outer class.
   if (sourcesJarPath) {
     const paths = fqnToZipRelPaths(fqn);
     if (paths.ok) {
       const entry = readZipEntryUtf8(sourcesJarPath, paths.sourceRelPath);
       if (entry.ok) {
-        return { source: entry.text, sourceAvailable: true };
+        return { source: entry.text, sourceAvailable: true, sourceRelPath: paths.sourceRelPath };
       }
     }
   }
@@ -217,9 +225,67 @@ async function fetchClassSource(
   });
 
   if (result.ok) {
-    return { source: result.source, sourceAvailable: false };
+    return {
+      source: result.source,
+      sourceAvailable: false,
+      // A top-level decompile includes nested types. A nested slice does not cover its siblings.
+      decompiledOuter: fqn.includes('$') ? undefined : outermostBinaryName(fqn),
+    };
   }
   return null;
+}
+
+/** Outers first, so a nested class can see that its enclosing file was already searched. */
+function orderScanFqns(fqns: string[]): string[] {
+  return fqns
+    .filter((fqn) => anonymousOrLocalClassError(fqn) === null)
+    .sort((a, b) => {
+      const depth = a.split('$').length - b.split('$').length;
+      if (depth !== 0) {
+        return depth;
+      }
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+}
+
+function hasOwnSourceFile(sourcesJarPath: string | null, exactRelPath: string): boolean {
+  if (!sourcesJarPath) {
+    return false;
+  }
+  const exists = zipEntryExists(sourcesJarPath, exactRelPath);
+  return exists.ok && exists.exists;
+}
+
+/**
+ * Skip `Outer$Inner` when the enclosing compilation unit was already searched,
+ * unless this nested type has its own `Outer$Inner.java`.
+ */
+function skipNestedAlreadyScanned(
+  fqn: string,
+  sourcesJarPath: string | null,
+  scannedSourcePaths: ReadonlySet<string>,
+  scannedDecompiledOuters: ReadonlySet<string>,
+): boolean {
+  if (!fqn.includes('$')) {
+    return false;
+  }
+  const paths = fqnToSourceCandidates(fqn);
+  if (!paths.ok) {
+    return false;
+  }
+  const exact = paths.sourceRelPaths[0]!;
+  if (hasOwnSourceFile(sourcesJarPath, exact)) {
+    return false;
+  }
+  if (scannedDecompiledOuters.has(outermostBinaryName(fqn))) {
+    return true;
+  }
+  for (const enclosing of paths.sourceRelPaths.slice(1)) {
+    if (scannedSourcePaths.has(enclosing)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -318,7 +384,7 @@ export async function searchInArtifactFromOutput(
     };
   }
 
-  const fqnResult = listFqnsFromJarClassEntries(artifact.jarPath);
+  const fqnResult = listFqnsFromJarClassEntries(artifact.jarPath, { includeNested: true });
   if (!fqnResult.ok) {
     return {
       ok: false,
@@ -327,12 +393,15 @@ export async function searchInArtifactFromOutput(
   }
 
   // 6. Search across classes
-  const allFqns = fqnResult.fqns.slice(0, maxClasses);
+  const orderedFqns = orderScanFqns(fqnResult.fqns);
+  const allFqns = orderedFqns.slice(0, maxClasses);
   const classHits: SearchInArtifactHitClass[] = [];
   let totalMatches = 0;
   let totalHitCount = 0;
   let truncated = false;
   let classesScanned = 0;
+  const scannedSourcePaths = new Set<string>();
+  const scannedDecompiledOuters = new Set<string>();
   const runner = regex ? new RegexMatchRunner() : undefined;
 
   try {
@@ -341,11 +410,20 @@ export async function searchInArtifactFromOutput(
         truncated = true;
         break;
       }
+      if (skipNestedAlreadyScanned(fqn, sourcesJarPath, scannedSourcePaths, scannedDecompiledOuters)) {
+        continue;
+      }
 
       const sourceResult = await fetchClassSource(fqn, artifact, sourcesJarPath);
       classesScanned++;
 
       if (sourceResult === null) continue;
+      if (sourceResult.sourceRelPath) {
+        scannedSourcePaths.add(sourceResult.sourceRelPath);
+      }
+      if (sourceResult.decompiledOuter) {
+        scannedDecompiledOuters.add(sourceResult.decompiledOuter);
+      }
 
       const remaining = maxHits - totalHitCount;
       const searchResult = await searchClassSourceTextAsync(
@@ -385,7 +463,7 @@ export async function searchInArtifactFromOutput(
   }
 
   // Mark truncated if we didn't finish all FQNs
-  if (!truncated && fqnResult.fqns.length > maxClasses) {
+  if (!truncated && orderedFqns.length > maxClasses) {
     truncated = true;
   }
 

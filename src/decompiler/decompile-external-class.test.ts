@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { applySourceExcerpt } from '../source-excerpt.js';
 import { decompileExternalClass } from './decompile-external-class.js';
 
 let prevJvmsrcCacheRoot: string | undefined;
@@ -114,6 +115,60 @@ describe('decompileExternalClass', () => {
       if (!r.ok) {
         expect(r.error.code).toBe('DECOMPILE_FAILED');
         expect(r.error.stderr).toBe('err');
+      }
+    } finally {
+      restoreCacheEnv();
+    }
+  });
+
+  test('nested type decompiles the outer class once and slices it', async () => {
+    isolateCacheEnv();
+    try {
+      const full = `package com.google.common.collect;
+public class ImmutableList {
+  public static final class Builder {
+    public ImmutableList build(int expectedSize) { return null; }
+  }
+}
+`;
+      let calls = 0;
+      const runCfr = async () => {
+        calls += 1;
+        return { ok: true as const, source: full };
+      };
+      const first = await decompileExternalClass({
+        ...baseOpts,
+        className: 'com.google.common.collect.ImmutableList$Builder',
+        coordinates: { group: 'com.google.guava', name: 'guava', version: '32.1.2-jre' },
+        runCfr,
+      });
+      const second = await decompileExternalClass({
+        ...baseOpts,
+        className: 'com.google.common.collect.ImmutableList$Builder',
+        coordinates: { group: 'com.google.guava', name: 'guava', version: '32.1.2-jre' },
+        runCfr,
+      });
+
+      expect(calls).toBe(1);
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+      if (first.ok && second.ok) {
+        expect(first.sourceAvailable).toBe(false);
+        expect(first.source).toContain('class Builder');
+        expect(first.source).toContain('build(int expectedSize)');
+        expect(first.source.startsWith('// jvmsrc: ')).toBe(true);
+        const unit = first.compilationUnit;
+        expect(unit).toBe(full);
+        expect(first.provenance.nestedIn).toBe('com.google.common.collect.ImmutableList');
+        expect(first.provenance.cachePath.endsWith(`${path.sep}ImmutableList.java`)).toBe(true);
+        expect(second.provenance.cachePath).toBe(first.provenance.cachePath);
+        if (unit === undefined) return;
+        const excerpt = applySourceExcerpt(unit, first.className, false, { methodNames: ['build'] });
+        expect(excerpt.ok).toBe(true);
+        if (excerpt.ok && excerpt.excerpt) {
+          expect(excerpt.source).toContain('build(int expectedSize)');
+          expect(excerpt.excerpt.lineNumbersReliable).toBe(false);
+        }
       }
     } finally {
       restoreCacheEnv();

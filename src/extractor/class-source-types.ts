@@ -12,6 +12,10 @@ export type SourcesJarProvenance = {
   kind: 'sourcesJar';
   coordinates: ArtifactCoordinates;
   jarPath: string;
+  /** Enclosing binary name when the type is nested (`com.foo.Outer` for `Outer$Inner`). */
+  nestedIn?: string;
+  /** Zip entry that was read, when the type is nested. */
+  sourceRelativePath?: string;
 };
 
 export type DecompiledProvenance = {
@@ -20,6 +24,8 @@ export type DecompiledProvenance = {
   jarPath: string;
   entryRelPath: string;
   cachePath: string;
+  /** Enclosing binary name when the returned text is a nested-type slice. */
+  nestedIn?: string;
 };
 
 /** Local `.java` in a depended Gradle submodule (`origin: interproject`). */
@@ -31,6 +37,8 @@ export type InterprojectProvenance = {
   moduleRoot: string;
   sourceRelativePath: string;
   absoluteSourcePath: string;
+  /** Enclosing binary name when the type is nested. */
+  nestedIn?: string;
 };
 
 export type ResolveSourcesJarFn = (coordinates: ArtifactCoordinates) => Promise<string | null>;
@@ -147,6 +155,11 @@ export type ClassSourceLookupResult =
       className: string;
       provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
       excerpt?: SourceExcerptInfo;
+      /**
+       * Full file when `source` is a nested-type slice. Used for file-relative excerpts.
+       * Stripped before CLI, MCP, and library return.
+       */
+      compilationUnit?: string;
       /** True when `source` was truncated to `JVMSRC_MAX_SOURCE_OUTPUT_CHARS`. */
       outputTruncated?: boolean;
       /** Original UTF-16 length before truncation. */

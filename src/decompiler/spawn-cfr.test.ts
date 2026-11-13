@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { getBundledResource } from '../bundled-resources.js';
 import { resolveJavaExecutable } from './resolve-java-executable.js';
-import { escapeCfrJarFilter, runCfrDecompile } from './spawn-cfr.js';
+import { cfrJarFilter, escapeCfrJarFilter, runCfrDecompile } from './spawn-cfr.js';
 
 function hasJavaTooling(): boolean {
   const java = resolveJavaExecutable();
@@ -37,6 +37,17 @@ describe('escapeCfrJarFilter', () => {
   test('escapes dots and dollar for inner classes', () => {
     expect(escapeCfrJarFilter('com.example.Beta')).toBe('com\\.example\\.Beta');
     expect(escapeCfrJarFilter('com.example.Outer$Inner')).toBe('com\\.example\\.Outer\\$Inner');
+  });
+});
+
+describe('cfrJarFilter', () => {
+  test('anchors the outermost type and its nested names', () => {
+    const filter = cfrJarFilter('com.google.common.collect.ImmutableList$Builder');
+    expect(filter).toBe('^com\\.google\\.common\\.collect\\.ImmutableList(?:\\$.*)?$');
+    expect(new RegExp(filter).test('com.google.common.collect.ImmutableList')).toBe(true);
+    expect(new RegExp(filter).test('com.google.common.collect.ImmutableList$Builder')).toBe(true);
+    expect(new RegExp(filter).test('com.google.common.collect.ImmutableListMultimap')).toBe(false);
+    expect(cfrJarFilter('com.google.common.collect.ImmutableList')).toBe(filter);
   });
 });
 

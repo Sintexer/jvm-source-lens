@@ -43,3 +43,33 @@ export function fqnToZipRelPaths(fqn: string): FqnPaths {
     classRelPath: `${dir}${simple}.class`,
   };
 }
+
+export type SourceCandidates =
+  | { ok: true; classRelPath: string; sourceRelPaths: string[] }
+  | { ok: false; error: ClassSourceError };
+
+/**
+ * Source ZIP / tree paths for `fqn`. The exact `Outer$Inner.java` path is first,
+ * then each enclosing compilation unit (`Outer.java`). Top-level names have one path.
+ * `classRelPath` stays the binary entry (`Outer$Inner.class`).
+ */
+export function fqnToSourceCandidates(fqn: string): SourceCandidates {
+  const base = fqnToZipRelPaths(fqn);
+  if (!base.ok) {
+    return base;
+  }
+  const sourceRelPaths = [base.sourceRelPath];
+  const lastDot = fqn.lastIndexOf('.');
+  const pkg = lastDot === -1 ? '' : fqn.slice(0, lastDot);
+  const simple = lastDot === -1 ? fqn : fqn.slice(lastDot + 1);
+  const dir = pkg.length === 0 ? '' : `${pkg.replaceAll('.', '/')}/`;
+  let name = simple;
+  while (name.includes('$')) {
+    name = name.slice(0, name.lastIndexOf('$'));
+    if (name.length === 0) {
+      break;
+    }
+    sourceRelPaths.push(`${dir}${name}.java`);
+  }
+  return { ok: true, classRelPath: base.classRelPath, sourceRelPaths };
+}

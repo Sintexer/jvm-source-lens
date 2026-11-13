@@ -21,7 +21,30 @@ describe('jar-class-fqns', () => {
       if (r.ok) {
         expect(r.fqns).toContain('com.smoke.Demo');
         expect(r.fqns.some((f) => f.includes('MANIFEST'))).toBe(false);
+        expect(r.fqns.some((f) => f.includes('$'))).toBe(false);
       }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('includeNested lists dollar binary names', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jvmsrc-jar-test-'));
+    const jarPath = join(dir, 'sample.jar');
+    try {
+      const bytes = zipSync({
+        'com/smoke/Demo.class': new Uint8Array([0xca, 0xfe, 0xba, 0xbe]),
+        'com/smoke/Demo$Builder.class': new Uint8Array([0xca, 0xfe, 0xba, 0xbe]),
+      });
+      writeFileSync(jarPath, bytes);
+      const r = listFqnsFromJarClassEntries(jarPath, { includeNested: true });
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.fqns).toContain('com.smoke.Demo');
+        expect(r.fqns).toContain('com.smoke.Demo$Builder');
+      }
+      const top = listFqnsFromJarClassEntries(jarPath);
+      expect(top.ok && top.fqns.some((f) => f.includes('$'))).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

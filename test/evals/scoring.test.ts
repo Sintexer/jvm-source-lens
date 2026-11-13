@@ -221,7 +221,7 @@ test('prompts.json is well-formed and matches the planned mix', async () => {
   const counts = Object.fromEntries(
     [...new Set(prompts.map((p) => p.category))].map((c) => [c, prompts.filter((p) => p.category === c).length]),
   );
-  expect(counts).toEqual({ direct: 10, indirect: 10, multimodule: 8, sloppy: 6, filecontext: 4, negative: 6 });
+  expect(counts).toEqual({ direct: 14, indirect: 10, multimodule: 8, sloppy: 6, filecontext: 4, negative: 6 });
   expect(new Set(prompts.map((p) => p.id)).size).toBe(prompts.length);
   for (const p of prompts) {
     expect(p.expectJvmsrc).toBe(p.category !== 'negative');

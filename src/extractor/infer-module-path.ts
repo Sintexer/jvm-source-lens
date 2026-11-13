@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import type { ClassSourceError, ClassSourceLookupOptions } from './class-source-types.js';
 import { findClasspathOwningClass, type ClasspathOwningClassHit } from './find-external-class-jar.js';
-import { fqnToZipRelPaths } from './fqn-paths.js';
+import { fqnToSourceCandidates } from './fqn-paths.js';
 import { candidateInterprojectJavaSourcePaths } from './interproject-paths.js';
 import { matchModule, withoutAllModules } from './match-module.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
@@ -51,7 +51,7 @@ function probeJavaSourceOwner(
   moduleName: string,
   opts: ProbeScope,
 ): Omit<ClassOwner, 'searchedArtifactCount'> | null {
-  const paths = fqnToZipRelPaths(opts.className);
+  const paths = fqnToSourceCandidates(opts.className);
   if (!paths.ok) {
     return null;
   }
@@ -65,7 +65,9 @@ function probeJavaSourceOwner(
   }
   const includeTest = Boolean(opts.includeTest);
   const hasSource = (root: string): boolean =>
-    candidateInterprojectJavaSourcePaths(root, paths.sourceRelPath, includeTest).some((p) => existsSync(p));
+    paths.sourceRelPaths.some((rel) =>
+      candidateInterprojectJavaSourcePaths(root, rel, includeTest).some((p) => existsSync(p)),
+    );
   const owned = (name: string) => ({
     modulePath: moduleName,
     identity: `interproject:${name}`,

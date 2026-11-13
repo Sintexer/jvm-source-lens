@@ -52,6 +52,8 @@ const provenanceSchema = z.union([
     kind: z.literal('sourcesJar'),
     coordinates: artifactCoordinatesSchema,
     jarPath: z.string(),
+    nestedIn: z.string().optional(),
+    sourceRelativePath: z.string().optional(),
   }),
   z.object({
     kind: z.literal('decompiled'),
@@ -59,6 +61,7 @@ const provenanceSchema = z.union([
     jarPath: z.string(),
     entryRelPath: z.string(),
     cachePath: z.string(),
+    nestedIn: z.string().optional(),
   }),
   z.object({
     kind: z.literal('interproject'),
@@ -67,6 +70,7 @@ const provenanceSchema = z.union([
     moduleRoot: z.string(),
     sourceRelativePath: z.string(),
     absoluteSourcePath: z.string(),
+    nestedIn: z.string().optional(),
   }),
 ]);
 

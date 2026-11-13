@@ -117,7 +117,7 @@ The MCP server runs over stdio (`jvmsrc mcp`). It needs no environment variables
 | **`resolve_dependencies`**| Analyzes the actual dependency graph this project uses |
 
 > [!TIP]
-> Every source response includes `sourceAvailable`: `true` for real sources (Javadoc, parameter names, generics), `false` for CFR decompilation (structure reliable, names may be synthetic).
+> Every source response includes `sourceAvailable`: `true` for real sources (Javadoc, parameter names, generics), `false` for CFR decompilation (structure reliable, names may be synthetic). Nested types (`Outer$Inner`, including `ImmutableList.Builder`) return structure, signatures, method excerpts, and decompiled source from the enclosing type.
 
 > [!NOTE]
 > **Multimodule:** omit `modulePath` and jvmsrc auto-picks the unique owning module; on a miss it lists candidate `modulePath`s. **Methods:** `search_classes` matches declared method names when the index has source enrichment; for body text in a known JAR use `search_in_artifact`. `get_class_source` `methodNames` also walks superclasses for unmatched names.

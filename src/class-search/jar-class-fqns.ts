@@ -26,7 +26,7 @@ function findEocdOffset(buf: Buffer): number {
   return -1;
 }
 
-function classEntryToFqn(entryName: string): string | null {
+function classEntryToFqn(entryName: string, includeNested: boolean): string | null {
   const n = entryName.replaceAll('\\', '/').replace(/^\/+/, '');
   if (!n.endsWith('.class') || n.includes('META-INF/')) {
     return null;
@@ -35,7 +35,7 @@ function classEntryToFqn(entryName: string): string | null {
   if (base === 'module-info' || base.endsWith('/module-info')) {
     return null;
   }
-  if (base.includes('$')) {
+  if (!includeNested && base.includes('$')) {
     return null;
   }
   if (!base.includes('/')) {
@@ -44,10 +44,19 @@ function classEntryToFqn(entryName: string): string | null {
   return base.replaceAll('/', '.');
 }
 
+export type ListJarClassFqnsOptions = {
+  /** When true, include `Outer$Inner` binary names. Default lists top-level types only. */
+  includeNested?: boolean;
+};
+
 /**
- * Lists top-level `.class` FQNs from a JAR by parsing the ZIP central directory only (no inflate).
+ * Lists `.class` FQNs from a JAR by parsing the ZIP central directory only (no inflate).
+ * Nested binary names are omitted unless `includeNested` is set.
  */
-export function listFqnsFromJarClassEntries(jarAbsPath: string): { ok: true; fqns: string[] } | { ok: false; message: string } {
+export function listFqnsFromJarClassEntries(
+  jarAbsPath: string,
+  options?: ListJarClassFqnsOptions,
+): { ok: true; fqns: string[] } | { ok: false; message: string } {
   const size = checkJarSize(jarAbsPath);
   if (!size.ok) {
     return { ok: false, message: size.message };
@@ -93,7 +102,7 @@ export function listFqnsFromJarClassEntries(jarAbsPath: string): { ok: true; fqn
     } catch {
       entryName = nameBuf.toString('latin1');
     }
-    const fqn = classEntryToFqn(entryName);
+    const fqn = classEntryToFqn(entryName, Boolean(options?.includeNested));
     if (fqn !== null) {
       fqns.push(fqn);
     }

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { strToU8, zipSync } from 'fflate';
+import { checkUnscopedFullSourceSize } from '../output-limits.js';
 
 const fakeClassBytes = Uint8Array.from([0xca, 0xfe, 0xba, 0xbe]);
 import type { ResolutionOutput, ResolvedArtifact } from '../resolvers/resolution-output.js';
@@ -77,6 +78,7 @@ describe('extractExternalClassSource', () => {
       expect(r.provenance.kind).toBe('sourcesJar');
       if (r.provenance.kind === 'sourcesJar') {
         expect(r.provenance.jarPath).toBe(sourcesJar);
+        expect(r.provenance.nestedIn).toBeUndefined();
       }
     }
   });
@@ -362,6 +364,133 @@ describe('extractExternalClassSource', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.code).toBe('CLASS_NOT_FOUND');
+    }
+  });
+
+  test('slices a nested type from the enclosing sources file', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
+    const pad = `/*${'x'.repeat(70_000)}*/\n`;
+    const body =
+      `${pad}package com.example;\n` +
+      'public class Outer {\n' +
+      '  /** docs */\n' +
+      '  public static class Builder {\n' +
+      '    public void build() {}\n' +
+      '  }\n' +
+      '}\n';
+    const sourcesJar = path.join(dir, 'lib-sources.jar');
+    const binJar = path.join(dir, 'lib.jar');
+    fs.writeFileSync(sourcesJar, zipSync({ 'com/example/Outer.java': strToU8(body) }));
+    fs.writeFileSync(binJar, zipSync({ 'com/example/Outer$Builder.class': fakeClassBytes }));
+
+    const out = baseOutput(dir, [
+      artifact({ group: 'com.example', name: 'lib', jarPath: binJar, sourcesJarPath: sourcesJar }),
+    ]);
+    const r = await extractExternalClassSource(out, { className: 'com.example.Outer$Builder' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) {
+      return;
+    }
+    expect(r.sourceAvailable).toBe(true);
+    expect(r.source.startsWith('// jvmsrc: com/example/Outer.java:')).toBe(true);
+    expect(r.source).toContain('/** docs */');
+    expect(r.source).toContain('class Builder');
+    expect(r.source).toContain('void build()');
+    expect(r.source).not.toContain(pad);
+    expect(r.compilationUnit).toBe(body);
+    expect(checkUnscopedFullSourceSize(r.className, r.source).ok).toBe(true);
+    expect(checkUnscopedFullSourceSize(r.className, r.compilationUnit ?? '').ok).toBe(false);
+    expect(r.provenance.kind).toBe('sourcesJar');
+    if (r.provenance.kind === 'sourcesJar') {
+      expect(r.provenance.nestedIn).toBe('com.example.Outer');
+      expect(r.provenance.sourceRelativePath).toBe('com/example/Outer.java');
+    }
+  });
+
+  test('an exact nested source file is returned whole', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
+    const body = 'package com.example;\npublic class Builder {}\n';
+    const sourcesJar = path.join(dir, 'lib-sources.jar');
+    fs.writeFileSync(sourcesJar, zipSync({ 'com/example/Outer$Builder.java': strToU8(body) }));
+    const out = baseOutput(dir, [
+      artifact({ group: 'com.example', name: 'lib', jarPath: null, sourcesJarPath: sourcesJar }),
+    ]);
+    const r = await extractExternalClassSource(out, { className: 'com.example.Outer$Builder' });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.provenance.kind === 'sourcesJar') {
+      expect(r.source).toBe(body);
+      expect(r.compilationUnit).toBeUndefined();
+      expect(r.provenance.nestedIn).toBe('com.example.Outer');
+      expect(r.provenance.sourceRelativePath).toBe('com/example/Outer$Builder.java');
+    }
+  });
+
+  test('a digit nested name does not return the enclosing file', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
+    const body = 'package com.example;\npublic class Outer { void m() {} }\n';
+    const sourcesJar = path.join(dir, 'lib-sources.jar');
+    const binJar = path.join(dir, 'lib.jar');
+    fs.writeFileSync(sourcesJar, zipSync({ 'com/example/Outer.java': strToU8(body) }));
+    fs.writeFileSync(binJar, zipSync({ 'com/example/Outer$1.class': fakeClassBytes }));
+    const out = baseOutput(dir, [
+      artifact({ group: 'com.example', name: 'lib', jarPath: binJar, sourcesJarPath: sourcesJar }),
+    ]);
+    let decompiled = '';
+    const r = await extractExternalClassSource(out, {
+      className: 'com.example.Outer$1',
+      decompileExternalClass: async (opts) => {
+        decompiled = opts.entryRelPath;
+        return {
+          ok: false,
+          error: {
+            code: 'DECOMPILE_FAILED',
+            message: 'nope',
+            className: opts.className,
+            jarPath: opts.jarPath,
+            entryRelPath: opts.entryRelPath,
+            coordinates: opts.coordinates,
+          },
+        };
+      },
+    });
+    expect(decompiled).toBe('');
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe('CLASS_NOT_FOUND');
+      expect(r.error.message).toBe(
+        'com.example.Outer$1 is an anonymous or local class. The enclosing class is com.example.Outer.',
+      );
+    }
+  });
+
+  test('slices a nested type from an inter-project tree', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
+    const depRoot = path.join(dir, 'shared');
+    const javaPath = path.join(depRoot, 'src/main/java/com/shared/Outer.java');
+    fs.mkdirSync(path.dirname(javaPath), { recursive: true });
+    fs.writeFileSync(
+      javaPath,
+      'package com.shared;\npublic class Outer {\n  public static class Inner { int n; }\n}\n',
+    );
+    const inter: ResolvedArtifact = {
+      group: 'root',
+      name: 'shared',
+      version: null,
+      type: 'project',
+      jarPath: null,
+      sourcesJarPath: null,
+      origin: 'interproject',
+      direct: true,
+      interproject: { moduleName: ':shared', modulePath: depRoot },
+    };
+    const r = await extractExternalClassSource(baseOutput(dir, [inter]), { className: 'com.shared.Outer$Inner' });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.provenance.kind === 'interproject') {
+      expect(r.source).toContain('class Inner');
+      expect(r.source).toContain('int n;');
+      expect(r.source.startsWith('// jvmsrc: com/shared/Outer.java:')).toBe(true);
+      expect(r.provenance.nestedIn).toBe('com.shared.Outer');
+      expect(r.provenance.sourceRelativePath).toBe('com/shared/Outer.java');
     }
   });
 });

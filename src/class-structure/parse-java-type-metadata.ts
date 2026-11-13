@@ -1,3 +1,4 @@
+import { locateTypeDeclaration } from './locate-type-declaration.js';
 import { declaringSimpleName } from './javap-parse.js';
 import { stripLeadingModifiers } from './strip-leading-modifiers.js';
 import type {
@@ -211,7 +212,25 @@ function skipStringLiteral(src: string, i: number): number {
   return src.length;
 }
 
-function skipLexicalNoise(src: string, i: number): number {
+function skipTextBlock(src: string, i: number): number {
+  let j = i + 3;
+  while (j < src.length) {
+    if (src[j] === '\\') {
+      j += 2;
+      continue;
+    }
+    if (src.startsWith('"""', j)) {
+      return j + 3;
+    }
+    j++;
+  }
+  return src.length;
+}
+
+export function skipLexicalNoise(src: string, i: number): number {
+  if (src.startsWith('"""', i)) {
+    return skipTextBlock(src, i);
+  }
   const c = src[i];
   if (c === '/' && src[i + 1] === '/') {
     return skipLineComment(src, i);
@@ -245,21 +264,28 @@ function braceDepthAt(src: string, endExclusive: number): number {
   return depth;
 }
 
-function findTopLevelTypeKeywordMatch(src: string, simpleName: string): { kind: ClassStructureKind; index: number } | null {
-  const patterns: Array<{ kind: ClassStructureKind; re: RegExp }> = [
-    { kind: 'class', re: new RegExp(`\\bclass\\s+${escapeRe(simpleName)}\\b`, 'g') },
-    { kind: 'interface', re: new RegExp(`\\binterface\\s+${escapeRe(simpleName)}\\b`, 'g') },
-    { kind: 'enum', re: new RegExp(`\\benum\\s+${escapeRe(simpleName)}\\b`, 'g') },
-    { kind: 'record', re: new RegExp(`\\brecord\\s+${escapeRe(simpleName)}\\b`, 'g') },
-    { kind: 'annotation', re: new RegExp(`@interface\\s+${escapeRe(simpleName)}\\b`, 'g') },
+function typeKeywordPatterns(simpleName: string): Array<{ kind: ClassStructureKind; re: RegExp }> {
+  const name = escapeRe(simpleName);
+  return [
+    { kind: 'class', re: new RegExp(`\\bclass\\s+${name}\\b`, 'g') },
+    { kind: 'interface', re: new RegExp(`\\binterface\\s+${name}\\b`, 'g') },
+    { kind: 'enum', re: new RegExp(`\\benum\\s+${name}\\b`, 'g') },
+    { kind: 'record', re: new RegExp(`\\brecord\\s+${name}\\b`, 'g') },
+    { kind: 'annotation', re: new RegExp(`@interface\\s+${name}\\b`, 'g') },
   ];
+}
 
+function earliestTypeKeyword(
+  src: string,
+  simpleName: string,
+  accept: (index: number) => boolean,
+): { kind: ClassStructureKind; index: number } | null {
   let best: { kind: ClassStructureKind; index: number } | null = null;
-  for (const { kind, re } of patterns) {
+  for (const { kind, re } of typeKeywordPatterns(simpleName)) {
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(src)) !== null) {
-      if (braceDepthAt(src, m.index) !== 0) {
+      if (!accept(m.index)) {
         continue;
       }
       if (!best || m.index < best.index) {
@@ -270,7 +296,21 @@ function findTopLevelTypeKeywordMatch(src: string, simpleName: string): { kind: 
   return best;
 }
 
-function findTypeBodyOpenBrace(src: string, declKeywordIdx: number): number {
+export function findTopLevelTypeKeywordMatch(src: string, simpleName: string): { kind: ClassStructureKind; index: number } | null {
+  return earliestTypeKeyword(src, simpleName, (index) => braceDepthAt(src, index) === 0);
+}
+
+/** Type keyword whose match starts in `[from, toExclusive)`. Does not require brace depth 0. */
+export function findTypeKeywordMatchInRange(
+  src: string,
+  simpleName: string,
+  from: number,
+  toExclusive: number,
+): { kind: ClassStructureKind; index: number } | null {
+  return earliestTypeKeyword(src, simpleName, (index) => index >= from && index < toExclusive);
+}
+
+export function findTypeBodyOpenBrace(src: string, declKeywordIdx: number): number {
   let i = declKeywordIdx;
   let angle = 0;
   let paren = 0;
@@ -297,7 +337,7 @@ function findTypeBodyOpenBrace(src: string, declKeywordIdx: number): number {
   return -1;
 }
 
-function indexOfMatchingBrace(src: string, openIdx: number): number {
+export function indexOfMatchingBrace(src: string, openIdx: number): number {
   if (src[openIdx] !== '{') {
     return -1;
   }
@@ -640,7 +680,7 @@ function looksLikeMethodSignatureBeforeBrace(prelude: string): boolean {
   return /\([^)]*\)\s*(?:throws\s+[\w\s.,]*)?\s*$/.test(t);
 }
 
-function extendSpanWithLeadingJavadoc(source: string, memberStart: number): number {
+export function extendSpanWithLeadingJavadoc(source: string, memberStart: number): number {
   let i = memberStart;
   while (i > 0 && /\s/.test(source[i - 1]!)) {
     i--;
@@ -673,9 +713,38 @@ function extendSpanWithLeadingJavadoc(source: string, memberStart: number): numb
   return memberStart;
 }
 
+/** Simple names from a binary name: `com.foo.Outer$Inner` → `['Outer', 'Inner']`. */
+function binaryTypeNames(classFqn: string): string[] {
+  const dot = classFqn.lastIndexOf('.');
+  const simple = dot < 0 ? classFqn : classFqn.slice(dot + 1);
+  return simple.split('$');
+}
+
 /**
- * Best-effort parse of a single compilation-unit `.java` for `classFqn`'s **top-level** type
- * matching {@link declaringSimpleName}.
+ * Nested names are located inside the enclosing declaration. When that walk misses
+ * (an exact `Outer$Inner.java` that declares only the inner type), use the top-level type.
+ */
+function resolveTypeKeyword(
+  source: string,
+  classFqn: string,
+): { kind: ClassStructureKind; index: number } | null {
+  const names = binaryTypeNames(classFqn);
+  const innermost = names[names.length - 1] ?? '';
+  if (innermost.length === 0 || names.some((name) => name.length === 0)) {
+    return null;
+  }
+  if (names.length > 1) {
+    const span = locateTypeDeclaration(source, names);
+    if (span) {
+      return findTypeKeywordMatchInRange(source, innermost, span.start, span.openBrace + 1);
+    }
+  }
+  return findTopLevelTypeKeywordMatch(source, innermost);
+}
+
+/**
+ * Best-effort parse of a compilation unit for `classFqn`, including a nested binary name
+ * (`Outer$Inner`) inside the enclosing file.
  */
 export function parseJavaTypeMetadata(
   source: string,
@@ -684,7 +753,7 @@ export function parseJavaTypeMetadata(
 ): ParsedJavaTypeMetadata | null {
   const simple = declaringSimpleName(classFqn);
   const ctx = buildImportCtx(source);
-  const hit = findTopLevelTypeKeywordMatch(source, simple);
+  const hit = resolveTypeKeyword(source, classFqn);
   if (!hit) {
     return null;
   }

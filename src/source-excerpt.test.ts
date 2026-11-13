@@ -114,3 +114,27 @@ public class Foo {
     }
   });
 });
+
+describe('applySourceExcerpt nested type', () => {
+  const src = `package com.google.common.collect;
+public class ImmutableList {
+  void outerOnly() {}
+  public static final class Builder {
+    public ImmutableList build(int expectedSize) { return null; }
+  }
+}
+`;
+
+  test('methodNames build returns the nested method from the enclosing file', () => {
+    const r = applySourceExcerpt(src, 'com.google.common.collect.ImmutableList$Builder', true, {
+      methodNames: ['build'],
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.excerpt) {
+      expect(r.source).toContain('build(int expectedSize)');
+      expect(r.source).not.toContain('outerOnly');
+      expect(r.excerpt.matchedMethodNames).toEqual(['build']);
+      expect(r.excerpt.lineNumbersReliable).toBe(true);
+    }
+  });
+});

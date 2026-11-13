@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { parseJavaClassSkeleton } from './parse-java-class-skeleton.js';
 import {
   JAVA_SOURCE_SYNTHETIC_DESC_PREFIX,
+  collectMethodSourceSpans,
   isSyntheticJvmDescriptor,
   parseJavaTypeMetadata,
   syntheticJvmDescriptor,
@@ -185,5 +187,87 @@ public final class Lists {
     expect(m.newArrayList!.parameters).toHaveLength(0);
     expect(m.asList!.parameters).toHaveLength(2);
     expect(m.annotatedReturn!.parameters).toHaveLength(1);
+  });
+});
+
+const NESTED_OUTER = `package com.google.common.collect;
+
+/** outer list */
+public class ImmutableList {
+  void outerOnly() {}
+
+  /**
+   * Builds an immutable list.
+   */
+  public static final class Builder {
+    /** Appends one element. */
+    public Builder add(Object element) { return this; }
+
+    public ImmutableList build(int expectedSize) { return null; }
+  }
+
+  void afterBuilder() {}
+}
+`;
+
+describe('parseJavaTypeMetadata nested binary name', () => {
+  test('reads javadoc and parameter names of the nested type', () => {
+    const meta = parseJavaTypeMetadata(NESTED_OUTER, 'com.google.common.collect.ImmutableList$Builder');
+    expect(meta).not.toBeNull();
+    expect(meta!.header.kind).toBe('class');
+    const add = meta!.methods.find((m) => m.jvmMethodName === 'add');
+    const build = meta!.methods.find((m) => m.jvmMethodName === 'build');
+    expect(add?.parameters.map((p) => p.name)).toEqual(['element']);
+    expect(build?.parameters.map((p) => p.name)).toEqual(['expectedSize']);
+    expect(meta!.methods.some((m) => m.jvmMethodName === 'outerOnly')).toBe(false);
+    expect(meta!.methods.some((m) => m.jvmMethodName === 'afterBuilder')).toBe(false);
+
+    const skeleton = parseJavaClassSkeleton(NESTED_OUTER, 'com.google.common.collect.ImmutableList$Builder');
+    expect(skeleton.typeJavadoc).toContain('Builds an immutable list');
+    expect(skeleton.typeJavadoc).not.toContain('outer list');
+    expect(skeleton.methods.find((m) => m.name === 'add')?.javadoc).toContain('Appends one element');
+  });
+
+  test('method spans are offsets in the enclosing file', () => {
+    const spans = collectMethodSourceSpans(NESTED_OUTER, 'com.google.common.collect.ImmutableList$Builder');
+    expect(spans).not.toBeNull();
+    const build = spans!.find((s) => s.jvmMethodName === 'build');
+    expect(build).toBeDefined();
+    const text = NESTED_OUTER.slice(build!.start, build!.end);
+    expect(text).toContain('build(int expectedSize)');
+    expect(text).not.toContain('outerOnly');
+    expect(build!.start).toBeGreaterThan(NESTED_OUTER.indexOf('class Builder'));
+  });
+
+  test('same simple name under two outers stays on the requested path', () => {
+    const src = `
+package p;
+public class OuterA {
+  public static class Builder { void fromA(int a) {} }
+}
+class OuterB {
+  public static class Builder { void fromB(String b) {} }
+}
+`;
+    const a = parseJavaTypeMetadata(src, 'p.OuterA$Builder');
+    const b = parseJavaTypeMetadata(src, 'p.OuterB$Builder');
+    expect(a!.methods.map((m) => m.jvmMethodName)).toEqual(['fromA']);
+    expect(a!.methods[0]!.parameters.map((p) => p.name)).toEqual(['a']);
+    expect(b!.methods.map((m) => m.jvmMethodName)).toEqual(['fromB']);
+    expect(b!.methods[0]!.parameters.map((p) => p.name)).toEqual(['b']);
+  });
+
+  test('exact nested file with no outer declaration parses the innermost type', () => {
+    const src = `package com.example;
+/** builder file */
+public class Builder {
+  public Builder add(Object element) { return this; }
+}
+`;
+    const meta = parseJavaTypeMetadata(src, 'com.example.Outer$Builder');
+    expect(meta).not.toBeNull();
+    expect(meta!.methods.find((m) => m.jvmMethodName === 'add')?.parameters.map((p) => p.name)).toEqual(['element']);
+    const skeleton = parseJavaClassSkeleton(src, 'com.example.Outer$Builder');
+    expect(skeleton.typeJavadoc).toContain('builder file');
   });
 });

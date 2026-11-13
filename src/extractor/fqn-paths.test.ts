@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { fqnToZipRelPaths } from './fqn-paths.js';
+import { fqnToSourceCandidates, fqnToZipRelPaths } from './fqn-paths.js';
 
 describe('fqnToZipRelPaths', () => {
   test('maps top-level class in default package', () => {
@@ -45,5 +45,29 @@ describe('fqnToZipRelPaths', () => {
   test('rejects segment starting with digit', () => {
     const r = fqnToZipRelPaths('com.1bad.Name');
     expect(r.ok).toBe(false);
+  });
+});
+
+describe('fqnToSourceCandidates', () => {
+  test('top-level name has one source path', () => {
+    const r = fqnToSourceCandidates('com.example.Foo');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.classRelPath).toBe('com/example/Foo.class');
+      expect(r.sourceRelPaths).toEqual(['com/example/Foo.java']);
+    }
+  });
+
+  test('exact nested file comes before each enclosing file', () => {
+    const r = fqnToSourceCandidates('com.example.Outer$Mid$Inner');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.classRelPath).toBe('com/example/Outer$Mid$Inner.class');
+      expect(r.sourceRelPaths).toEqual([
+        'com/example/Outer$Mid$Inner.java',
+        'com/example/Outer$Mid.java',
+        'com/example/Outer.java',
+      ]);
+    }
   });
 });

@@ -306,6 +306,46 @@
     ]
   },
   {
+    "id": "nc01",
+    "category": "direct",
+    "prompt": "In the worker module, show the source of com.google.common.collect.ImmutableList.Builder.build.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_source",
+      "get_method_signature"
+    ]
+  },
+  {
+    "id": "nc02",
+    "category": "direct",
+    "prompt": "What parameters does ImmutableList.Builder.add take in the guava version the worker module uses?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature",
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "nc03",
+    "category": "direct",
+    "prompt": "In the worker module, find the word build inside com.google.common.collect.ImmutableList.Builder.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "find_in_class_source",
+      "get_class_source"
+    ]
+  },
+  {
+    "id": "nc04",
+    "category": "direct",
+    "prompt": "Show the structure of com.google.common.collect.ImmutableMap.Builder from guava in the worker module.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_structure",
+      "search_classes"
+    ]
+  },
+  {
     "id": "s05",
     "category": "sloppy",
     "prompt": "In 'worker', list overloads of Lists.newArrayList.",

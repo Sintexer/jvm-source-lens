@@ -5,7 +5,7 @@ It drives Claude Code headlessly (`claude -p`, your existing login, no API key).
 network + Gradle, so it is **not** part of `bun test` or CI (only `scoring.test.ts` runs there).
 
 ```bash
-bun run eval                              # all 40 prompts
+bun run eval                              # all 48 prompts
 bun run eval --filter negative            # a category or id; comma-separate several: d01,i05,m03
 bun run eval --limit 5                    # first N prompts (cheap smoke run)
 bun run eval --mode competing             # also allow WebSearch / WebFetch

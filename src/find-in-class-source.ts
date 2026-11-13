@@ -5,6 +5,8 @@ import type {
   InterprojectProvenance,
   SourcesJarProvenance,
 } from './extractor/class-source-types.js';
+import { locateTypeDeclaration } from './class-structure/locate-type-declaration.js';
+import { nestedTypeNames } from './extractor/nested-class-source.js';
 import {
   searchClassSourceText,
   searchClassSourceTextAsync,
@@ -138,12 +140,47 @@ export async function findInClassSource(
   return searchExtractedSource(sourceResult, opts);
 }
 
+/** Searches the nested declaration when `className` is nested. Line numbers stay file-relative. */
+function searchWindow(source: string, className: string): { text: string; lineOffset: number } {
+  if (!className.includes('$')) {
+    return { text: source, lineOffset: 0 };
+  }
+  const span = locateTypeDeclaration(source, nestedTypeNames(className));
+  if (!span) {
+    return { text: source, lineOffset: 0 };
+  }
+  let lineOffset = 0;
+  for (let i = 0; i < span.start && i < source.length; i++) {
+    if (source[i] === '\n') {
+      lineOffset++;
+    }
+  }
+  return { text: source.slice(span.start, span.closeBrace + 1), lineOffset };
+}
+
+function shiftSearchLines<T extends { line: number; block?: { startLine: number; endLine: number } }>(
+  hits: T[],
+  lineOffset: number,
+): T[] {
+  if (lineOffset === 0) {
+    return hits;
+  }
+  return hits.map((hit) => ({
+    ...hit,
+    line: hit.line + lineOffset,
+    ...(hit.block
+      ? { block: { startLine: hit.block.startLine + lineOffset, endLine: hit.block.endLine + lineOffset } }
+      : {}),
+  }));
+}
+
 /** Searches an already-extracted compilation unit; regex mode runs under the regex deadline. */
 export async function searchExtractedSource(
   extracted: Extract<ClassSourceLookupResult, { ok: true }>,
   opts: Pick<FindInClassSourceOptions, 'query' | 'contextLines' | 'maxHits' | 'regex'>,
 ): Promise<FindInClassSourceResult> {
-  const search = await searchClassSourceTextAsync(extracted.source, {
+  const window = searchWindow(extracted.source, extracted.className);
+  const search = await searchClassSourceTextAsync(window.text, {
     query: opts.query,
     contextLines: opts.contextLines,
     maxHits: opts.maxHits,
@@ -154,5 +191,8 @@ export async function searchExtractedSource(
     return { ok: false, error: mapSearchError(search.error) };
   }
 
-  return successFromSource(extracted, opts.query, Boolean(opts.regex), search);
+  return successFromSource(extracted, opts.query, Boolean(opts.regex), {
+    ...search,
+    hits: shiftSearchLines(search.hits, window.lineOffset),
+  });
 }

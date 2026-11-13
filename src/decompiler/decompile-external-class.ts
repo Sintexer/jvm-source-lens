@@ -1,12 +1,15 @@
 import { sha256File } from '../cache/sha256-file.js';
 import type { ArtifactCoordinates, DecompiledProvenance } from '../extractor/class-source-types.js';
+import { fqnToZipRelPaths } from '../extractor/fqn-paths.js';
+import { formatNestedSlice, nestedTypeNames } from '../extractor/nested-class-source.js';
+import { locateTypeDeclaration } from '../class-structure/locate-type-declaration.js';
 import {
   getDecompiledCacheFilePath,
   readDecompiledCacheFile,
   writeDecompiledCacheFile,
 } from '../cache/decompiled-paths.js';
 import { resolveJavaExecutable } from './resolve-java-executable.js';
-import { runCfrDecompile } from './spawn-cfr.js';
+import { outermostBinaryName, runCfrDecompile } from './spawn-cfr.js';
 
 export type DecompileExternalClassOptions = {
   className: string;
@@ -24,6 +27,8 @@ export type DecompileExternalClassSuccess = {
   sourceAvailable: false;
   className: string;
   provenance: DecompiledProvenance;
+  /** Full outer CFR text when `source` is a nested slice. */
+  compilationUnit?: string;
 };
 
 export type DecompileExternalClassError = {
@@ -66,6 +71,46 @@ function failure(
   };
 }
 
+function presentDecompiled(
+  opts: DecompileExternalClassOptions,
+  fullSource: string,
+  cachePath: string,
+): DecompileExternalClassResult {
+  const provenance: DecompiledProvenance = {
+    kind: 'decompiled',
+    coordinates: opts.coordinates,
+    jarPath: opts.jarPath,
+    entryRelPath: opts.entryRelPath,
+    cachePath,
+  };
+  const dollar = opts.className.lastIndexOf('$');
+  if (dollar < 0) {
+    return {
+      ok: true,
+      source: fullSource,
+      sourceAvailable: false,
+      className: opts.className,
+      provenance,
+    };
+  }
+
+  const span = locateTypeDeclaration(fullSource, nestedTypeNames(opts.className));
+  if (!span) {
+    return failure(opts, `CFR output did not contain nested type ${opts.className}`);
+  }
+  const outer = outermostBinaryName(opts.className);
+  const outerPath = fqnToZipRelPaths(outer);
+  const sourceRelPath = outerPath.ok ? outerPath.sourceRelPath : `${outer}.java`;
+  return {
+    ok: true,
+    source: formatNestedSlice(fullSource, sourceRelPath, span),
+    compilationUnit: fullSource,
+    sourceAvailable: false,
+    className: opts.className,
+    provenance: { ...provenance, nestedIn: opts.className.slice(0, dollar) },
+  };
+}
+
 export async function decompileExternalClass(
   opts: DecompileExternalClassOptions,
 ): Promise<DecompileExternalClassResult> {
@@ -77,7 +122,8 @@ export async function decompileExternalClass(
     // If the JAR can't be read for hashing, proceed without a hash (legacy path).
   }
 
-  const cachePathResult = getDecompiledCacheFilePath(opts.coordinates, opts.className, jarContentHash);
+  const cacheName = outermostBinaryName(opts.className);
+  const cachePathResult = getDecompiledCacheFilePath(opts.coordinates, cacheName, jarContentHash);
   if (!cachePathResult.ok) {
     return failure(opts, cachePathResult.message);
   }
@@ -85,19 +131,7 @@ export async function decompileExternalClass(
   const cachePath = cachePathResult.cachePath;
   const cached = readDecompiledCacheFile(cachePath);
   if (cached !== null) {
-    return {
-      ok: true,
-      source: cached,
-      sourceAvailable: false,
-      className: opts.className,
-      provenance: {
-        kind: 'decompiled',
-        coordinates: opts.coordinates,
-        jarPath: opts.jarPath,
-        entryRelPath: opts.entryRelPath,
-        cachePath,
-      },
-    };
+    return presentDecompiled(opts, cached, cachePath);
   }
 
   const java = resolveJavaExecutable();
@@ -124,17 +158,5 @@ export async function decompileExternalClass(
     return failure(opts, `Failed to write decompilation cache: ${msg}`);
   }
 
-  return {
-    ok: true,
-    source: cfr.source,
-    sourceAvailable: false,
-    className: opts.className,
-    provenance: {
-      kind: 'decompiled',
-      coordinates: opts.coordinates,
-      jarPath: opts.jarPath,
-      entryRelPath: opts.entryRelPath,
-      cachePath,
-    },
-  };
+  return presentDecompiled(opts, cfr.source, cachePath);
 }

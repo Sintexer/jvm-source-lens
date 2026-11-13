@@ -1,3 +1,4 @@
+import { locateTypeDeclaration } from './locate-type-declaration.js';
 import { declaringSimpleName } from './javap-parse.js';
 
 export type JavaMethodSkeleton = {
@@ -78,8 +79,23 @@ function skipWhitespaceAndAnnotations(fragment: string): string {
   return fragment.slice(i);
 }
 
-function parseMethodAfterJavadoc(fragment: string, classSimpleName: string): JavaMethodSkeleton | null {
+/** Text of the declaration that immediately follows a Javadoc, stopping at its `{` or `;`. */
+function immediateDeclaration(fragment: string): string {
   const stmt = skipWhitespaceAndAnnotations(fragment);
+  let end = stmt.length;
+  const brace = stmt.indexOf('{');
+  const semi = stmt.indexOf(';');
+  if (brace >= 0) {
+    end = Math.min(end, brace);
+  }
+  if (semi >= 0) {
+    end = Math.min(end, semi);
+  }
+  return stmt.slice(0, end);
+}
+
+function parseMethodAfterJavadoc(fragment: string, classSimpleName: string): JavaMethodSkeleton | null {
+  const stmt = immediateDeclaration(fragment);
   if (stmt.length === 0) {
     return null;
   }
@@ -118,10 +134,29 @@ function parseMethodAfterJavadoc(fragment: string, classSimpleName: string): Jav
   return { name, paramCount: countParametersInParens(inner), javadoc: null };
 }
 
+/** Nested binary names scan only that declaration, so the outer type's Javadoc is not reused. */
+function skeletonSource(source: string, classFqn: string): string {
+  if (!classFqn.includes('$')) {
+    return source;
+  }
+  const dot = classFqn.lastIndexOf('.');
+  const simple = dot < 0 ? classFqn : classFqn.slice(dot + 1);
+  const names = simple.split('$');
+  if (names.length < 2 || names.some((name) => name.length === 0)) {
+    return source;
+  }
+  const span = locateTypeDeclaration(source, names);
+  if (!span) {
+    return source;
+  }
+  return source.slice(span.start, span.closeBrace + 1);
+}
+
 /**
  * Lightweight `.java` scan for Javadoc before type and methods (best-effort).
  */
 export function parseJavaClassSkeleton(source: string, classFqn: string): JavaClassSkeleton {
+  const text = skeletonSource(source, classFqn);
   const classSimpleName = declaringSimpleName(classFqn);
   const methods: JavaMethodSkeleton[] = [];
   let typeJavadoc: string | null = null;
@@ -129,15 +164,15 @@ export function parseJavaClassSkeleton(source: string, classFqn: string): JavaCl
 
   const jdoc = /\/\*\*([\s\S]*?)\*\//g;
   let m: RegExpExecArray | null;
-  while ((m = jdoc.exec(source)) !== null) {
+  while ((m = jdoc.exec(text)) !== null) {
     const doc = normalizeJavadoc(m[1] ?? '');
-    const after = source.slice(m.index + m[0].length);
+    const after = text.slice(m.index + m[0].length);
     const meth = parseMethodAfterJavadoc(after, classSimpleName);
     if (meth) {
       methods.push({ name: meth.name, paramCount: meth.paramCount, javadoc: doc });
       continue;
     }
-    const stmt = skipWhitespaceAndAnnotations(after);
+    const stmt = immediateDeclaration(after);
     if (!sealedType && (/\b(class|interface|enum|record)\s+/.test(stmt) || /@interface\b/.test(stmt))) {
       typeJavadoc = doc;
       sealedType = true;

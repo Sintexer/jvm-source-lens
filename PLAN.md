@@ -23,7 +23,7 @@ Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGEL
 
 Released together in 1.19.0: checkpoints 1 and 2.
 
-Checkpoint 3 is done and not released. Checkpoint 4 starts after that release.
+Checkpoint 3 is done and not released. Checkpoint 4 is done and not released. Release checkpoint 3 first, then checkpoint 4.
 
 
 | # | Checkpoint | Why at this position | Size |
@@ -86,26 +86,27 @@ Checkpoint 3 is done and not released. Checkpoint 4 starts after that release.
 
 **Done when:** the README results table has a full run, and each target is met or has a recorded reason.
 
-## Checkpoint 4 — Nested classes: source
+## Checkpoint 4 — Nested classes: source (done)
 
 **Problem:** `get_class_source com.google.common.collect.ImmutableList$Builder` returns `DECOMPILE_FAILED`. The lookup asks for `ImmutableList$Builder.java`, but that file does not exist.
 
-- [ ] **Spike:** on guava `ImmutableList`, check what CFR does with the inner class alone and with the outer class. Record the result here. Decide the shape of the decompile fallback for checkpoint 5.
-- [ ] **Locator:** `locateTypeDeclaration(source, ['Outer', 'Inner', …])` → `{ start, openBrace, closeBrace }`. `start` includes the Javadoc and annotations before the declaration. Reuse `findTopLevelTypeKeywordMatch`, `findTypeBodyOpenBrace`, `indexOfMatchingBrace`, `skipLexicalNoise` and `extendSpanWithLeadingJavadoc`. Write unit tests for: strings, char `'{'`, comments, text blocks, annotations with braces, generics, nested `record` / `enum` / `interface` / `@interface`, and the same simple name under different outer classes.
-- [ ] **Candidates:** `fqnToSourceCandidates()` returns the exact `Outer$Inner.java` first, then the outer file. Connect it to the sources-JAR, inter-project and local-module readers.
-- [ ] `get_class_source` returns only the nested type. Line numbers are relative to the file, and a one-line header names the enclosing file. The size guard applies to the slice.
-- [ ] Provenance gets `nestedIn` and the `sourceRelativePath` of the outer file. Update SPEC §7.1 and §8.
+- [x] **Spike:** on guava `ImmutableList`, check what CFR does with the inner class alone and with the outer class. Record the result here. Decide the shape of the decompile fallback for checkpoint 5.
+  Result (guava 32.1.2-jre, bundled CFR 0.152, `java -jar cfr.jar <jar> --jarfilter <name> --silent true`): a filter for `ImmutableList$Builder` exits 0 and prints nothing, which is today's `DECOMPILE_FAILED` ("CFR produced no decompiled source"). A filter for `ImmutableList` prints the outer class with `public static final class Builder` and `build()` inside it. That filter is unanchored, so the same output also contains `ImmutableListMultimap`. `ImmutableList.class` alone does not contain `Builder` (separate class file). `ImmutableList$Builder.class` alone decompiles, but as `public static final class ImmutableList.Builder` and with "Could not load" the enclosing types. Checkpoint 5: decompile once with the outer-class jarfilter, cache that text, then slice with the locator. Anchor the filter, or drop classes that are not the outer type or its `$` nested types, so `ImmutableList` does not keep `ImmutableListMultimap`.
+- [x] **Locator:** `locateTypeDeclaration(source, ['Outer', 'Inner', …])` → `{ start, openBrace, closeBrace }`. `start` includes the Javadoc and annotations before the declaration. Reuse `findTopLevelTypeKeywordMatch`, `findTypeBodyOpenBrace`, `indexOfMatchingBrace`, `skipLexicalNoise` and `extendSpanWithLeadingJavadoc`. Write unit tests for: strings, char `'{'`, comments, text blocks, annotations with braces, generics, nested `record` / `enum` / `interface` / `@interface`, and the same simple name under different outer classes.
+- [x] **Candidates:** `fqnToSourceCandidates()` returns the exact `Outer$Inner.java` first, then the outer file. Connect it to the sources-JAR, inter-project and local-module readers.
+- [x] `get_class_source` returns only the nested type. Line numbers are relative to the file, and a one-line header names the enclosing file. The size guard applies to the slice.
+- [x] Provenance gets `nestedIn` and the `sourceRelativePath` of the outer file. Update SPEC §7.1 and §8.
 
 **Done when:** `get_class_source …ImmutableList$Builder` succeeds from a sources JAR. Other paths work as before. Decompile without sources can still fail; checkpoint 5 fixes that.
 
 ## Checkpoint 5 — Nested classes: structure, decompile, search
 
-- [ ] `parseJavaTypeMetadata(source, fqn)` accepts the nested path. `get_class_structure` and `get_method_signature` return the Javadoc and the real parameter names of the nested type.
-- [ ] `find_in_class_source` and `methodNames` excerpts work on the nested slice.
-- [ ] CFR fallback: decompile the **outer** class one time, cache it under `decompiled/`, then extract the nested type with the locator (`sourceAvailable: false`).
-- [ ] `search_in_artifact`: skip `$` classes when their outer source was scanned.
-- [ ] Anonymous and local classes (`Outer$1`): return a clear message that names the enclosing class.
-- [ ] Evals: `s04` passes on the first call. Add 3–4 nested-class prompts to `test/evals/prompts.json`.
+- [x] `parseJavaTypeMetadata(source, fqn)` accepts the nested path. `get_class_structure` and `get_method_signature` return the Javadoc and the real parameter names of the nested type.
+- [x] `find_in_class_source` and `methodNames` excerpts work on the nested slice.
+- [x] CFR fallback: decompile the **outer** class one time, cache it under `decompiled/`, then extract the nested type with the locator (`sourceAvailable: false`).
+- [x] `search_in_artifact`: skip `$` classes when their outer source was scanned.
+- [x] Anonymous and local classes (`Outer$1`): return a clear message that names the enclosing class.
+- [x] Evals: `s04` passes on the first call. Add 3–4 nested-class prompts to `test/evals/prompts.json`.
 
 **Done when:** `ImmutableList$Builder` with `methodNames: ["build"]` succeeds with sources and without sources.
 

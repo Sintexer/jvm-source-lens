@@ -15,18 +15,19 @@ export function formatProvenanceLine(
 ): string {
   const c = p.coordinates;
   const coord = `${c.group}:${c.name}:${c.version ?? ''}`;
+  const nested = 'nestedIn' in p && p.nestedIn ? `; nested in ${p.nestedIn}` : '';
   switch (p.kind) {
     case 'classpathJar':
     case 'sourcesJar':
     case 'decompiled':
-      return `Provenance: ${coord} (${p.kind})`;
+      return `Provenance: ${coord} (${p.kind})${nested}`;
     case 'interproject':
-      return `Provenance: interproject ${p.moduleName}`;
+      return `Provenance: interproject ${p.moduleName}${nested}`;
     case 'interprojectSource':
-      return `Provenance: interproject ${p.moduleName}`;
+      return `Provenance: interproject ${p.moduleName}${nested}`;
     case 'interprojectBytecode':
       return `Provenance: interproject ${p.moduleName} bytecode`;
     default:
-      return `Provenance: ${coord}`;
+      return `Provenance: ${coord}${nested}`;
   }
 }

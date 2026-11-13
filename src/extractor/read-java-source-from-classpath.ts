@@ -6,8 +6,10 @@ import type {
   SourcesJarProvenance,
 } from './class-source-types.js';
 import { isClasspathBinaryJarArtifact, isExternalJarArtifact } from './class-source-types.js';
+import { locateTypeDeclaration } from '../class-structure/locate-type-declaration.js';
 import { findExternalJarAmongArtifacts } from './find-external-class-jar.js';
-import { fqnToZipRelPaths } from './fqn-paths.js';
+import { fqnToSourceCandidates } from './fqn-paths.js';
+import { nestedTypeNames, anonymousOrLocalClassError } from './nested-class-source.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
 import { tryReadLocalModuleJavaSource } from './local-module-sources.js';
 import { readInterprojectJavaIfPresent } from './read-interproject-java-source.js';
@@ -43,9 +45,73 @@ export type TryReadJavaSourceFromClasspathResult =
   | { ok: true; hit: false }
   | { ok: false; error: ClassSourceError };
 
+type SourceHit = { ok: true; source: string; provenance: SourcesJarProvenance | InterprojectProvenance };
+
+function withNestedReadProvenance(
+  provenance: SourcesJarProvenance | InterprojectProvenance,
+  className: string,
+  sourceRelPath: string,
+): SourcesJarProvenance | InterprojectProvenance {
+  const dollar = className.lastIndexOf('$');
+  if (dollar < 0) {
+    return provenance;
+  }
+  return {
+    ...provenance,
+    nestedIn: className.slice(0, dollar),
+    sourceRelativePath: sourceRelPath,
+  };
+}
+
+/**
+ * Full compilation unit for structure and signatures. An enclosing file is kept only when it
+ * declares the nested type. The text is not sliced; the parser walks the nested binary name.
+ */
+function acceptFullCompilationUnit(
+  hit: SourceHit,
+  className: string,
+  sourceRelPath: string,
+  exactSourceRelPath: string,
+): TryReadJavaSourceFromClasspathResult | null {
+  if (sourceRelPath !== exactSourceRelPath && className.includes('$')) {
+    if (!locateTypeDeclaration(hit.source, nestedTypeNames(className))) {
+      return null;
+    }
+  }
+  return {
+    ok: true,
+    hit: true,
+    sourceText: hit.source,
+    provenance: withNestedReadProvenance(hit.provenance, className, sourceRelPath),
+  };
+}
+
+async function readFirstCandidate(
+  sourceRelPaths: readonly string[],
+  className: string,
+  read: (sourceRelPath: string) => Promise<SourceHit | { ok: false; error: ClassSourceError } | null>,
+): Promise<TryReadJavaSourceFromClasspathResult | null> {
+  const exact = sourceRelPaths[0]!;
+  for (const rel of sourceRelPaths) {
+    const hit = await read(rel);
+    if (hit === null) {
+      continue;
+    }
+    if (!hit.ok) {
+      return { ok: false, error: hit.error };
+    }
+    const accepted = acceptFullCompilationUnit(hit, className, rel, exact);
+    if (accepted !== null) {
+      return accepted;
+    }
+  }
+  return null;
+}
+
 /**
  * Classpath-order `.java` read (inter-project edges first, then sources JARs on external jars),
- * mirroring {@link extractExternalClassSource} / {@link tryReadPrimaryJavaSourceFromArtifacts}.
+ * mirroring {@link extractExternalClassSource}. Nested names try `Outer$Inner.java`, then each
+ * enclosing compilation unit. The result is the full file, not the declaration slice.
  */
 export async function tryReadJavaSourceFromClasspath(
   output: ResolutionOutput,
@@ -60,52 +126,50 @@ export async function tryReadJavaSourceFromClasspath(
     return { ok: false, error: picked.error };
   }
 
-  const paths = fqnToZipRelPaths(opts.className);
+  const anonymous = anonymousOrLocalClassError(opts.className);
+  if (anonymous) {
+    return { ok: false, error: anonymous };
+  }
+
+  const paths = fqnToSourceCandidates(opts.className);
   if (!paths.ok) {
     return { ok: false, error: paths.error };
   }
+  const includeTest = Boolean(opts.includeTest);
 
-  const local = await tryReadLocalModuleJavaSource(
-    picked.module,
-    paths.sourceRelPath,
-    opts.className,
-    Boolean(opts.includeTest),
-  );
+  const local = await readFirstCandidate(paths.sourceRelPaths, opts.className, async (rel) => {
+    const read = await tryReadLocalModuleJavaSource(picked.module, rel, opts.className, includeTest);
+    if (read === null) {
+      return null;
+    }
+    if (!read.ok) {
+      return { ok: false, error: read.error };
+    }
+    if (read.provenance.kind !== 'interproject') {
+      return null;
+    }
+    return { ok: true, source: read.source, provenance: read.provenance };
+  });
   if (local !== null) {
-    if (!local.ok) {
-      return { ok: false, error: local.error };
-    }
-    const ipp = local.provenance;
-    if (ipp.kind === 'interproject') {
-      return {
-        ok: true,
-        hit: true,
-        sourceText: local.source,
-        provenance: ipp,
-      };
-    }
+    return local;
   }
 
   for (const edge of picked.configuration.artifacts) {
-    const ip = await readInterprojectJavaIfPresent(
-      edge,
-      paths.sourceRelPath,
-      opts.className,
-      Boolean(opts.includeTest),
-    );
+    const ip = await readFirstCandidate(paths.sourceRelPaths, opts.className, async (rel) => {
+      const read = await readInterprojectJavaIfPresent(edge, rel, opts.className, includeTest);
+      if (read === null) {
+        return null;
+      }
+      if (!read.ok) {
+        return { ok: false, error: read.error };
+      }
+      if (read.provenance.kind !== 'interproject') {
+        return null;
+      }
+      return { ok: true, source: read.source, provenance: read.provenance };
+    });
     if (ip !== null) {
-      if (!ip.ok) {
-        return { ok: false, error: ip.error };
-      }
-      const ipp = ip.provenance;
-      if (ipp.kind === 'interproject') {
-        return {
-          ok: true,
-          hit: true,
-          sourceText: ip.source,
-          provenance: ipp,
-        };
-      }
+      return ip;
     }
   }
 
@@ -122,17 +186,11 @@ export async function tryReadJavaSourceFromClasspath(
       name: a.name,
       version: a.version,
     };
-    const fromCached = tryReadSourceFromJar(sj, paths.sourceRelPath, opts.className, coordinates);
+    const fromCached = await readFirstCandidate(paths.sourceRelPaths, opts.className, async (rel) =>
+      tryReadSourceFromJar(sj, rel, opts.className, coordinates),
+    );
     if (fromCached !== null) {
-      if (!fromCached.ok) {
-        return { ok: false, error: fromCached.error };
-      }
-      return {
-        ok: true,
-        hit: true,
-        sourceText: fromCached.source,
-        provenance: fromCached.provenance,
-      };
+      return fromCached;
     }
   }
 
@@ -157,17 +215,11 @@ export async function tryReadJavaSourceFromClasspath(
   }
 
   if (sourcesJarPath !== null && sourcesJarPath.length > 0) {
-    const fromResolved = tryReadSourceFromJar(sourcesJarPath, paths.sourceRelPath, opts.className, coordinates);
+    const fromResolved = await readFirstCandidate(paths.sourceRelPaths, opts.className, async (rel) =>
+      tryReadSourceFromJar(sourcesJarPath!, rel, opts.className, coordinates),
+    );
     if (fromResolved !== null) {
-      if (!fromResolved.ok) {
-        return { ok: false, error: fromResolved.error };
-      }
-      return {
-        ok: true,
-        hit: true,
-        sourceText: fromResolved.source,
-        provenance: fromResolved.provenance,
-      };
+      return fromResolved;
     }
   }
 

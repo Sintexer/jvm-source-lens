@@ -112,6 +112,33 @@ describe('inferModulePath', () => {
     expect(r).toEqual({ kind: 'use', modulePath: ':app', inferred: true });
   });
 
+  test('source-only nested type is found via the enclosing file', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-infer-'));
+    const coreDir = path.join(dir, 'core');
+    fs.mkdirSync(path.join(coreDir, 'src/main/java/com/example'), { recursive: true });
+    fs.writeFileSync(
+      path.join(coreDir, 'src/main/java/com/example/Outer.java'),
+      'package com.example; class Outer { class Inner {} }',
+    );
+
+    const out = multiModuleOutput(dir, {
+      ':app': [
+        artifact({
+          group: 'project',
+          name: 'core',
+          version: null,
+          type: 'project',
+          origin: 'interproject',
+          interproject: { moduleName: ':core', modulePath: coreDir },
+        }),
+      ],
+      ':core': [],
+    });
+
+    const r = inferModulePath(out, { className: 'com.example.Outer$Inner' });
+    expect(r).toEqual({ kind: 'use', modulePath: ':app', inferred: true });
+  });
+
   test('reports none with all module names and summed searched count when no owner exists', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-infer-'));
     const jarA = jarWithClass(dir, 'a.jar', 'com/other/A.class');

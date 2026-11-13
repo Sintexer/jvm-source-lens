@@ -54,6 +54,16 @@ function commonInput(opts: GetClassSourceOptions, className: string): Record<str
   };
 }
 
+function compilationUnitResult(
+  extracted: Extract<ClassSourceLookupResult, { ok: true }>,
+): Extract<ClassSourceLookupResult, { ok: true }> {
+  if (extracted.compilationUnit === undefined) {
+    return extracted;
+  }
+  const { compilationUnit, ...rest } = extracted;
+  return { ...rest, source: compilationUnit };
+}
+
 async function applyExcerptToSuccess(
   extracted: Extract<ClassSourceLookupResult, { ok: true }>,
   excerptRequest: SourceExcerptRequest | undefined,
@@ -72,8 +82,9 @@ async function applyExcerptToSuccess(
       ? merged
       : null;
 
+  const unit = extracted.compilationUnit ?? extracted.source;
   const applied = await applySourceExcerptWithInheritance(
-    extracted.source,
+    unit,
     extracted.className,
     extracted.sourceAvailable,
     normalized,
@@ -83,10 +94,12 @@ async function applyExcerptToSuccess(
     return { ok: false, error: applied.error };
   }
   if (applied.excerpt === undefined) {
-    return refuseOrCapUnscopedFullSource(extracted);
+    const { compilationUnit: _unit, ...sliced } = extracted;
+    return refuseOrCapUnscopedFullSource(sliced);
   }
+  const { compilationUnit: _unit, ...rest } = extracted;
   return capClassSourceSuccess({
-    ...extracted,
+    ...rest,
     source: applied.source,
     excerpt: applied.excerpt,
   });
@@ -254,7 +267,7 @@ export async function getClassSource(
       resolveSourcesJar: resolveSourcesJarFn,
     });
     const withExcerpt = opts.rawForSearch
-      ? extracted
+      ? compilationUnitResult(extracted)
       : await applyExcerptToSuccess(extracted, opts.excerpt, supertypeResolver);
     if (!withExcerpt.ok) {
       const err = withExcerpt.error;
