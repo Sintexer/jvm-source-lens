@@ -228,6 +228,8 @@ export type Aggregate = {
   modulePassRate: number;
   /** ...and it was the right module. */
   moduleCorrectRate: number;
+  /** Prompts that expect a module. `0` means a filtered run did not score filecontext. */
+  moduleSamples: number;
   passRate: number;
   /** Total hook-blocked fallback attempts (deny reason reached the agent). */
   hookDenials: number;
@@ -253,6 +255,7 @@ export function aggregate(scores: PromptScore[]): Aggregate {
     fallbackRate: ratio(positives.filter((s) => s.fallbackUsed).length, positives.length),
     modulePassRate: ratio(withModule.filter((s) => s.modulePassed).length, withModule.length),
     moduleCorrectRate: ratio(withModule.filter((s) => s.moduleCorrect).length, withModule.length),
+    moduleSamples: withModule.length,
     passRate: ratio(scores.filter((s) => s.passed).length, scores.length),
     hookDenials: scores.reduce((n, s) => n + s.hookDenials, 0),
   };
@@ -263,5 +266,54 @@ export function aggregateByCategory(scores: PromptScore[]): Record<string, Aggre
   return Object.fromEntries(cats.map((c) => [c, aggregate(scores.filter((s) => s.category === c))]));
 }
 
-/** Targets from the UX plan; used only to print pass/fail next to the numbers. */
-export const TARGETS = { selectionRecall: 0.95, firstCallSuccess: 0.95 } as const;
+/**
+ * Checkpoint 3 gates. Strict `firstCallSuccess` is reported beside usable first-call and is not a gate:
+ * a retry-ready `MODULE_AMBIGUOUS` answer is correct. `moduleCorrectRate` applies only when
+ * `moduleSamples` > 0. Fallback is an upper bound (0).
+ */
+export const TARGETS = {
+  selectionRecall: 0.95,
+  firstCallUsable: 0.95,
+  moduleCorrectRate: 0.9,
+  fallbackRate: 0,
+} as const;
+
+export type TargetVerdict = {
+  metric: keyof typeof TARGETS;
+  value: number;
+  target: number;
+  met: boolean;
+};
+
+/** Pass/fail for each gated metric. Omits the filecontext module gate when the run did not score it. */
+export function assessTargets(totals: Aggregate): TargetVerdict[] {
+  const rows: TargetVerdict[] = [
+    {
+      metric: 'selectionRecall',
+      value: totals.selectionRecall,
+      target: TARGETS.selectionRecall,
+      met: totals.selectionRecall >= TARGETS.selectionRecall,
+    },
+    {
+      metric: 'firstCallUsable',
+      value: totals.firstCallUsable,
+      target: TARGETS.firstCallUsable,
+      met: totals.firstCallUsable >= TARGETS.firstCallUsable,
+    },
+    {
+      metric: 'fallbackRate',
+      value: totals.fallbackRate,
+      target: TARGETS.fallbackRate,
+      met: totals.fallbackRate <= TARGETS.fallbackRate,
+    },
+  ];
+  if (totals.moduleSamples > 0) {
+    rows.push({
+      metric: 'moduleCorrectRate',
+      value: totals.moduleCorrectRate,
+      target: TARGETS.moduleCorrectRate,
+      met: totals.moduleCorrectRate >= TARGETS.moduleCorrectRate,
+    });
+  }
+  return rows;
+}

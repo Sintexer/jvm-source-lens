@@ -1,10 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  TARGETS,
   aggregate,
+  assessTargets,
   modulePathMatches,
   isFallbackCommand,
   parseTranscript,
   scorePrompt,
+  type Aggregate,
   type EvalPrompt,
   type PromptScore,
 } from './scoring.js';
@@ -156,6 +159,60 @@ describe('aggregate', () => {
 
   test('empty input does not divide by zero', () => {
     expect(aggregate([]).selectionRecall).toBe(0);
+    expect(aggregate([]).moduleSamples).toBe(0);
+  });
+});
+
+describe('checkpoint 3 targets', () => {
+  const recorded: Aggregate = {
+    prompts: 44,
+    selectionRecall: 1,
+    selectionPrecision: 1,
+    firstCallSuccess: 0.87,
+    firstCallUsable: 0.97,
+    firstToolAccuracy: 0.97,
+    callsPerTask: 1.45,
+    fallbackRate: 0,
+    modulePassRate: 1,
+    moduleCorrectRate: 1,
+    moduleSamples: 4,
+    passRate: 1,
+    hookDenials: 0,
+  };
+
+  test('gates are usable first-call, filecontext module, and shell fallback', () => {
+    expect(TARGETS).toEqual({
+      selectionRecall: 0.95,
+      firstCallUsable: 0.95,
+      moduleCorrectRate: 0.9,
+      fallbackRate: 0,
+    });
+    expect(TARGETS).not.toHaveProperty('firstCallSuccess');
+  });
+
+  test('the recorded default run meets every gate', () => {
+    const rows = assessTargets(recorded);
+    expect(rows.map((row) => row.metric).sort()).toEqual(
+      ['fallbackRate', 'firstCallUsable', 'moduleCorrectRate', 'selectionRecall'].sort(),
+    );
+    expect(rows.every((row) => row.met)).toBe(true);
+  });
+
+  test('usable first-call under 95% fails and strict success is not a gate', () => {
+    const rows = assessTargets({ ...recorded, firstCallSuccess: 1, firstCallUsable: 0.94 });
+    expect(rows.find((row) => row.metric === 'firstCallUsable')?.met).toBe(false);
+    expect(rows.some((row) => row.metric === 'firstCallSuccess')).toBe(false);
+  });
+
+  test('a run with no filecontext prompts does not fail the module target', () => {
+    const rows = assessTargets({ ...recorded, moduleSamples: 0, moduleCorrectRate: 0, modulePassRate: 0 });
+    expect(rows.some((row) => row.metric === 'moduleCorrectRate')).toBe(false);
+    expect(rows.every((row) => row.met)).toBe(true);
+  });
+
+  test('any shell fallback fails the fallback gate', () => {
+    const rows = assessTargets({ ...recorded, fallbackRate: 0.01 });
+    expect(rows.find((row) => row.metric === 'fallbackRate')?.met).toBe(false);
   });
 });
 

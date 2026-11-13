@@ -16,13 +16,14 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import {
-  TARGETS,
   aggregate,
   aggregateByCategory,
+  assessTargets,
   parseTranscript,
   scorePrompt,
   type EvalPrompt,
   type PromptScore,
+  type TargetVerdict,
 } from './scoring.js';
 
 const repoRoot = path.resolve(import.meta.dir, '../..');
@@ -172,10 +173,16 @@ async function eagerTokens(): Promise<EagerTokens | null> {
 }
 
 const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
-const mark = (value: number, target: number) => (value >= target ? 'ok ' : 'LOW');
+
+function formatGate(rows: TargetVerdict[], metric: TargetVerdict['metric']): string {
+  const row = rows.find((r) => r.metric === metric);
+  if (!row) return '';
+  return `  [${row.met ? 'ok ' : 'LOW'} target ${pct(row.target)}]`;
+}
 
 function printReport(scores: PromptScore[], tokens: EagerTokens | null): void {
   const total = aggregate(scores);
+  const gates = assessTargets(total);
   console.log('\n=== Per category ===');
   console.table(
     Object.entries(aggregateByCategory(scores)).map(([category, a]) => ({
@@ -191,16 +198,17 @@ function printReport(scores: PromptScore[], tokens: EagerTokens | null): void {
     })),
   );
   console.log('=== Overall ===');
-  console.log(`selection recall      ${pct(total.selectionRecall)}  [${mark(total.selectionRecall, TARGETS.selectionRecall)} target ${pct(TARGETS.selectionRecall)}]`);
+  console.log(`selection recall      ${pct(total.selectionRecall)}${formatGate(gates, 'selectionRecall')}`);
   console.log(`selection precision   ${pct(total.selectionPrecision)}`);
-  console.log(`first-call success    ${pct(total.firstCallSuccess)}  [${mark(total.firstCallSuccess, TARGETS.firstCallSuccess)} target ${pct(TARGETS.firstCallSuccess)}]`);
-  console.log(`first-call usable     ${pct(total.firstCallUsable)}  (success + retry-ready ambiguity answers)`);
-  if (scores.some((s) => s.moduleCorrect !== null)) {
-    console.log(`module passed (file-context prompts)  ${pct(total.modulePassRate)}   correct ${pct(total.moduleCorrectRate)}`);
+  console.log(`first-call usable     ${pct(total.firstCallUsable)}${formatGate(gates, 'firstCallUsable')}  (strict ${pct(total.firstCallSuccess)})`);
+  if (total.moduleSamples > 0) {
+    console.log(
+      `module passed (file-context prompts)  ${pct(total.modulePassRate)}   correct ${pct(total.moduleCorrectRate)}${formatGate(gates, 'moduleCorrectRate')}`,
+    );
   }
   console.log(`first-tool accuracy   ${pct(total.firstToolAccuracy)}   (sibling-confusion signal)`);
   console.log(`calls per task        ${total.callsPerTask.toFixed(1)}`);
-  console.log(`shell fallback rate   ${pct(total.fallbackRate)}`);
+  console.log(`shell fallback rate   ${pct(total.fallbackRate)}${formatGate(gates, 'fallbackRate')}`);
   console.log(`hook denials          ${total.hookDenials}${args['with-hook'] ? '   (deny reason seen by the agent)' : ''}`);
   console.log(`web used              ${scores.filter((s) => s.webUsed).length} prompt(s)`);
   console.log(`eager tokens          ${tokens ? `${tokens.total} (${tokens.method})` : 'n/a'}`);
