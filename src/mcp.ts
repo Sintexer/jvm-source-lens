@@ -38,6 +38,8 @@ import { searchClasses } from './search-classes.js';
 import { searchInArtifact } from './search-in-artifact.js';
 import { JVMSRC_INSTRUCTIONS, MCP_TOOL_COPY } from './copy/index.js';
 import { withCallLog } from './diagnostics/call-log.js';
+import { installCompactToolList } from './mcp-advertised-schema.js';
+import { inferIncludeTest } from './extractor/match-module.js';
 
 const artifactCoordinatesSchema = z.object({
   group: z.string(),
@@ -771,6 +773,13 @@ function combineToolResults(results: CallToolResult[]): CallToolResult {
   return { isError: results.some((r) => r.isError), content: [{ type: 'text', text }] };
 }
 
+function withInferredIncludeTest(args: Record<string, unknown>): Record<string, unknown> {
+  const modulePath = typeof args.modulePath === 'string' ? args.modulePath : undefined;
+  const explicit = typeof args.includeTest === 'boolean' ? args.includeTest : undefined;
+  const includeTest = inferIncludeTest(modulePath, explicit);
+  return includeTest === explicit ? args : { ...args, includeTest };
+}
+
 /** Workspace folders the client announced via MCP `roots`; empty when unsupported or on error. */
 async function listWorkspaceRoots(server: McpServer): Promise<string[]> {
   if (!server.server.getClientCapabilities()?.roots) {
@@ -808,8 +817,13 @@ export function createMcpServer(): McpServer {
   };
 
   const registerTool = server.registerTool.bind(server) as typeof server.registerTool;
-  server.registerTool = ((name: string, config: never, cb: never) =>
-    registerTool(name, config, withCallLog(name, cb) as never)) as typeof server.registerTool;
+  type ToolCallback = (args: Record<string, unknown>, extra: never) => Promise<CallToolResult>;
+  server.registerTool = ((name: string, config: never, cb: ToolCallback) =>
+    registerTool(
+      name,
+      config,
+      withCallLog(name, (args: Record<string, unknown>, extra) => cb(withInferredIncludeTest(args), extra)) as never,
+    )) as typeof server.registerTool;
 
   server.registerTool(
     'get_class_source',
@@ -1138,6 +1152,7 @@ export function createMcpServer(): McpServer {
     },
   );
 
+  installCompactToolList(server);
   return server;
 }
 

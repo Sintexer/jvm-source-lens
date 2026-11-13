@@ -17,7 +17,8 @@ import { searchInArtifact } from './search-in-artifact.js';
 import { createCliProgressReporter } from './cli-progress.js';
 import { getClassSource } from './get-class-source.js';
 import { mergeSourceExcerptInputs } from './source-excerpt.js';
-import { resolveProjectRoot } from './project-path.js';
+import { resolveProjectRoot, type ResolvedProjectRoot } from './project-path.js';
+import { inferIncludeTest } from './extractor/match-module.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
 import { formatResolutionSummaryText } from './text-format/format-resolve.js';
 import { runJavaDoctor } from './jdk/doctor-java.js';
@@ -47,6 +48,15 @@ function injectImplicitGetSubcommand(): void {
 
 injectImplicitGetSubcommand();
 
+/** Same discovery as MCP (`JVMSRC_PROJECT_ROOT`, then cwd, lifted to the Gradle root); the lift note goes to stderr. */
+function cliProjectRoot(project: string | undefined, quiet = false): ResolvedProjectRoot {
+  const root = resolveProjectRoot(project);
+  if (root.ok && root.note && !quiet) {
+    console.error(`[jvmsrc] ${root.note}`);
+  }
+  return root;
+}
+
 const pkgPath = fileURLToPath(new URL('../package.json', import.meta.url));
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
 
@@ -63,13 +73,13 @@ program
     'Print Java source for a fully-qualified class (inter-project submodule source, sources JAR, or CFR fallback)',
   )
   .argument('<className>', 'e.g. com.example.MyClass')
-  .option('-p, --project <path>', 'Path to the project root', process.cwd())
+  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle build containing cwd)')
   .option('-m, --module <module>', 'Gradle module path (e.g. :core:utils); defaults to root')
   .option(
     '-c, --configuration <name>',
     'Resolved configuration name (default: compileClasspath, or testCompileClasspath with --include-test)',
   )
-  .option('--include-test', 'When --configuration is omitted, use testCompileClasspath', false)
+  .option('--include-test', 'When --configuration is omitted, use testCompileClasspath (implied when --module is a src/test path)')
   .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle', false)
   .option('-q, --quiet', 'On success, write only Java source to stdout (no metadata JSON on stderr)', false)
   .option('-v, --verbose', 'Stream Gradle stderr during resolution and sources JAR fetch', false)
@@ -89,7 +99,7 @@ program
     async (
       className: string,
       options: {
-        project: string;
+        project?: string;
         module?: string;
         configuration?: string;
         includeTest?: boolean;
@@ -105,13 +115,13 @@ program
       const json = Boolean(options.json);
       const showProgress = !options.quiet;
       const verboseGradle = Boolean(options.verbose);
-      const root = resolveProjectRoot(options.project);
+      const root = cliProjectRoot(options.project, Boolean(options.quiet));
       if (!root.ok) {
         const d = recordFailureDiagnostic({
           operation: 'cli_get',
           publicCode: 'INVALID_PROJECT_ROOT',
           message: root.message,
-          projectRoot: options.project,
+          projectRoot: options.project ?? process.cwd(),
           buildSystem: null,
           input: { className },
         });
@@ -139,7 +149,7 @@ program
         projectRoot: root.path,
         modulePath: options.module,
         configuration: options.configuration,
-        includeTest: Boolean(options.includeTest),
+        includeTest: Boolean(inferIncludeTest(options.module, options.includeTest)),
         forceRefresh: Boolean(options.forceRefresh),
         cli,
         excerpt:
@@ -160,13 +170,13 @@ program
   .description(
     'Resolve Gradle dependencies (compact text summary by default; --full or --json for ResolutionOutput JSON)',
   )
-  .option('-p, --project <path>', 'Path to the project root', process.cwd())
+  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle build containing cwd)')
   .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle')
   .option('-v, --verbose', 'Stream Gradle stderr during resolution', false)
   .option('--full', 'Print full ResolutionOutput JSON (same as --json)', false)
   .option('--json', 'Alias for --full', false)
-  .action(async (options: { project: string; forceRefresh?: boolean; verbose?: boolean; full?: boolean; json?: boolean }) => {
-    const root = resolveProjectRoot(options.project);
+  .action(async (options: { project?: string; forceRefresh?: boolean; verbose?: boolean; full?: boolean; json?: boolean }) => {
+    const root = cliProjectRoot(options.project);
     if (!root.ok) {
       console.error(root.message);
       process.exitCode = 1;
@@ -214,10 +224,10 @@ program
   )
   .argument('<className>', 'e.g. com.example.MyClass')
   .argument('<query>', 'substring or regex to find')
-  .option('-p, --project <path>', 'Path to the project root', process.cwd())
+  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle build containing cwd)')
   .option('-m, --module <module>', 'Gradle module path (e.g. :core:utils)')
   .option('-c, --configuration <name>', 'Resolved configuration name')
-  .option('--include-test', 'Use testCompileClasspath when configuration omitted', false)
+  .option('--include-test', 'Use testCompileClasspath when configuration omitted (implied when --module is a src/test path)')
   .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle', false)
   .option('-q, --quiet', 'Disable progress labels on stderr', false)
   .option('-v, --verbose', 'Stream Gradle stderr during resolution', false)
@@ -231,7 +241,7 @@ program
       className: string,
       query: string,
       options: {
-        project: string;
+        project?: string;
         module?: string;
         configuration?: string;
         includeTest?: boolean;
@@ -244,7 +254,7 @@ program
         regex?: boolean;
       },
     ) => {
-      const root = resolveProjectRoot(options.project);
+      const root = cliProjectRoot(options.project, Boolean(options.quiet));
       if (!root.ok) {
         if (options.json) {
           console.log(
@@ -264,7 +274,7 @@ program
         projectRoot: root.path,
         modulePath: options.module,
         configuration: options.configuration,
-        includeTest: Boolean(options.includeTest),
+        includeTest: Boolean(inferIncludeTest(options.module, options.includeTest)),
         forceRefresh: Boolean(options.forceRefresh),
         query,
         contextLines: options.contextLines,
@@ -282,14 +292,14 @@ program
     'Search for a literal or regex query across all classes in one resolved dependency JAR',
   )
   .argument('<query>', 'substring or regex to find')
-  .option('-p, --project <path>', 'Path to the project root', process.cwd())
+  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle build containing cwd)')
   .option('-g, --group <group>', 'Maven group ID (required with --name)')
   .option('-n, --name <name>', 'Maven artifact name (required with --group)')
   .option('--version <version>', 'Maven version (optional with coordinates)')
   .option('--jar-path <path>', 'Absolute JAR path from resolve output (alternative to coordinates)')
   .option('-m, --module <module>', 'Gradle module path (e.g. :core:utils)')
   .option('-c, --configuration <name>', 'Resolved configuration name')
-  .option('--include-test', 'Use testCompileClasspath when configuration omitted', false)
+  .option('--include-test', 'Use testCompileClasspath when configuration omitted (implied when --module is a src/test path)')
   .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle', false)
   .option('--regex', 'Treat query as a JavaScript RegExp pattern', false)
   .option('--context-lines <n>', 'Context lines above/below each hit (default 3)', (v) => parseInt(v, 10))
@@ -300,7 +310,7 @@ program
     async (
       query: string,
       options: {
-        project: string;
+        project?: string;
         group?: string;
         name?: string;
         version?: string;
@@ -317,7 +327,7 @@ program
       },
     ) => {
       const useJson = Boolean(options.json);
-      const root = resolveProjectRoot(options.project);
+      const root = cliProjectRoot(options.project);
       if (!root.ok) {
         if (useJson) {
           console.log(
@@ -359,7 +369,7 @@ program
         maxClasses: options.maxClasses,
         modulePath: options.module,
         configuration: options.configuration,
-        includeTest: Boolean(options.includeTest),
+        includeTest: Boolean(inferIncludeTest(options.module, options.includeTest)),
         forceRefresh: Boolean(options.forceRefresh),
       });
 
@@ -407,9 +417,9 @@ const doctorCmd = new Command('doctor').description('Run environment diagnostics
 doctorCmd
   .command('java')
   .description('Diagnose project JDK requirement, selection, and candidate scan')
-  .option('-p, --project <path>', 'Path to the project root', process.cwd())
-  .action((options: { project: string }) => {
-    const root = resolveProjectRoot(options.project);
+  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle build containing cwd)')
+  .action((options: { project?: string }) => {
+    const root = cliProjectRoot(options.project);
     if (!root.ok) {
       console.error(root.message);
       process.exitCode = 1;

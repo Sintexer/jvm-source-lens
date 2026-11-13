@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ResolvedModule } from '../resolvers/resolution-output.js';
-import { isAllModules, matchModule, normalizeModulePath, withoutAllModules } from './match-module.js';
+import { inferIncludeTest, isAllModules, matchModule, normalizeModulePath, withoutAllModules } from './match-module.js';
 
 const mod = (name: string, path: string): ResolvedModule => ({ name, path, configurations: [] });
 
@@ -138,5 +138,27 @@ describe('files and directories inside a module', () => {
 
   test('a sibling directory with a shared name prefix is not inside the module', () => {
     expect(name(`${root}/app-extra/src/X.java`)).toBe('root');
+  });
+});
+
+describe('inferIncludeTest', () => {
+  test.each([
+    ['/p/app/src/test/java/com/x/FooTest.java', true],
+    ['app/src/test/java/com/x/FooTest.java', true],
+    ['src/test/kotlin/FooTest.kt', true],
+    ['C:\\p\\app\\src\\test\\java\\FooTest.java', true],
+    ['/p/app/src/test', true],
+    ['/p/app/src/main/java/com/x/Foo.java', undefined],
+    ['/p/app/src/testFixtures/java/Foo.java', undefined],
+    ['/p/mytest/src/main/Foo.java', undefined],
+    [':app', undefined],
+    [undefined, undefined],
+  ])('modulePath %p → %p', (modulePath, expected) => {
+    expect(inferIncludeTest(modulePath, undefined)).toBe(expected);
+  });
+
+  test('an explicit includeTest wins over the path', () => {
+    expect(inferIncludeTest('/p/app/src/test/java/FooTest.java', false)).toBe(false);
+    expect(inferIncludeTest('/p/app/src/main/java/Foo.java', true)).toBe(true);
   });
 });

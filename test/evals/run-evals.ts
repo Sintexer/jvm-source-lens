@@ -155,14 +155,17 @@ async function runAll(): Promise<void> {
   await Promise.all(Array.from({ length: Math.max(1, Number(args.concurrency)) }, worker));
 }
 
-async function eagerTokens(): Promise<number | null> {
+type EagerTokens = { total: number; method: 'api' | 'approx' };
+
+async function eagerTokens(): Promise<EagerTokens | null> {
   try {
-    const proc = Bun.spawn(['npx', 'tsx', path.join(repoRoot, 'scripts/measure-eager-tokens.ts'), '--json'], {
+    const proc = Bun.spawn([process.execPath, path.join(repoRoot, 'scripts/measure-eager-tokens.ts'), '--json'], {
       cwd: repoRoot,
       stdout: 'pipe',
       stderr: 'ignore',
     });
-    return (JSON.parse(await new Response(proc.stdout).text()) as { total: number }).total;
+    const { total, method } = JSON.parse(await new Response(proc.stdout).text()) as EagerTokens;
+    return { total, method };
   } catch {
     return null;
   }
@@ -171,7 +174,7 @@ async function eagerTokens(): Promise<number | null> {
 const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
 const mark = (value: number, target: number) => (value >= target ? 'ok ' : 'LOW');
 
-function printReport(scores: PromptScore[], tokens: number | null): void {
+function printReport(scores: PromptScore[], tokens: EagerTokens | null): void {
   const total = aggregate(scores);
   console.log('\n=== Per category ===');
   console.table(
@@ -198,8 +201,9 @@ function printReport(scores: PromptScore[], tokens: number | null): void {
   console.log(`first-tool accuracy   ${pct(total.firstToolAccuracy)}   (sibling-confusion signal)`);
   console.log(`calls per task        ${total.callsPerTask.toFixed(1)}`);
   console.log(`shell fallback rate   ${pct(total.fallbackRate)}`);
+  console.log(`hook denials          ${total.hookDenials}${args['with-hook'] ? '   (deny reason seen by the agent)' : ''}`);
   console.log(`web used              ${scores.filter((s) => s.webUsed).length} prompt(s)`);
-  console.log(`eager tokens (approx) ${tokens ?? 'n/a'}`);
+  console.log(`eager tokens          ${tokens ? `${tokens.total} (${tokens.method})` : 'n/a'}`);
   const failed = scores.filter((s) => !s.passed);
   if (failed.length > 0) {
     console.log('\n=== Failed prompts ===');

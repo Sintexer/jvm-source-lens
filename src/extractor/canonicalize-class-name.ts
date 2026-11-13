@@ -4,6 +4,7 @@ import type { ClassSourceError } from './class-source-types.js';
 import {
   inferModulePath,
   probeClassOwner,
+  type InferModulePathResult,
   resolveModuleScopeOrError,
   type InferModulePathOptions,
   type ResolveModuleScopeResult,
@@ -15,7 +16,8 @@ const SEGMENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const MAX_PICK_LIST = 10;
 
 export type CanonicalClassName =
-  | { ok: true; className: string }
+  /** `inferred`: the all-modules probe for `className`, when one ran, so callers need not probe again. */
+  | { ok: true; className: string; inferred?: InferModulePathResult }
   | { ok: false; error: ClassSourceError };
 
 type Scope = Pick<InferModulePathOptions, 'modulePath' | 'configuration' | 'includeTest'>;
@@ -27,13 +29,21 @@ export function normalizeClassNameSyntax(raw: string): string {
   return stripped.length > 0 ? stripped : s;
 }
 
-function existsInScope(output: ResolutionOutput, className: string, scope: Scope): boolean {
+type ScopeProbe = { exists: boolean; inferred?: InferModulePathResult };
+
+function probeInScope(output: ResolutionOutput, className: string, scope: Scope): ScopeProbe {
   if (scope.modulePath !== undefined && scope.modulePath.length > 0) {
     const matched = matchModule(scope.modulePath, output.modules, output.projectRoot);
-    return matched.kind === 'match' && probeClassOwner(output, matched.module.name, { className, ...scope }).owner !== null;
+    return {
+      exists: matched.kind === 'match' && probeClassOwner(output, matched.module.name, { className, ...scope }).owner !== null,
+    };
   }
-  return inferModulePath(output, { className, ...scope }).kind !== 'none';
+  const inferred = inferModulePath(output, { className, ...scope });
+  return { exists: inferred.kind !== 'none', inferred };
 }
+
+const existsInScope = (output: ResolutionOutput, className: string, scope: Scope): boolean =>
+  probeInScope(output, className, scope).exists;
 
 /** Top-level FQNs on the classpath whose simple name is `simple` (exact first, then case-insensitive). */
 function lookupBySimpleName(
@@ -93,16 +103,19 @@ export function canonicalizeClassName(
   if (!segs.every((s) => SEGMENT.test(s))) {
     return { ok: true, className: name };
   }
-  const unchanged: CanonicalClassName = { ok: true, className: name };
+  let unchanged: CanonicalClassName = { ok: true, className: name };
   try {
-    if (existsInScope(output, name, scope)) {
+    const direct = probeInScope(output, name, scope);
+    unchanged = { ok: true, className: name, inferred: direct.inferred };
+    if (direct.exists) {
       return unchanged;
     }
 
     for (let i = segs.length - 1; i >= 1 && /^[A-Z]/.test(segs[i - 1]!); i--) {
       const candidate = `${segs.slice(0, i).join('.')}$${segs.slice(i).join('$')}`;
-      if (existsInScope(output, candidate, scope)) {
-        return { ok: true, className: candidate };
+      const nested = probeInScope(output, candidate, scope);
+      if (nested.exists) {
+        return { ok: true, className: candidate, inferred: nested.inferred };
       }
     }
 
@@ -149,7 +162,7 @@ export function resolveClassScopeOrError(
   if (!canon.ok) {
     return { ok: false, error: canon.error };
   }
-  const scope = resolveModuleScopeOrError(output, { ...opts, className: canon.className });
+  const scope = resolveModuleScopeOrError(output, { ...opts, className: canon.className }, canon.inferred);
   if (!scope.ok) {
     return scope;
   }

@@ -57,6 +57,11 @@ export function isFallbackCommand(command: string): boolean {
   return FALLBACK_COMMAND.some((re) => re.test(command));
 }
 
+/** The tool result is the deny reason from docs/hooks/block-jvm-fallbacks.mjs, so the command never ran. */
+export function isHookDenial(call: ToolCall): boolean {
+  return /Blocked: .*Use the jvmsrc MCP tools instead/s.test(call.resultText ?? '');
+}
+
 function resultTextOf(content: unknown): string {
   if (typeof content === 'string') {
     return content;
@@ -142,8 +147,10 @@ export type PromptScore = {
   moduleCorrect: boolean | null;
   /** First jvmsrc call is one of `expectFirstTools`; `null` when not applicable. */
   firstToolExpected: boolean | null;
-  /** Ran javap/unzip/jar/Gradle-cache style shell commands. */
+  /** Ran javap/unzip/jar/Gradle-cache style shell commands (blocked attempts do not count). */
   fallbackUsed: boolean;
+  /** Fallback attempts the PreToolUse hook blocked, with the deny reason visible to the agent. */
+  hookDenials: number;
   webUsed: boolean;
   /** Positive prompt: used jvmsrc and no shell fallback. Negative prompt: did not use jvmsrc. */
   passed: boolean;
@@ -162,9 +169,11 @@ export function modulePathMatches(given: string, expected: string): boolean {
 export function scorePrompt(p: EvalPrompt, t: ParsedTranscript): PromptScore {
   const jv = t.calls.filter((c) => isJvmsrcTool(c.name));
   const first = jv[0];
-  const fallbackUsed = t.calls.some(
+  const fallbackAttempts = t.calls.filter(
     (c) => c.name === 'Bash' && typeof c.input.command === 'string' && isFallbackCommand(c.input.command),
   );
+  const hookDenials = fallbackAttempts.filter(isHookDenial).length;
+  const fallbackUsed = fallbackAttempts.length > hookDenials;
   const webUsed = t.calls.some((c) => c.name === 'WebSearch' || c.name === 'WebFetch');
   const selected = jv.length > 0;
   return {
@@ -190,6 +199,7 @@ export function scorePrompt(p: EvalPrompt, t: ParsedTranscript): PromptScore {
           modulePathMatches(first.input.modulePath, p.expectModule),
     firstToolExpected: first && p.expectJvmsrc ? p.expectFirstTools.includes(shortToolName(first.name)) : null,
     fallbackUsed,
+    hookDenials,
     webUsed,
     passed: p.expectJvmsrc ? selected && !fallbackUsed : !selected,
     numTurns: t.numTurns,
@@ -219,6 +229,8 @@ export type Aggregate = {
   /** ...and it was the right module. */
   moduleCorrectRate: number;
   passRate: number;
+  /** Total hook-blocked fallback attempts (deny reason reached the agent). */
+  hookDenials: number;
 };
 
 const ratio = (num: number, den: number): number => (den === 0 ? 0 : num / den);
@@ -242,6 +254,7 @@ export function aggregate(scores: PromptScore[]): Aggregate {
     modulePassRate: ratio(withModule.filter((s) => s.modulePassed).length, withModule.length),
     moduleCorrectRate: ratio(withModule.filter((s) => s.moduleCorrect).length, withModule.length),
     passRate: ratio(scores.filter((s) => s.passed).length, scores.length),
+    hookDenials: scores.reduce((n, s) => n + s.hookDenials, 0),
   };
 }
 

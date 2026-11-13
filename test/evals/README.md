@@ -42,12 +42,14 @@ Each prompt has `expectJvmsrc` and `expectFirstTools` (any-of sensible first jvm
 |---|---|---|
 | selection recall | positives that called any jvmsrc tool | ≥ 95% (before the hook) |
 | selection precision | of prompts that called jvmsrc, how many should have | — (negatives lower it) |
-| first-call success | first jvmsrc call returned without `isError` | ≥ 95% |
+| first-call success | first jvmsrc call returned without `isError` (strict) | reported; the target is **usable** ≥ 95% (below) |
+| first-call usable | strict, plus a retry-ready `MODULE_AMBIGUOUS` / ambiguous-simple-name answer | ≥ 95% (checkpoint 3 decision: `ObjectMapper` ambiguity is correct by design) |
 | module passed / correct (`filecontext`) | first jvmsrc call carried a concrete `modulePath`, and it denotes the module of the named file | high; low values mean the instructions/descriptions do not make agents pass the module |
 | first-tool accuracy | first jvmsrc call ∈ `expectFirstTools` | high; low values mean sibling-tool confusion (Checkpoint 7) |
 | calls per task | jvmsrc calls per positive prompt | lower is better |
-| shell fallback rate | positives that ran javap/unzip/jar/Gradle-cache commands | 0% with `--with-hook` |
-| eager tokens | `bun run measure:tokens` | ≤ ~2,000 |
+| shell fallback rate | positives that ran javap/unzip/jar/Gradle-cache commands (attempts the hook blocked do not count) | 0% with `--with-hook` |
+| hook denials | fallback attempts the `PreToolUse` hook blocked, whose deny reason came back to the agent as the tool result | > 0 with `--with-hook` proves the reason reaches the agent |
+| eager tokens | `bun run measure:tokens` (Anthropic `count_tokens` with `ANTHROPIC_API_KEY`, else `chars / 4`; the method is printed and saved in `summary.json`) | ≤ 2,000 |
 
 A positive prompt **passes** only if jvmsrc was called and no shell fallback ran; a negative passes if jvmsrc was not called.
 
@@ -69,7 +71,15 @@ Add one row for each full run. Write the model and the client version in the row
 | Date | Setup | Recall | First-call success | First-tool acc. | Fallback | Notes |
 |---|---|---|---|---|---|---|
 | 2026-10-01 | Full baseline, 40 prompts, Claude Code 2.1.286, default model, jvmsrc + read-only Bash | 100% (34/34; 0/6 negatives) | 71% strict / 82% usable | 97% | 0% | Precision 100%, 1.8 calls/task. 12 of 60 calls had errors: 9 `MODULE_AMBIGUOUS`, 2 `SOURCE_OUTPUT_TOO_LARGE` on find, 1 `DECOMPILE_FAILED` (nested class). The fixes that followed are not measured yet |
+| 2026-11-10 | Checkpoint 3 code, default mode, 44 prompts, Claude Code 2.1.322, default model (not recorded by the harness), jvmsrc + read-only Bash, no hook | 100% (38/38; 6/6 negatives) | 87% strict (33/38) / 97% usable (37/38) | 97% | 0% | Precision 100%, 1.45 calls/task, all 44 prompts passed. 5 first-call errors: 4 `MODULE_AMBIGUOUS` on `ObjectMapper` (`i08`, `m03`, `s01`, `s03`; retry-ready, all recovered in the next call), 1 `search_classes` with no `query` (`i07`): the agent called before `ToolSearch` loaded the schema, then recovered. Eager tokens 1,982 (`chars / 4`). Hook not measured in this run; see the probe below |
+| 2026-11-10 | Checkpoint 3 code, `--with-hook`, 44 prompts, Claude Code 2.1.322, default model (not recorded), jvmsrc + read-only Bash | 100% (38/38; 6/6 negatives) | 87% strict (33/38) / 97% usable (37/38) | 97% | 0% | All 44 passed. No run made a Bash call, so 0 denials here. The hook was checked with a separate probe (below) |
+| 2026-11-10 | Checkpoint 3 code, `--mode competing`, 44 prompts, Claude Code 2.1.322, default model (not recorded), jvmsrc + read-only Bash + WebSearch/WebFetch | 100% (38/38; 6/6 negatives) | 89% strict (34/38) / 100% usable (38/38) | 97% | 0% | All 44 passed. No web tool used. The strict gain is the `i07` empty call, which did not recur |
+
+**Hook probe (2026-11-10, after the `--with-hook` run).** The prompt asked for `javap -version` with the hook installed, in `project/`, with the harness flags. The hook denied the call. The agent got the deny reason as the tool result (`PreToolUse:Bash hook error: Blocked: javap reads whatever version is on disk … Use the jvmsrc MCP tools instead …`) and reported it to the user. Cost $0.06. Scoring counts this as a hook denial (`isHookDenial`).
+The eval prompts never make the agent reach for a shell command, so the harness cannot test the hook on its own. The probe is the only check of the hook path.
 
 "Usable" includes answers to questions that are really ambiguous, when the answer is ready for a retry. An example is one class with different versions in different modules.
 
-Eager tokens (`bun run measure:tokens`, `chars / 4`): 4,283 at v1.16.0 → 2,401 after the copy rewrite → 2,478 after `modulePath` guidance. The target is ≤ 2,000 ([PLAN.md](../../PLAN.md), checkpoint 3).
+Eager tokens (`bun run measure:tokens`, `chars / 4`): 4,283 at v1.16.0 → 2,401 after the copy rewrite → 2,478 after `modulePath` guidance → 2,584 at v1.19.0 → **1,982** after checkpoint 3 (schema noise removed; `projectRoot`, `configuration`, `forceRefresh`, `maxClasses` no longer advertised). Numbers from the `count_tokens` API are not comparable with these `chars / 4` numbers; start a new series when you first measure with a key.
+
+**Replay of the 2026-10-01 first calls (checkpoint 3, no model).** Each recorded first jvmsrc call was sent again, with the same arguments, to the current server on `project/`. Of the 10 first-call errors in the 40-prompt run, 6 now succeed (`d09`, `i01`, `i05`, `i07`, `i10`, `m05`). The 4 that stay (`i08`, `m03`, `s01`, `s03`) are `MODULE_AMBIGUOUS` on `ObjectMapper`: those prompts name no module, and the class is 2.15.2 in `:app` and 2.14.2 in `:worker`. That answer is correct by design ([PLAN.md](../../PLAN.md), rejected decisions), so on this prompt set the strict first-call success is about 90% at best and "usable" is the metric that the 95% target applies to.

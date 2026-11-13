@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { zipSync } from 'fflate';
 import type { ResolutionOutput, ResolvedArtifact } from '../resolvers/resolution-output.js';
 import {
@@ -9,6 +9,7 @@ import {
   normalizeClassNameSyntax,
   resolveClassScopeOrError,
 } from './canonicalize-class-name.js';
+import * as classpathProbe from './find-external-class-jar.js';
 
 const bytes = Uint8Array.from([0xca, 0xfe, 0xba, 0xbe]);
 
@@ -135,6 +136,18 @@ describe('resolveClassScopeOrError', () => {
     if (r.ok) {
       expect(r.className).toBe('com.example.Foo');
       expect(r.modulePath).toBe(':app');
+    }
+  });
+
+  test('shouldProbeEachModuleOnceWhenModulePathIsOmitted', () => {
+    const out = output({ ':a': [artifact('lib', jarA)], ':b': [artifact('lib', jarA)], ':c': [] });
+    const spy = spyOn(classpathProbe, 'findClasspathOwningClass');
+    try {
+      const r = resolveClassScopeOrError(dir, out, { className: 'com.example.Foo' });
+      expect(r.ok).toBe(true);
+      expect(spy).toHaveBeenCalledTimes(3);
+    } finally {
+      spy.mockRestore();
     }
   });
 

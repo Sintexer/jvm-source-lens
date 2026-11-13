@@ -170,12 +170,14 @@ export type ResolveModuleScopeResult =
  * Wraps {@link inferModulePath} into a `ClassSourceError`-shaped result for getters: `ambiguous`
  * becomes `MODULE_AMBIGUOUS`, `none` becomes a bare `CLASS_NOT_FOUND` (callers should enrich it
  * with `enrichClassNotFound` for `suggestedModulePaths` / `suggestions` before returning).
+ * `precomputed` must be {@link inferModulePath} of the same `output` and `opts`.
  */
 export function resolveModuleScopeOrError(
   output: ResolutionOutput,
   opts: InferModulePathOptions,
+  precomputed?: InferModulePathResult,
 ): ResolveModuleScopeResult {
-  const inferred = inferModulePath(output, opts);
+  const inferred = precomputed ?? inferModulePath(output, opts);
   switch (inferred.kind) {
     case 'use':
       return { ok: true, modulePath: inferred.modulePath };

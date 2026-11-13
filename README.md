@@ -123,7 +123,7 @@ The MCP server runs over stdio (`jvmsrc mcp`). It needs no environment variables
 > **Multimodule:** omit `modulePath` and jvmsrc auto-picks the unique owning module; on a miss it lists candidate `modulePath`s. **Methods:** `search_classes` matches declared method names when the index has source enrichment; for body text in a known JAR use `search_in_artifact`. `get_class_source` `methodNames` also walks superclasses for unmatched names.
 
 > [!NOTE]
-> **Inputs are forgiving.** `projectRoot` can be omitted (the workspace is used, or set `JVMSRC_PROJECT_ROOT`); `modulePath` accepts `app`, `/app`, `:app`, or a file/directory inside the module (omit it, or pass `"*"`, to search all modules); `className` accepts a simple name, `Outer.Inner`, or a trailing `.class`/`.java`. When jvmsrc reinterprets an input (simple name to FQN, subdirectory to Gradle root), the result ends with a `note:` line. Pass `forceRefresh: true` only after something changed that the build files do not show, such as a SNAPSHOT republish.
+> **Inputs are forgiving.** `projectRoot` can be omitted (the workspace is used, or set `JVMSRC_PROJECT_ROOT`); `modulePath` accepts `app`, `/app`, `:app`, or a file/directory inside the module (omit it, or pass `"*"`, to search all modules; a file under `src/test/` also selects the test classpath); `className` accepts a simple name, `Outer.Inner`, or a trailing `.class`/`.java`. When jvmsrc reinterprets an input (simple name to FQN, subdirectory to Gradle root), the result ends with a `note:` line. Pass `forceRefresh: true` only after something changed that the build files do not show, such as a SNAPSHOT republish. To save tokens on every turn, `projectRoot`, `configuration` and `forceRefresh` (except on `resolve_dependencies`) are accepted but not listed in the tool schemas.
 
 ### Private repository credentials (optional)
 
@@ -211,7 +211,7 @@ Primarily **Java + Spring Boot** projects on Gradle. Other JVM languages (Kotlin
 | **Gradle** | Supported — multimodule included |
 | Maven, Bazel | Planned ([SPEC.md](SPEC.md)) |
 
-`-p` / `projectRoot` can be the Gradle root or any directory inside it; jvmsrc walks up to the nearest `gradlew` / `settings.gradle(.kts)`. MCP tools can omit `projectRoot`. Uses `./gradlew` when present, else `gradle` on `PATH`. Maven-only trees get an explicit unsupported error.
+`-p` / `projectRoot` can be the Gradle root or any directory inside it; jvmsrc walks up to the nearest `gradlew` / `settings.gradle(.kts)`. MCP tools can omit `projectRoot`, and the CLI can omit `-p` (it uses `JVMSRC_PROJECT_ROOT`, else the Gradle build that contains the working directory). Uses `./gradlew` when present, else `gradle` on `PATH`. Maven-only trees get an explicit unsupported error.
 
 </details>
 
@@ -255,7 +255,8 @@ Then delete the jvmsrc cache folder (`JVMSRC_CACHE_ROOT`, or the OS default), th
 <summary>CLI Command Reference</summary>
 
 ```bash
-jvmsrc com.example.MyClass -p /path/to/gradle-project          # shorthand for get
+jvmsrc com.example.MyClass                                     # shorthand for get; project = build containing cwd
+jvmsrc com.example.MyClass -p /path/to/gradle-project          # explicit project
 jvmsrc get com.example.MyClass -p /path/to/project -q > MyClass.java
 jvmsrc resolve -p /path/to/project --force-refresh
 jvmsrc config jdk-roots add /path/to/jdks                      # one-time JDK roots setup
@@ -264,7 +265,7 @@ jvmsrc diagnostics last                                         # latest failure
 jvmsrc mcp                                                     # run as MCP server
 ```
 
-**Useful flags:** `-p` / `--project`, `--module` (`:core:api`), `--configuration`, `--include-test`, `--force-refresh`, `--verbose` (Gradle stderr only), `--method`, `--start-line` / `--end-line`.
+**Useful flags:** `-p` / `--project` (optional), `--module` (`:core:api`, or a file inside the module), `--configuration`, `--include-test` (implied when `--module` is under `src/test/`), `--force-refresh`, `--verbose` (Gradle stderr only), `--method`, `--start-line` / `--end-line`.
 
 **Repo fixture for testing:**
 `test/fixtures/gradle-smoke` —
@@ -295,7 +296,7 @@ jvmsrc mcp                                                     # run as MCP serv
 | `JVMSRC_LOG_DIR` | Diagnostic logs (absolute) |
 | `JVMSRC_CALL_LOG` | `1` = append one line per MCP tool call to `calls.log` (opt-in; see SPEC §6.3) |
 | `JVMSRC_ALLOWED_ROOTS` | Allowed `projectRoot` prefixes |
-| `JVMSRC_PROJECT_ROOT` | Default project root for MCP tools when `projectRoot` is omitted and the client sends no workspace roots (falls back to the working directory) |
+| `JVMSRC_PROJECT_ROOT` | Default project root when MCP `projectRoot` / CLI `-p` is omitted and the client sends no workspace roots (falls back to the working directory) |
 | `JVMSRC_MAX_SOURCE_OUTPUT_CHARS` | Max source body size (default 524288) |
 | `JVMSRC_MAX_FULL_SOURCE_CHARS` | Unscoped full-file `get_class_source` larger than this is refused with `SOURCE_OUTPUT_TOO_LARGE` (default 65536) |
 | `JVMSRC_GRADLE_TIMEOUT_MS` | Gradle timeout |

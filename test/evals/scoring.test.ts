@@ -221,3 +221,41 @@ describe('module-passing metric', () => {
     expect(a.moduleCorrectRate).toBeCloseTo(1 / 3);
   });
 });
+
+describe('PreToolUse hook denials', () => {
+  const denied = (id: string) =>
+    line({
+      type: 'user',
+      message: {
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: id,
+            is_error: true,
+            content: 'Blocked: javap reads whatever version is on disk, not the one this build resolves. Use the jvmsrc MCP tools instead: …',
+          },
+        ],
+      },
+    });
+
+  test('shouldNotCountFallbackWhenHookBlockedTheCommand', () => {
+    const s = scorePrompt(
+      positive,
+      parseTranscript([use('a', 'Bash', { command: 'javap -p Foo' }), denied('a'), use('b', 'mcp__jvmsrc__get_class_structure'), result('b')]),
+    );
+    expect(s.fallbackUsed).toBe(false);
+    expect(s.hookDenials).toBe(1);
+    expect(s.passed).toBe(true);
+  });
+
+  test('shouldCountFallbackWhenCommandRanWithoutHook', () => {
+    const s = scorePrompt(positive, parseTranscript([use('a', 'Bash', { command: 'javap -p Foo' }), result('a')]));
+    expect(s.fallbackUsed).toBe(true);
+    expect(s.hookDenials).toBe(0);
+  });
+
+  test('shouldSumHookDenialsInAggregate', () => {
+    const t = parseTranscript([use('a', 'Bash', { command: 'javap -p Foo' }), denied('a')]);
+    expect(aggregate([scorePrompt(positive, t), scorePrompt(positive, t)]).hookDenials).toBe(2);
+  });
+});

@@ -27,6 +27,14 @@ export function withoutAllModules<T extends { modulePath?: string }>(opts: T): T
   return isAllModules(opts.modulePath) ? { ...opts, modulePath: undefined } : opts;
 }
 
+/** A `modulePath` that points into `src/test/` means the test classpath, unless `includeTest` is explicit. */
+export function inferIncludeTest(modulePath: string | undefined, includeTest: boolean | undefined): boolean | undefined {
+  if (includeTest !== undefined || modulePath === undefined) {
+    return includeTest;
+  }
+  return /(^|\/)src\/test(\/|$)/.test(modulePath.trim().replace(/\\/g, '/')) ? true : undefined;
+}
+
 export type ModuleMatch =
   | { kind: 'match'; module: ResolvedModule }
   | { kind: 'ambiguous'; candidates: string[] }

@@ -42,6 +42,26 @@ describe('advertised input schemas', () => {
     }
   });
 
+  test('schemas carry no $schema, empty additionalProperties, or safe-integer maximum', () => {
+    const raw = JSON.stringify(tools.map((t) => t.inputSchema));
+    expect(raw).not.toContain('$schema');
+    expect(raw).not.toContain('additionalProperties');
+    expect(raw).not.toContain(String(Number.MAX_SAFE_INTEGER));
+  });
+
+  test('seldom-used parameters are not advertised', () => {
+    for (const t of tools) {
+      const names = props(t.name);
+      expect(names).not.toContain('projectRoot');
+      expect(names).not.toContain('configuration');
+      expect(names).not.toContain('maxClasses');
+      if (t.name !== 'resolve_dependencies') {
+        expect(names).not.toContain('forceRefresh');
+      }
+    }
+    expect(props('resolve_dependencies')).toContain('forceRefresh');
+  });
+
   test('scope does not offer "full"', () => {
     const scope = tools.find((t) => t.name === 'get_class_structure')!.inputSchema.properties!.scope as {
       enum?: string[];
@@ -82,6 +102,30 @@ describe('tolerated inputs', () => {
       arguments: { className: 'a.B', projectRoot: missingRoot, full: true, include: ['fields'] },
     });
     expect(text(r)).toContain('does not exist');
+  });
+
+  test('unadvertised configuration / forceRefresh / maxClasses are still accepted', async () => {
+    const r = await client.callTool({
+      name: 'search_in_artifact',
+      arguments: {
+        query: 'x',
+        coordinates: { group: 'g', name: 'n' },
+        projectRoot: missingRoot,
+        configuration: 'runtimeClasspath',
+        forceRefresh: true,
+        maxClasses: 5,
+      },
+    });
+    expect(text(r)).toContain('does not exist');
+  });
+
+  test('unadvertised parameters are still type-checked', async () => {
+    const r = await client.callTool({
+      name: 'get_class_source',
+      arguments: { className: 'a.B', projectRoot: missingRoot, forceRefresh: 'yes' },
+    });
+    expect((r as { isError?: boolean }).isError).toBe(true);
+    expect(text(r)).toContain('forceRefresh');
   });
 
   test('get_class_source accepts a bare string methodNames', async () => {
