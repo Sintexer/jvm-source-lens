@@ -6,8 +6,10 @@ import { strToU8, zipSync } from 'fflate';
 import { checkUnscopedFullSourceSize } from '../output-limits.js';
 
 const fakeClassBytes = Uint8Array.from([0xca, 0xfe, 0xba, 0xbe]);
+import type { DecompileExternalClassFn } from '../decompiler/decompile-external-class.js';
 import type { ResolutionOutput, ResolvedArtifact } from '../resolvers/resolution-output.js';
 import { extractExternalClassSource } from './extract-external-class-source.js';
+import { buildClassFile } from './test-class-file.js';
 
 function artifact(partial: Partial<ResolvedArtifact> & Pick<ResolvedArtifact, 'group' | 'name'>): ResolvedArtifact {
   return {
@@ -75,6 +77,7 @@ describe('extractExternalClassSource', () => {
     if (r.ok) {
       expect(r.source).toBe(body);
       expect(r.sourceAvailable).toBe(true);
+      expect(r.sourceLanguage).toBe('java');
       expect(r.provenance.kind).toBe('sourcesJar');
       if (r.provenance.kind === 'sourcesJar') {
         expect(r.provenance.jarPath).toBe(sourcesJar);
@@ -225,6 +228,7 @@ describe('extractExternalClassSource', () => {
         ok: true,
         source: 'decompiled Foo',
         sourceAvailable: false,
+        sourceLanguage: 'java',
         className: 'com.example.Foo',
         provenance: {
           kind: 'decompiled',
@@ -239,6 +243,7 @@ describe('extractExternalClassSource', () => {
     if (r.ok) {
       expect(r.source).toBe('decompiled Foo');
       expect(r.sourceAvailable).toBe(false);
+      expect(r.sourceLanguage).toBe('java');
       expect(r.provenance.kind).toBe('decompiled');
     }
   });
@@ -276,6 +281,7 @@ describe('extractExternalClassSource', () => {
         ok: true,
         source: 'from local jar',
         sourceAvailable: false,
+        sourceLanguage: 'java',
         className: 'com.example.Foo',
         provenance: {
           kind: 'decompiled',
@@ -491,6 +497,181 @@ describe('extractExternalClassSource', () => {
       expect(r.source.startsWith('// jvmsrc: com/shared/Outer.java:')).toBe(true);
       expect(r.provenance.nestedIn).toBe('com.shared.Outer');
       expect(r.provenance.sourceRelativePath).toBe('com/shared/Outer.java');
+    }
+  });
+});
+
+describe('extractExternalClassSource SourceFile attribute', () => {
+  function libWith(dir: string, classes: Record<string, Uint8Array>, sources: Record<string, string>) {
+    const binJar = path.join(dir, 'lib.jar');
+    const sourcesJar = path.join(dir, 'lib-sources.jar');
+    fs.writeFileSync(binJar, zipSync(classes));
+    fs.writeFileSync(
+      sourcesJar,
+      zipSync(Object.fromEntries(Object.entries(sources).map(([k, v]) => [k, strToU8(v)]))),
+    );
+    return baseOutput(dir, [artifact({ group: 'com.x', name: 'lib', jarPath: binJar, sourcesJarPath: sourcesJar })]);
+  }
+
+  const failDecompile: DecompileExternalClassFn = async (opts) => ({
+    ok: false,
+    error: {
+      code: 'DECOMPILE_FAILED',
+      message: 'should not decompile',
+      className: opts.className,
+      jarPath: opts.jarPath,
+      entryRelPath: opts.entryRelPath,
+      coordinates: opts.coordinates,
+    },
+  });
+
+  test('shouldReturnKotlinFileWhenFacadeClassNamesItInSourceFile', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-sf-'));
+    const kt = 'package com.x\n\nfun hello(name: String) = "hi $name"\n';
+    const out = libWith(
+      dir,
+      { 'com/x/FooKt.class': buildClassFile({ internalName: 'com/x/FooKt', sourceFile: 'Foo.kt' }) },
+      { 'com/x/Foo.kt': kt },
+    );
+    const r = await extractExternalClassSource(out, { className: 'com.x.FooKt', decompileExternalClass: failDecompile });
+    expect(r.ok).toBe(true);
+    if (!r.ok) {
+      return;
+    }
+    expect(r.source).toBe(kt);
+    expect(r.sourceAvailable).toBe(true);
+    expect(r.sourceLanguage).toBe('kotlin');
+    expect(r.compilationUnit).toBeUndefined();
+    expect(r.provenance.kind).toBe('sourcesJar');
+    if (r.provenance.kind === 'sourcesJar') {
+      expect(r.provenance.sourceRelativePath).toBe('com/x/Foo.kt');
+      expect(r.provenance.nestedIn).toBeUndefined();
+    }
+  });
+
+  test('shouldSliceSecondaryTopLevelClassWhenSourceFileIsAnotherJavaFile', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-sf-'));
+    const java = 'package com.x;\npublic class Primary {}\n\nclass Helper {\n  void help() {}\n}\n';
+    const out = libWith(
+      dir,
+      { 'com/x/Helper.class': buildClassFile({ internalName: 'com/x/Helper', sourceFile: 'Primary.java' }) },
+      { 'com/x/Primary.java': java },
+    );
+    const r = await extractExternalClassSource(out, { className: 'com.x.Helper', decompileExternalClass: failDecompile });
+    expect(r.ok).toBe(true);
+    if (!r.ok) {
+      return;
+    }
+    expect(r.source.startsWith('// jvmsrc: com/x/Primary.java:4-6\n')).toBe(true);
+    expect(r.source).toContain('void help()');
+    expect(r.source).not.toContain('class Primary');
+    expect(r.compilationUnit).toBe(java);
+    if (r.provenance.kind === 'sourcesJar') {
+      expect(r.provenance.sourceRelativePath).toBe('com/x/Primary.java');
+      expect(r.provenance.nestedIn).toBeUndefined();
+    }
+  });
+
+  test('shouldReturnWholeKotlinFileWhenNestedClassComesFromKotlin', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-sf-'));
+    const kt = 'package com.x\n\nclass Outer {\n  class Inner\n}\n';
+    const out = libWith(
+      dir,
+      { 'com/x/Outer$Inner.class': buildClassFile({ internalName: 'com/x/Outer$Inner', sourceFile: 'Outer.kt' }) },
+      { 'com/x/Outer.kt': kt },
+    );
+    const r = await extractExternalClassSource(out, {
+      className: 'com.x.Outer$Inner',
+      decompileExternalClass: failDecompile,
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) {
+      return;
+    }
+    expect(r.source).toBe(kt);
+    expect(r.compilationUnit).toBeUndefined();
+    if (r.provenance.kind === 'sourcesJar') {
+      expect(r.provenance.nestedIn).toBe('com.x.Outer');
+      expect(r.provenance.sourceRelativePath).toBe('com/x/Outer.kt');
+    }
+  });
+
+  test('shouldUseNameCandidatesWhenClassHasNoSourceFile', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-sf-'));
+    const binJar = path.join(dir, 'lib.jar');
+    const sourcesJar = path.join(dir, 'lib-sources.jar');
+    const java = 'package com.x;\npublic class Foo {}\n';
+    fs.writeFileSync(binJar, zipSync({ 'com/x/Foo.class': buildClassFile({ internalName: 'com/x/Foo' }) }));
+    fs.writeFileSync(sourcesJar, zipSync({ 'com/x/Foo.java': strToU8(java) }));
+    const out = baseOutput(dir, [artifact({ group: 'com.x', name: 'lib', jarPath: binJar })]);
+    const r = await extractExternalClassSource(out, {
+      className: 'com.x.Foo',
+      resolveSourcesJar: async () => sourcesJar,
+      decompileExternalClass: failDecompile,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.source).toBe(java);
+      if (r.provenance.kind === 'sourcesJar') {
+        expect(r.provenance.sourceRelativePath).toBeUndefined();
+      }
+    }
+  });
+});
+
+describe('extractExternalClassSource inter-project languages', () => {
+  function sibling(dir: string, depRoot: string) {
+    return baseOutput(dir, [
+      {
+        group: 'root',
+        name: 'shared',
+        version: null,
+        type: 'project',
+        jarPath: null,
+        sourcesJarPath: null,
+        origin: 'interproject',
+        direct: true,
+        interproject: { moduleName: ':shared', modulePath: depRoot },
+      },
+    ]);
+  }
+
+  test('shouldReturnKotlinSourceWhenSiblingModuleHasKtFile', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-kt-'));
+    const depRoot = path.join(dir, 'shared');
+    const ktPath = path.join(depRoot, 'src/main/kotlin/com/shared/Greeter.kt');
+    fs.mkdirSync(path.dirname(ktPath), { recursive: true });
+    const kt = 'package com.shared\n\nclass Greeter {\n  fun hello() = "hi"\n}\n';
+    fs.writeFileSync(ktPath, kt);
+
+    const r = await extractExternalClassSource(sibling(dir, depRoot), { className: 'com.shared.Greeter' });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.provenance.kind === 'interproject') {
+      expect(r.source).toBe(kt);
+      expect(r.sourceLanguage).toBe('kotlin');
+      expect(r.provenance.sourceRelativePath).toBe('com/shared/Greeter.kt');
+    }
+  });
+
+  test('shouldReturnKotlinFileWhenCompiledFacadeNamesItInSourceFile', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-kt-'));
+    const depRoot = path.join(dir, 'shared');
+    const classRel = 'com/shared/FooKt.class';
+    const classPath = path.join(depRoot, 'build/classes/kotlin/main', classRel);
+    fs.mkdirSync(path.dirname(classPath), { recursive: true });
+    fs.writeFileSync(classPath, buildClassFile({ internalName: 'com/shared/FooKt', sourceFile: 'Foo.kt' }));
+    const ktPath = path.join(depRoot, 'src/main/kotlin/com/shared/Foo.kt');
+    fs.mkdirSync(path.dirname(ktPath), { recursive: true });
+    const kt = 'package com.shared\n\nfun hello() = 1\n';
+    fs.writeFileSync(ktPath, kt);
+
+    const r = await extractExternalClassSource(sibling(dir, depRoot), { className: 'com.shared.FooKt' });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.provenance.kind === 'interproject') {
+      expect(r.source).toBe(kt);
+      expect(r.compilationUnit).toBeUndefined();
+      expect(r.provenance.nestedIn).toBeUndefined();
+      expect(r.provenance.sourceRelativePath).toBe('com/shared/Foo.kt');
     }
   });
 });

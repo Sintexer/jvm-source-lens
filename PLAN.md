@@ -23,7 +23,7 @@ Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGEL
 
 Released together in 1.19.0: checkpoints 1 and 2.
 
-Checkpoint 3 is done and not released. Checkpoint 4 is done and not released. Release checkpoint 3 first, then checkpoint 4.
+Checkpoints 3, 4 and 5 are done and not released. Release them in order: 3, 4, then 5. Checkpoint 6 is in progress.
 
 
 | # | Checkpoint | Why at this position | Size |
@@ -99,7 +99,7 @@ Checkpoint 3 is done and not released. Checkpoint 4 is done and not released. Re
 
 **Done when:** `get_class_source …ImmutableList$Builder` succeeds from a sources JAR. Other paths work as before. Decompile without sources can still fail; checkpoint 5 fixes that.
 
-## Checkpoint 5 — Nested classes: structure, decompile, search
+## Checkpoint 5 — Nested classes: structure, decompile, search (done)
 
 - [x] `parseJavaTypeMetadata(source, fqn)` accepts the nested path. `get_class_structure` and `get_method_signature` return the Javadoc and the real parameter names of the nested type.
 - [x] `find_in_class_source` and `methodNames` excerpts work on the nested slice.
@@ -114,9 +114,12 @@ Checkpoint 3 is done and not released. Checkpoint 4 is done and not released. Re
 
 **Problem:** the lookup expects `Foo.java`. Kotlin sources JARs contain `.kt` files, and the class name and the file name often differ (`FooKt`, many classes in one file). Today these classes go to CFR.
 
-- [ ] **`SourceFile` attribute:** add a small class-file reader that gets the `SourceFile` attribute from the `.class`. The source path is the package directory plus `SourceFile`. This works for Kotlin facades, multi-class files, Scala and Groovy. It also works for non-public secondary top-level Java classes. Use it first, then the name-based candidates from checkpoint 4.
-- [ ] Inter-project and local modules: read `src/{main,test}/{kotlin,scala,groovy}` in addition to `java`. The FQN index reads the `package` line, because in Kotlin the directory can differ from the package.
-- [ ] Response: add `sourceLanguage` (`java` | `kotlin` | `scala` | `groovy`). `sourceAvailable: true` for original source. Update SPEC §7.1.
+- [x] **`SourceFile` attribute:** add a small class-file reader that gets the `SourceFile` attribute from the `.class`. The source path is the package directory plus `SourceFile`. This works for Kotlin facades, multi-class files, Scala and Groovy. It also works for non-public secondary top-level Java classes. Use it first, then the name-based candidates from checkpoint 4.
+  Result: `src/extractor/class-file-source-file.ts`. Only binary-JAR hits read it (inter-project trees are step 2). `get` returns a non-Java file whole; a Java file with another name is sliced. Structure and signatures use only a `.java` `SourceFile`, so Kotlin still goes to `javap`.
+- [x] Inter-project and local modules: read `src/{main,test}/{kotlin,scala,groovy}` in addition to `java`. The FQN index reads the `package` line, because in Kotlin the directory can differ from the package.
+  Result: a `.java` lookup also tries `.kt`, `.scala` and `.groovy`. A compiled class's `SourceFile` is tried first (`FooKt` → `Foo.kt`). The index FQN is the `package` declaration plus the file name. Kotlin text is not passed to the Java parser.
+- [x] Response: add `sourceLanguage` (`java` | `kotlin` | `scala` | `groovy`). `sourceAvailable: true` for original source. Update SPEC §7.1.
+  Result: the field is the extension of the file that was read. CFR text is `java` with `sourceAvailable: false`. CLI stderr, `--json` and MCP `get_class_source` include it.
 - [ ] Line-range excerpts and `find_in_class_source` work on all languages. For non-Java files, `methodNames` returns a clear message ("method excerpts are Java-only; use startLine/endLine") until checkpoint 7. `get_class_structure` uses `javap` for non-Java.
 - [ ] Scenario `test/scenarios/gradle/kotlin-library/`: a Kotlin producer publishes a JAR and a sources JAR to a temp Maven repo, and a Java consumer uses it.
 - [ ] Evals: add a Kotlin dependency to the eval project and 4 Kotlin prompts.

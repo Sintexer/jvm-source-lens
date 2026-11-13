@@ -25,6 +25,7 @@ export type DecompileExternalClassSuccess = {
   ok: true;
   source: string;
   sourceAvailable: false;
+  sourceLanguage: 'java';
   className: string;
   provenance: DecompiledProvenance;
   /** Full outer CFR text when `source` is a nested slice. */
@@ -89,6 +90,7 @@ function presentDecompiled(
       ok: true,
       source: fullSource,
       sourceAvailable: false,
+      sourceLanguage: 'java',
       className: opts.className,
       provenance,
     };
@@ -106,6 +108,7 @@ function presentDecompiled(
     source: formatNestedSlice(fullSource, sourceRelPath, span),
     compilationUnit: fullSource,
     sourceAvailable: false,
+    sourceLanguage: 'java',
     className: opts.className,
     provenance: { ...provenance, nestedIn: opts.className.slice(0, dollar) },
   };

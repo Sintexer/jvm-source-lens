@@ -43,8 +43,8 @@ export function buildClassNotFoundMessage(ctx: ClassNotFoundContext): string {
       ? ` while looking up method ${JSON.stringify(ctx.methodName)}`
       : '';
   const parts = [
-    `Classpath resolved successfully${scope}; scanned ${ctx.searchedArtifactCount} classpath edge(s) (JARs, inter-project outputs, local file JARs, and this module's src/main/java` +
-      `${ctx.includeTest ? ' and src/test/java' : ''}) but found no .class for ${JSON.stringify(ctx.className)}${methodBit}.`,
+    `Classpath resolved successfully${scope}; scanned ${ctx.searchedArtifactCount} classpath edge(s) (JARs, inter-project outputs, local file JARs, and this module's src/main source roots` +
+      `${ctx.includeTest ? ' and src/test source roots' : ''}) but found no .class for ${JSON.stringify(ctx.className)}${methodBit}.`,
     'This is not a transient failure — the type is absent from the selected scope.',
   ];
   if (looksLikeSimpleName(ctx.className)) {

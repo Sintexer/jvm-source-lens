@@ -3,6 +3,7 @@ import type {
   ClassSourceError,
   ClassSourceLookupResult,
   DecompiledProvenance,
+  SourceLanguage,
   InterprojectProvenance,
   SourcesJarProvenance,
 } from './extractor/class-source-types.js';
@@ -83,6 +84,7 @@ export type McpClassSourceSuccessPayload = {
   found: true;
   source: string;
   sourceAvailable: boolean;
+  sourceLanguage: SourceLanguage;
   className: string;
   provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
   excerpt?: SourceExcerptInfo;
@@ -467,6 +469,7 @@ export function mcpToolResultFromClassSource(result: ClassSourceLookupResult, qu
       found: true,
       source: result.source,
       sourceAvailable: result.sourceAvailable,
+      sourceLanguage: result.sourceLanguage,
       className: result.className,
       provenance: result.provenance,
       ...(result.excerpt !== undefined ? { excerpt: result.excerpt } : {}),

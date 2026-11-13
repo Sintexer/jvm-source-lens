@@ -32,6 +32,7 @@ const successResult = {
   ok: true as const,
   source: 'class Foo {}\n',
   sourceAvailable: true as const,
+  sourceLanguage: 'java' as const,
   className: 'com.example.Foo',
   provenance: {
     kind: 'sourcesJar' as const,
@@ -46,6 +47,7 @@ describe('writeCliGetResult', () => {
     writeCliGetResult(successResult);
     expect(stderrMessages.length).toBe(1);
     expect(stderrMessages[0]).toContain('"sourceAvailable":true');
+    expect(stderrMessages[0]).toContain('"sourceLanguage":"java"');
   });
 
   test('quiet mode skips success metadata on stderr', () => {
@@ -60,6 +62,7 @@ describe('writeCliGetResult', () => {
       ok: true,
       source: 'class Foo {}\n',
       sourceAvailable: false,
+      sourceLanguage: 'java',
       className: 'com.example.Foo',
       provenance: {
         kind: 'decompiled',
@@ -111,11 +114,13 @@ describe('writeCliGetResult', () => {
     const parsed = JSON.parse(stdoutJsonLines[0]!) as {
       source: string;
       sourceAvailable: boolean;
+      sourceLanguage: string;
       className: string;
       provenance: unknown;
     };
     expect(parsed.source).toBe(successResult.source);
     expect(parsed.sourceAvailable).toBe(true);
+    expect(parsed.sourceLanguage).toBe('java');
     expect(parsed.className).toBe('com.example.Foo');
     expect(parsed.provenance).toEqual(successResult.provenance);
   });

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  candidateInterprojectSourcePaths,
   interprojectBytecodeRootSuffixes,
   resolveInterprojectClasspathRootForBinary,
 } from './interproject-paths.js';
@@ -22,4 +23,19 @@ test('resolveInterprojectClasspathRootForBinary finds kotlin main output', () =>
   fs.writeFileSync(path.join(root, classRel), 'x');
 
   expect(resolveInterprojectClasspathRootForBinary(dir, classRel, false)).toBe(root);
+});
+
+test('shouldTryKotlinScalaAndGroovyWhenTheRequestIsJava', () => {
+  const paths = candidateInterprojectSourcePaths('/mod', 'com/acme/Foo.java', true).map((c) => c.absolutePath);
+  const rels = [
+    'src/main/java/com/acme/Foo.java',
+    'src/main/kotlin/com/acme/Foo.kt',
+    'src/main/scala/com/acme/Foo.scala',
+    'src/main/groovy/com/acme/Foo.groovy',
+    'src/test/java/com/acme/Foo.java',
+    'src/test/kotlin/com/acme/Foo.kt',
+    'src/test/scala/com/acme/Foo.scala',
+    'src/test/groovy/com/acme/Foo.groovy',
+  ];
+  expect(paths).toEqual(rels.map((rel) => path.join('/mod', rel)));
 });

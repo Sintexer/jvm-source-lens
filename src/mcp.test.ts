@@ -90,6 +90,7 @@ test('mcpClassSourceToolPayloadSchema accepts interproject provenance', () => {
     ...outcomeOk,
     source: 'package x;\npublic class Y {}\n',
     sourceAvailable: true,
+    sourceLanguage: 'java',
     className: 'x.Y',
     provenance: {
       kind: 'interproject',
@@ -221,6 +222,7 @@ test('mcpClassSourceToolPayloadSchema accepts success with found=true', () => {
     ...outcomeOk,
     source: 'public class T {}',
     sourceAvailable: true,
+    sourceLanguage: 'java',
     className: 'com.example.T',
     provenance: {
       kind: 'sourcesJar',

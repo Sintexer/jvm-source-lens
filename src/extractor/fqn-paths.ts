@@ -73,3 +73,21 @@ export function fqnToSourceCandidates(fqn: string): SourceCandidates {
   }
   return { ok: true, classRelPath: base.classRelPath, sourceRelPaths };
 }
+
+/**
+ * Puts `<package dir>/<sourceFile>` (the class-file `SourceFile` attribute) before the
+ * name-based candidates. Without `sourceFile` the candidates are returned unchanged.
+ */
+export function withSourceFileCandidate(
+  fqn: string,
+  sourceRelPaths: readonly string[],
+  sourceFile: string | null,
+): string[] {
+  if (sourceFile === null) {
+    return [...sourceRelPaths];
+  }
+  const lastDot = fqn.lastIndexOf('.');
+  const dir = lastDot === -1 ? '' : `${fqn.slice(0, lastDot).replaceAll('.', '/')}/`;
+  const first = `${dir}${sourceFile}`;
+  return [first, ...sourceRelPaths.filter((p) => p !== first)];
+}

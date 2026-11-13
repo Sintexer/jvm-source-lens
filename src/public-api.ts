@@ -27,6 +27,7 @@ export type {
   ClassSourceLookupResult,
   DecompiledProvenance,
   ResolveSourcesJarFn,
+  SourceLanguage,
   SourcesJarProvenance,
 } from './extractor/class-source-types.js';
 export { decompileExternalClass } from './decompiler/index.js';

@@ -6,6 +6,7 @@ import { strToU8, zipSync } from 'fflate';
 import { parseJavaTypeMetadata } from '../class-structure/parse-java-type-metadata.js';
 import type { ResolutionOutput, ResolvedArtifact } from '../resolvers/resolution-output.js';
 import { tryReadJavaSourceFromClasspath } from './read-java-source-from-classpath.js';
+import { buildClassFile } from './test-class-file.js';
 
 function artifact(partial: Partial<ResolvedArtifact> & Pick<ResolvedArtifact, 'group' | 'name'>): ResolvedArtifact {
   return {
@@ -73,5 +74,54 @@ describe('tryReadJavaSourceFromClasspath nested type', () => {
     expect(meta!.methods.find((m) => m.jvmMethodName === 'build')?.parameters.map((p) => p.name)).toEqual([
       'expectedSize',
     ]);
+  });
+});
+
+describe('tryReadJavaSourceFromClasspath SourceFile attribute', () => {
+  function libWith(dir: string, classRel: string, internalName: string, sourceFile: string, sources: Record<string, string>) {
+    const binJar = path.join(dir, 'lib.jar');
+    const sourcesJar = path.join(dir, 'lib-sources.jar');
+    fs.writeFileSync(binJar, zipSync({ [classRel]: buildClassFile({ internalName, sourceFile }) }));
+    fs.writeFileSync(
+      sourcesJar,
+      zipSync(Object.fromEntries(Object.entries(sources).map(([k, v]) => [k, strToU8(v)]))),
+    );
+    return baseOutput(dir, [artifact({ group: 'com.x', name: 'lib', jarPath: binJar, sourcesJarPath: sourcesJar })]);
+  }
+
+  test('shouldNotHitWhenSourceFileIsKotlin', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-read-src-'));
+    const out = libWith(dir, 'com/x/FooKt.class', 'com/x/FooKt', 'Foo.kt', {
+      'com/x/Foo.kt': 'package com.x\nfun hello() = 1\n',
+    });
+    const r = await tryReadJavaSourceFromClasspath(out, { className: 'com.x.FooKt' });
+    expect(r).toEqual({ ok: true, hit: false });
+  });
+
+  test('shouldReturnPrimaryFileWhenSecondaryTopLevelClassIsRequested', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-read-src-'));
+    const java = 'package com.x;\npublic class Primary {}\n\nclass Helper {\n  void help(int times) {}\n}\n';
+    const out = libWith(dir, 'com/x/Helper.class', 'com/x/Helper', 'Primary.java', { 'com/x/Primary.java': java });
+    const r = await tryReadJavaSourceFromClasspath(out, { className: 'com.x.Helper' });
+    expect(r.ok).toBe(true);
+    if (!r.ok || !r.hit) {
+      throw new Error('expected a source hit');
+    }
+    expect(r.sourceText).toBe(java);
+    if (r.provenance.kind === 'sourcesJar') {
+      expect(r.provenance.sourceRelativePath).toBe('com/x/Primary.java');
+      expect(r.provenance.nestedIn).toBeUndefined();
+    }
+    const meta = parseJavaTypeMetadata(r.sourceText, 'com.x.Helper');
+    expect(meta!.methods.find((m) => m.jvmMethodName === 'help')?.parameters.map((p) => p.name)).toEqual(['times']);
+  });
+
+  test('shouldNotHitWhenLocalModuleSourceIsKotlin', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-read-src-'));
+    const ktPath = path.join(dir, 'src/main/kotlin/com/x/Foo.kt');
+    fs.mkdirSync(path.dirname(ktPath), { recursive: true });
+    fs.writeFileSync(ktPath, 'package com.x\nfun hello() = 1\n');
+    const r = await tryReadJavaSourceFromClasspath(baseOutput(dir, []), { className: 'com.x.Foo' });
+    expect(r.ok ? r.hit : false).toBe(false);
   });
 });

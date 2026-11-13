@@ -16,6 +16,7 @@ function extracted(source: string, className = 'com.example.Evil'): Extract<Clas
     ok: true,
     source,
     sourceAvailable: true,
+    sourceLanguage: 'java',
     className,
     provenance: {
       kind: 'sourcesJar',

@@ -55,25 +55,26 @@ export function formatNestedSlice(
   return header + source.slice(span.start, span.closeBrace + 1);
 }
 
-function withNestedProvenance(
+function withSourceProvenance(
   result: ClassSourceSuccess,
-  nestedIn: string,
+  nestedIn: string | null,
   sourceRelPath: string,
 ): ClassSourceSuccess {
   const p = result.provenance;
   if (p.kind === 'sourcesJar' || p.kind === 'interproject') {
     return {
       ...result,
-      provenance: { ...p, nestedIn, sourceRelativePath: sourceRelPath },
+      provenance: { ...p, ...(nestedIn === null ? {} : { nestedIn }), sourceRelativePath: sourceRelPath },
     };
   }
   return result;
 }
 
 /**
- * When `className` is nested and `sourceRelPath` is an enclosing file, replace `source`
- * with the nested slice and keep the file on `compilationUnit`.
- * Returns null when the enclosing file does not declare that type (try the next candidate).
+ * When `sourceRelPath` is not the file named after `className` (an enclosing file, or the
+ * `SourceFile` of a secondary top-level class), replace `source` with the declaration slice
+ * and keep the file on `compilationUnit`. Non-Java files are returned whole.
+ * Returns null when a Java file does not declare that type (try the next candidate).
  * An exact `Outer$Inner.java` hit is returned unsliced, with `nestedIn` set.
  */
 export function presentNestedSource(
@@ -83,12 +84,12 @@ export function presentNestedSource(
   exactSourceRelPath: string,
 ): ClassSourceSuccess | null {
   const dollar = className.lastIndexOf('$');
-  if (dollar < 0) {
-    return result;
-  }
-  const nestedIn = className.slice(0, dollar);
-  const marked = withNestedProvenance(result, nestedIn, sourceRelPath);
+  const nestedIn = dollar < 0 ? null : className.slice(0, dollar);
   if (sourceRelPath === exactSourceRelPath) {
+    return nestedIn === null ? result : withSourceProvenance(result, nestedIn, sourceRelPath);
+  }
+  const marked = withSourceProvenance(result, nestedIn, sourceRelPath);
+  if (!sourceRelPath.endsWith('.java')) {
     return marked;
   }
   const span = locateTypeDeclaration(result.source, nestedTypeNames(className));

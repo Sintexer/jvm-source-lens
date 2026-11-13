@@ -45,7 +45,7 @@ export type ClassOwner = { modulePath: string; identity: string; label: string; 
 
 type ProbeScope = Pick<ClassSourceLookupOptions, 'className' | 'configuration' | 'includeTest'>;
 
-/** Inter-project classes are often source-only (no `build/classes` yet), so also look for the `.java`. */
+/** Inter-project classes are often source-only (no `build/classes` yet), so also look for source files. */
 function probeJavaSourceOwner(
   output: ResolutionOutput,
   moduleName: string,

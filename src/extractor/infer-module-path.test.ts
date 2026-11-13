@@ -139,6 +139,31 @@ describe('inferModulePath', () => {
     expect(r).toEqual({ kind: 'use', modulePath: ':app', inferred: true });
   });
 
+  test('shouldFindSourceOnlyKotlinClassWhenFileIsInKotlinRoot', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-infer-'));
+    const coreDir = path.join(dir, 'core');
+    const ktPath = path.join(coreDir, 'src/main/kotlin/com/example/Greeter.kt');
+    fs.mkdirSync(path.dirname(ktPath), { recursive: true });
+    fs.writeFileSync(ktPath, 'package com.example\nclass Greeter\n');
+
+    const out = multiModuleOutput(dir, {
+      ':app': [
+        artifact({
+          group: 'project',
+          name: 'core',
+          version: null,
+          type: 'project',
+          origin: 'interproject',
+          interproject: { moduleName: ':core', modulePath: coreDir },
+        }),
+      ],
+      ':core': [],
+    });
+
+    const r = inferModulePath(out, { className: 'com.example.Greeter' });
+    expect(r).toEqual({ kind: 'use', modulePath: ':app', inferred: true });
+  });
+
   test('reports none with all module names and summed searched count when no owner exists', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-infer-'));
     const jarA = jarWithClass(dir, 'a.jar', 'com/other/A.class');

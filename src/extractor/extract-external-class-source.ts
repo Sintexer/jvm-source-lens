@@ -1,11 +1,18 @@
 import { decompileExternalClass } from '../decompiler/decompile-external-class.js';
-import type { ArtifactCoordinates, ClassSourceLookupOptions, ClassSourceLookupResult } from './class-source-types.js';
+import {
+  sourceLanguageFromPath,
+  type ArtifactCoordinates,
+  type ClassSourceLookupOptions,
+  type ClassSourceLookupResult,
+} from './class-source-types.js';
 import { isClasspathBinaryJarArtifact, isExternalJarArtifact } from './class-source-types.js';
 import { findExternalJarAmongArtifacts } from './find-external-class-jar.js';
-import { fqnToSourceCandidates } from './fqn-paths.js';
+import { readJarClassSourceFile } from './class-file-source-file.js';
+import { fqnToSourceCandidates, withSourceFileCandidate } from './fqn-paths.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
 import { tryReadLocalModuleJavaSource } from './local-module-sources.js';
 import { presentNestedSource, anonymousOrLocalClassError } from './nested-class-source.js';
+import { moduleTreeSourceRelPaths } from './interproject-paths.js';
 import { readInterprojectJavaIfPresent } from './read-interproject-java-source.js';
 import type { ResolutionOutput, ResolvedArtifact } from '../resolvers/resolution-output.js';
 import { readZipEntryUtf8 } from './zip-entry.js';
@@ -22,6 +29,7 @@ function tryReadSourceFromJar(
       ok: true,
       source: r.text,
       sourceAvailable: true,
+      sourceLanguage: sourceLanguageFromPath(sourceRelPath),
       className,
       provenance: {
         kind: 'sourcesJar',
@@ -36,6 +44,13 @@ function tryReadSourceFromJar(
   return null;
 }
 
+function openedSourceRel(hit: ClassSourceLookupResult, requested: string): string {
+  if (hit.ok && hit.provenance.kind === 'interproject') {
+    return hit.provenance.sourceRelativePath;
+  }
+  return requested;
+}
+
 function acceptSourceHit(
   hit: ClassSourceLookupResult,
   className: string,
@@ -45,15 +60,15 @@ function acceptSourceHit(
   if (!hit.ok) {
     return hit;
   }
-  return presentNestedSource(hit, className, sourceRelPath, exactSourceRelPath);
+  return presentNestedSource(hit, className, openedSourceRel(hit, sourceRelPath), exactSourceRelPath);
 }
 
 async function readFirstCandidate(
   sourceRelPaths: readonly string[],
   read: (sourceRelPath: string) => Promise<ClassSourceLookupResult | null> | ClassSourceLookupResult | null,
   className: string,
+  exact: string = sourceRelPaths[0]!,
 ): Promise<ClassSourceLookupResult | null> {
-  const exact = sourceRelPaths[0]!;
   for (const rel of sourceRelPaths) {
     const hit = await read(rel);
     if (hit === null) {
@@ -76,7 +91,7 @@ function readCachedSources(
   if (sourcesJarPath === null || sourcesJarPath.length === 0) {
     return null;
   }
-  return readSourcesJarCandidates(sourcesJarPath, sourceRelPaths, className, {
+  return readSourcesJarCandidates(sourcesJarPath, sourceRelPaths, sourceRelPaths[0]!, className, {
     group: artifact.group,
     name: artifact.name,
     version: artifact.version,
@@ -86,10 +101,10 @@ function readCachedSources(
 function readSourcesJarCandidates(
   sourcesJarPath: string,
   sourceRelPaths: readonly string[],
+  exact: string,
   className: string,
   coordinates: ArtifactCoordinates,
 ): ClassSourceLookupResult | null {
-  const exact = sourceRelPaths[0]!;
   for (const rel of sourceRelPaths) {
     const hit = tryReadSourceFromJar(sourcesJarPath, rel, className, coordinates);
     if (hit === null) {
@@ -132,20 +147,33 @@ export async function extractExternalClassSource(
   }
   const includeTest = Boolean(opts.includeTest);
 
+  const exact = paths.sourceRelPaths[0]!;
   const local = await readFirstCandidate(
-    paths.sourceRelPaths,
+    moduleTreeSourceRelPaths(picked.module.path, opts.className, paths.classRelPath, paths.sourceRelPaths, includeTest),
     (rel) => tryReadLocalModuleJavaSource(picked.module, rel, opts.className, includeTest),
     opts.className,
+    exact,
   );
   if (local !== null) {
     return local;
   }
 
   for (const edge of picked.configuration.artifacts) {
+    const rels =
+      edge.origin === 'interproject' && edge.interproject
+        ? moduleTreeSourceRelPaths(
+            edge.interproject.modulePath,
+            opts.className,
+            paths.classRelPath,
+            paths.sourceRelPaths,
+            includeTest,
+          )
+        : paths.sourceRelPaths;
     const ip = await readFirstCandidate(
-      paths.sourceRelPaths,
+      rels,
       (rel) => readInterprojectJavaIfPresent(edge, rel, opts.className, includeTest),
       opts.className,
+      exact,
     );
     if (ip !== null) {
       return ip;
@@ -186,7 +214,8 @@ export async function extractExternalClassSource(
   if (sourcesJarPath !== null && sourcesJarPath.length > 0) {
     const fromResolved = readSourcesJarCandidates(
       sourcesJarPath,
-      paths.sourceRelPaths,
+      withSourceFileCandidate(opts.className, paths.sourceRelPaths, readJarClassSourceFile(hit.classpath, paths.classRelPath)),
+      paths.sourceRelPaths[0]!,
       opts.className,
       coordinates,
     );

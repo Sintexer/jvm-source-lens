@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { fqnToSourceCandidates, fqnToZipRelPaths } from './fqn-paths.js';
+import { fqnToSourceCandidates, fqnToZipRelPaths, withSourceFileCandidate } from './fqn-paths.js';
 
 describe('fqnToZipRelPaths', () => {
   test('maps top-level class in default package', () => {
@@ -69,5 +69,21 @@ describe('fqnToSourceCandidates', () => {
         'com/example/Outer.java',
       ]);
     }
+  });
+});
+
+describe('withSourceFileCandidate', () => {
+  test('puts the SourceFile path first and removes the duplicate', () => {
+    expect(
+      withSourceFileCandidate('com.example.Outer$Inner', ['com/example/Outer$Inner.java', 'com/example/Outer.java'], 'Outer.java'),
+    ).toEqual(['com/example/Outer.java', 'com/example/Outer$Inner.java']);
+  });
+
+  test('adds a Kotlin file in the default package', () => {
+    expect(withSourceFileCandidate('FooKt', ['FooKt.java'], 'Foo.kt')).toEqual(['Foo.kt', 'FooKt.java']);
+  });
+
+  test('keeps the candidates without a SourceFile', () => {
+    expect(withSourceFileCandidate('com.x.Foo', ['com/x/Foo.java'], null)).toEqual(['com/x/Foo.java']);
   });
 });

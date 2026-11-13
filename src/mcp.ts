@@ -218,6 +218,7 @@ export const mcpClassSourceToolPayloadSchema = z.union([
     ...outcomeOnlySuccessSchema,
     source: z.string(),
     sourceAvailable: z.boolean(),
+    sourceLanguage: z.enum(['java', 'kotlin', 'scala', 'groovy']),
     className: z.string(),
     provenance: provenanceSchema,
     excerpt: z

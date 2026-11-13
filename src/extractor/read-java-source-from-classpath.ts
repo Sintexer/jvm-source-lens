@@ -8,10 +8,12 @@ import type {
 import { isClasspathBinaryJarArtifact, isExternalJarArtifact } from './class-source-types.js';
 import { locateTypeDeclaration } from '../class-structure/locate-type-declaration.js';
 import { findExternalJarAmongArtifacts } from './find-external-class-jar.js';
-import { fqnToSourceCandidates } from './fqn-paths.js';
+import { readJarClassSourceFile } from './class-file-source-file.js';
+import { fqnToSourceCandidates, withSourceFileCandidate } from './fqn-paths.js';
 import { nestedTypeNames, anonymousOrLocalClassError } from './nested-class-source.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
 import { tryReadLocalModuleJavaSource } from './local-module-sources.js';
+import { moduleTreeSourceRelPaths } from './interproject-paths.js';
 import { readInterprojectJavaIfPresent } from './read-interproject-java-source.js';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
 import { readZipEntryUtf8 } from './zip-entry.js';
@@ -51,21 +53,22 @@ function withNestedReadProvenance(
   provenance: SourcesJarProvenance | InterprojectProvenance,
   className: string,
   sourceRelPath: string,
+  exactSourceRelPath: string,
 ): SourcesJarProvenance | InterprojectProvenance {
   const dollar = className.lastIndexOf('$');
-  if (dollar < 0) {
-    return provenance;
+  if (dollar >= 0) {
+    return { ...provenance, nestedIn: className.slice(0, dollar), sourceRelativePath: sourceRelPath };
   }
-  return {
-    ...provenance,
-    nestedIn: className.slice(0, dollar),
-    sourceRelativePath: sourceRelPath,
-  };
+  if (sourceRelPath !== exactSourceRelPath) {
+    return { ...provenance, sourceRelativePath: sourceRelPath };
+  }
+  return provenance;
 }
 
 /**
- * Full compilation unit for structure and signatures. An enclosing file is kept only when it
- * declares the nested type. The text is not sliced; the parser walks the nested binary name.
+ * Full compilation unit for structure and signatures. A file with another name (enclosing file,
+ * or the `SourceFile` of a secondary top-level class) is kept only when it declares the type.
+ * The text is not sliced; the parser walks the nested binary name.
  */
 function acceptFullCompilationUnit(
   hit: SourceHit,
@@ -73,16 +76,14 @@ function acceptFullCompilationUnit(
   sourceRelPath: string,
   exactSourceRelPath: string,
 ): TryReadJavaSourceFromClasspathResult | null {
-  if (sourceRelPath !== exactSourceRelPath && className.includes('$')) {
-    if (!locateTypeDeclaration(hit.source, nestedTypeNames(className))) {
-      return null;
-    }
+  if (sourceRelPath !== exactSourceRelPath && !locateTypeDeclaration(hit.source, nestedTypeNames(className))) {
+    return null;
   }
   return {
     ok: true,
     hit: true,
     sourceText: hit.source,
-    provenance: withNestedReadProvenance(hit.provenance, className, sourceRelPath),
+    provenance: withNestedReadProvenance(hit.provenance, className, sourceRelPath, exactSourceRelPath),
   };
 }
 
@@ -90,8 +91,8 @@ async function readFirstCandidate(
   sourceRelPaths: readonly string[],
   className: string,
   read: (sourceRelPath: string) => Promise<SourceHit | { ok: false; error: ClassSourceError } | null>,
+  exact: string = sourceRelPaths[0]!,
 ): Promise<TryReadJavaSourceFromClasspathResult | null> {
-  const exact = sourceRelPaths[0]!;
   for (const rel of sourceRelPaths) {
     const hit = await read(rel);
     if (hit === null) {
@@ -136,26 +137,43 @@ export async function tryReadJavaSourceFromClasspath(
     return { ok: false, error: paths.error };
   }
   const includeTest = Boolean(opts.includeTest);
+  const exact = paths.sourceRelPaths[0]!;
 
-  const local = await readFirstCandidate(paths.sourceRelPaths, opts.className, async (rel) => {
-    const read = await tryReadLocalModuleJavaSource(picked.module, rel, opts.className, includeTest);
-    if (read === null) {
-      return null;
-    }
-    if (!read.ok) {
-      return { ok: false, error: read.error };
-    }
-    if (read.provenance.kind !== 'interproject') {
-      return null;
-    }
-    return { ok: true, source: read.source, provenance: read.provenance };
-  });
+  const local = await readFirstCandidate(
+    moduleTreeSourceRelPaths(picked.module.path, opts.className, paths.classRelPath, paths.sourceRelPaths, includeTest, true),
+    opts.className,
+    async (rel) => {
+      const read = await tryReadLocalModuleJavaSource(picked.module, rel, opts.className, includeTest);
+      if (read === null) {
+        return null;
+      }
+      if (!read.ok) {
+        return { ok: false, error: read.error };
+      }
+      if (read.provenance.kind !== 'interproject' || !read.provenance.sourceRelativePath.endsWith('.java')) {
+        return null;
+      }
+      return { ok: true, source: read.source, provenance: read.provenance };
+    },
+    exact,
+  );
   if (local !== null) {
     return local;
   }
 
   for (const edge of picked.configuration.artifacts) {
-    const ip = await readFirstCandidate(paths.sourceRelPaths, opts.className, async (rel) => {
+    const rels =
+      edge.origin === 'interproject' && edge.interproject
+        ? moduleTreeSourceRelPaths(
+            edge.interproject.modulePath,
+            opts.className,
+            paths.classRelPath,
+            paths.sourceRelPaths,
+            includeTest,
+            true,
+          )
+        : paths.sourceRelPaths;
+    const ip = await readFirstCandidate(rels, opts.className, async (rel) => {
       const read = await readInterprojectJavaIfPresent(edge, rel, opts.className, includeTest);
       if (read === null) {
         return null;
@@ -163,11 +181,11 @@ export async function tryReadJavaSourceFromClasspath(
       if (!read.ok) {
         return { ok: false, error: read.error };
       }
-      if (read.provenance.kind !== 'interproject') {
+      if (read.provenance.kind !== 'interproject' || !read.provenance.sourceRelativePath.endsWith('.java')) {
         return null;
       }
       return { ok: true, source: read.source, provenance: read.provenance };
-    });
+    }, exact);
     if (ip !== null) {
       return ip;
     }
@@ -215,8 +233,13 @@ export async function tryReadJavaSourceFromClasspath(
   }
 
   if (sourcesJarPath !== null && sourcesJarPath.length > 0) {
-    const fromResolved = await readFirstCandidate(paths.sourceRelPaths, opts.className, async (rel) =>
-      tryReadSourceFromJar(sourcesJarPath!, rel, opts.className, coordinates),
+    const sourceFile = readJarClassSourceFile(hit.classpath, paths.classRelPath);
+    const javaSourceFile = sourceFile !== null && sourceFile.endsWith('.java') ? sourceFile : null;
+    const fromResolved = await readFirstCandidate(
+      withSourceFileCandidate(opts.className, paths.sourceRelPaths, javaSourceFile),
+      opts.className,
+      async (rel) => tryReadSourceFromJar(sourcesJarPath!, rel, opts.className, coordinates),
+      paths.sourceRelPaths[0]!,
     );
     if (fromResolved !== null) {
       return fromResolved;

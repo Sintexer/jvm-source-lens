@@ -9,8 +9,10 @@ import {
 } from './java-source-search-text.js';
 import { listFqnsFromJarClassEntries } from './jar-class-fqns.js';
 import { statKeyForJar, type JarFqnCacheFileV1 } from './jar-fqn-cache.js';
-import { resolveInterprojectJavaAbsolutePath } from './interproject-java-path.js';
-import { listFqnsFromInterprojectSources } from './interproject-source-fqns.js';
+import {
+  listFqnsFromInterprojectSources,
+  type ListedInterprojectSource,
+} from './interproject-source-fqns.js';
 import {
   CLASS_SEARCH_INDEX_FORMAT_VERSION,
   type ClassSearchIndexEntry,
@@ -74,50 +76,65 @@ export function buildClassSearchIndex(
   let skippedArtifacts = 0;
   let sourceEnrichedEntries = 0;
 
-  const localListed = listFqnsFromInterprojectSources(module.path, includeTest);
-  if (localListed.ok) {
-    const localArtifact: ResolvedArtifact = {
-      group: 'project',
-      name: module.name,
-      version: null,
-      type: 'project',
-      jarPath: null,
-      sourcesJarPath: null,
-      origin: 'interproject',
-      direct: true,
-      interproject: { moduleName: module.name, modulePath: module.path },
-    };
-    for (const fqn of new Set(localListed.fqns)) {
+  const appendSourceFiles = (
+    files: readonly ListedInterprojectSource[],
+    artifact: ResolvedArtifact,
+    moduleRoot: string,
+    interprojectModuleName: string,
+  ): void => {
+    const seen = new Set<string>();
+    for (const file of files) {
+      if (seen.has(file.fqn)) {
+        continue;
+      }
+      seen.add(file.fqn);
       let blob: string | null = null;
-      const abs = resolveInterprojectJavaAbsolutePath(module.path, fqn, includeTest);
-      if (abs !== null) {
-        try {
-          const text = fs.readFileSync(abs, 'utf8');
-          const b = buildJavaSourceSearchBlob(text, fqn);
-          if (b.length > 0) {
-            blob = b;
-          }
-        } catch {
-          /* omit enrichment */
+      try {
+        const text = fs.readFileSync(file.absolutePath, 'utf8');
+        const b = buildJavaSourceSearchBlob(text, file.fqn);
+        if (b.length > 0) {
+          blob = b;
         }
+      } catch {
+        /* omit enrichment */
       }
       if (blob !== null) {
         sourceEnrichedEntries += 1;
       }
       entries.push(
         makeEntry(
-          fqn,
-          localArtifact,
+          file.fqn,
+          artifact,
           module.name,
           configuration.name,
           'interproject',
           null,
-          module.path,
-          module.name,
+          moduleRoot,
+          interprojectModuleName,
           blob,
         ),
       );
     }
+  };
+
+  const localListed = listFqnsFromInterprojectSources(module.path, includeTest);
+  if (localListed.ok) {
+    appendSourceFiles(
+      localListed.files,
+      {
+        group: 'project',
+        name: module.name,
+        version: null,
+        type: 'project',
+        jarPath: null,
+        sourcesJarPath: null,
+        origin: 'interproject',
+        direct: true,
+        interproject: { moduleName: module.name, modulePath: module.path },
+      },
+      module.path,
+      module.name,
+    );
   }
 
   for (const a of configuration.artifacts) {
@@ -183,37 +200,7 @@ export function buildClassSearchIndex(
         skippedArtifacts += 1;
         continue;
       }
-      for (const fqn of new Set(listed.fqns)) {
-        let blob: string | null = null;
-        const abs = resolveInterprojectJavaAbsolutePath(root, fqn, includeTest);
-        if (abs !== null) {
-          try {
-            const text = fs.readFileSync(abs, 'utf8');
-            const b = buildJavaSourceSearchBlob(text, fqn);
-            if (b.length > 0) {
-              blob = b;
-            }
-          } catch {
-            /* omit enrichment */
-          }
-        }
-        if (blob !== null) {
-          sourceEnrichedEntries += 1;
-        }
-        entries.push(
-          makeEntry(
-            fqn,
-            a,
-            module.name,
-            configuration.name,
-            'interproject',
-            null,
-            root,
-            a.interproject.moduleName,
-            blob,
-          ),
-        );
-      }
+      appendSourceFiles(listed.files, a, root, a.interproject.moduleName);
       continue;
     }
 

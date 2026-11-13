@@ -2,6 +2,25 @@ import type { ResolvedArtifact } from '../resolvers/resolution-output.js';
 import type { DecompileExternalClassFn } from '../decompiler/decompile-external-class.js';
 import type { SourceExcerptInfo } from '../source-excerpt.js';
 
+export type SourceLanguage = 'java' | 'kotlin' | 'scala' | 'groovy';
+
+const SOURCE_LANGUAGE_BY_EXT: Record<string, SourceLanguage> = {
+  '.java': 'java',
+  '.kt': 'kotlin',
+  '.scala': 'scala',
+  '.groovy': 'groovy',
+};
+
+/** Language of the file that was read. An unknown extension, including CFR output, is `java`. */
+export function sourceLanguageFromPath(relPath: string | null | undefined): SourceLanguage {
+  if (relPath === null || relPath === undefined) {
+    return 'java';
+  }
+  const dot = relPath.lastIndexOf('.');
+  const ext = dot < 0 ? '' : relPath.slice(dot).toLowerCase();
+  return SOURCE_LANGUAGE_BY_EXT[ext] ?? 'java';
+}
+
 export type ArtifactCoordinates = {
   group: string;
   name: string;
@@ -14,7 +33,7 @@ export type SourcesJarProvenance = {
   jarPath: string;
   /** Enclosing binary name when the type is nested (`com.foo.Outer` for `Outer$Inner`). */
   nestedIn?: string;
-  /** Zip entry that was read, when the type is nested. */
+  /** Zip entry that was read, when the type is nested or its file has another name (`SourceFile`). */
   sourceRelativePath?: string;
 };
 
@@ -152,6 +171,8 @@ export type ClassSourceLookupResult =
       ok: true;
       source: string;
       sourceAvailable: boolean;
+      /** Language of `source`. Decompiled text is `java`. */
+      sourceLanguage: SourceLanguage;
       className: string;
       provenance: SourcesJarProvenance | DecompiledProvenance | InterprojectProvenance;
       excerpt?: SourceExcerptInfo;

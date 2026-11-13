@@ -23,6 +23,7 @@ export function formatClassSourceCompactText(result: Extract<ClassSourceLookupRe
     '\n---\n' +
     formatProvenanceLine(result.provenance) +
     `\nsourceAvailable: ${result.sourceAvailable}` +
+    `\nsourceLanguage: ${result.sourceLanguage}` +
     excerpt +
     trunc
   );

@@ -98,6 +98,39 @@ describe('local module test sources', () => {
     }
   });
 
+  test('shouldReturnKotlinSourceWhenLocalModuleHasKtFile', async () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-local-'));
+    const ktPath = path.join(dir, 'src/main/kotlin/com/app/Greeter.kt');
+    fs.mkdirSync(path.dirname(ktPath), { recursive: true });
+    const kt = 'package com.app\n\nclass Greeter {\n  fun hello() = "hi"\n}\n';
+    fs.writeFileSync(ktPath, kt);
+
+    const output: ResolutionOutput = {
+      schemaVersion: '1.1',
+      resolvedAt: '2020-01-01T00:00:00Z',
+      buildSystem: { type: 'gradle', version: '8.0', wrapper: true },
+      projectRoot: dir,
+      modules: [
+        {
+          name: ':app',
+          path: dir,
+          configurations: [{ name: 'compileClasspath', scope: 'compile', artifacts: [] }],
+        },
+      ],
+      errors: [],
+    };
+
+    const r = await extractExternalClassSource(output, { className: 'com.app.Greeter', modulePath: ':app' });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.provenance.kind === 'interproject') {
+      expect(r.source).toBe(kt);
+      expect(r.sourceAvailable).toBe(true);
+      expect(r.sourceLanguage).toBe('kotlin');
+      expect(r.provenance.sourceRelativePath).toBe('com/app/Greeter.kt');
+      expect(r.provenance.absoluteSourcePath).toBe(ktPath);
+    }
+  });
+
   test('pickResolvedConfiguration falls back to jvmTestCompileClasspath', () => {
     const output: ResolutionOutput = {
       schemaVersion: '1.1',

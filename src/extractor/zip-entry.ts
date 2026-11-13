@@ -26,6 +26,19 @@ function zipReadError(jarPath: string, entryRelPath: string, message: string): C
  * archive is not fully expanded into memory.
  */
 export function readZipEntryUtf8(jarAbsPath: string, entryRelPath: string): ReadZipUtf8Result {
+  const r = readZipEntryBytes(jarAbsPath, entryRelPath);
+  if (!r.ok) {
+    return r;
+  }
+  return { ok: true, text: new TextDecoder('utf-8', { fatal: false }).decode(r.bytes) };
+}
+
+export type ReadZipBytesResult =
+  | { ok: true; bytes: Uint8Array }
+  | { ok: false; reason: 'missing' }
+  | { ok: false; reason: 'error'; error: ClassSourceError };
+
+export function readZipEntryBytes(jarAbsPath: string, entryRelPath: string): ReadZipBytesResult {
   const want = normalizeZipEntryName(entryRelPath);
   const size = checkJarSize(jarAbsPath);
   if (!size.ok) {
@@ -55,7 +68,7 @@ export function readZipEntryUtf8(jarAbsPath: string, entryRelPath: string): Read
     if (bytes === undefined) {
       return { ok: false, reason: 'missing' };
     }
-    return { ok: true, text: new TextDecoder('utf-8', { fatal: false }).decode(bytes) };
+    return { ok: true, bytes };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return {

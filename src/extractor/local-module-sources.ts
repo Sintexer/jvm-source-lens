@@ -1,11 +1,12 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
-import type {
-  ArtifactCoordinates,
-  ClassSourceLookupResult,
+import {
+  sourceLanguageFromPath,
+  type ArtifactCoordinates,
+  type ClassSourceLookupResult,
 } from './class-source-types.js';
-import { candidateInterprojectJavaSourcePaths } from './interproject-paths.js';
+import { candidateInterprojectSourcePaths } from './interproject-paths.js';
 import { resolveInterprojectClasspathRootForBinary } from './interproject-paths.js';
 import type { ResolvedModule } from '../resolvers/resolution-output.js';
 
@@ -18,8 +19,9 @@ function localModuleCoordinates(module: ResolvedModule): ArtifactCoordinates {
 }
 
 /**
- * Reads `.java` from the selected module's own tree (`src/main/java`, and `src/test/java` when
- * `includeTest`). Sibling inter-project edges do not include the querying module itself.
+ * Reads a source file from the selected module's own tree
+ * (`src/{main,test}/{java,kotlin,scala,groovy}`). A `.java` request also opens the same
+ * path as `.kt`, `.scala` or `.groovy`. Sibling edges do not include the querying module.
  */
 export async function tryReadLocalModuleJavaSource(
   module: ResolvedModule,
@@ -27,24 +29,24 @@ export async function tryReadLocalModuleJavaSource(
   className: string,
   includeTest: boolean,
 ): Promise<ClassSourceLookupResult | null> {
-  const paths = candidateInterprojectJavaSourcePaths(module.path, sourceRelPath, includeTest);
-  for (const absoluteSourcePath of paths) {
-    if (!existsSync(absoluteSourcePath)) {
+  for (const candidate of candidateInterprojectSourcePaths(module.path, sourceRelPath, includeTest)) {
+    if (!existsSync(candidate.absolutePath)) {
       continue;
     }
-    const source = await readFile(absoluteSourcePath, 'utf8');
+    const source = await readFile(candidate.absolutePath, 'utf8');
     return {
       ok: true,
       source,
       sourceAvailable: true,
+      sourceLanguage: sourceLanguageFromPath(candidate.sourceRelPath),
       className,
       provenance: {
         kind: 'interproject',
         coordinates: localModuleCoordinates(module),
         moduleName: module.name,
         moduleRoot: module.path,
-        sourceRelativePath: sourceRelPath,
-        absoluteSourcePath,
+        sourceRelativePath: candidate.sourceRelPath,
+        absoluteSourcePath: candidate.absolutePath,
       },
     };
   }

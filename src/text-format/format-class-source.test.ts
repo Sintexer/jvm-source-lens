@@ -12,6 +12,7 @@ function successResult(
     className: 'q.Child',
     provenance: { kind: 'sourcesJar', coordinates: { group: 'g', name: 'n', version: '1' }, jarPath: '/x.jar' },
     ...overrides,
+    sourceLanguage: overrides.sourceLanguage ?? 'java',
   };
 }
 

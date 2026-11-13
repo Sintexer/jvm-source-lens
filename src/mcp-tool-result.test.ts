@@ -319,6 +319,7 @@ test('success compact returns source text without structuredContent', () => {
       ok: true,
       source: 'class T {}',
       sourceAvailable: true,
+      sourceLanguage: 'java',
       className: 'com.example.T',
       provenance: {
         kind: 'sourcesJar',
@@ -340,6 +341,7 @@ test('success full=true includes structured JSON', () => {
       ok: true,
       source: 'class T {}',
       sourceAvailable: true,
+      sourceLanguage: 'java',
       className: 'com.example.T',
       provenance: {
         kind: 'sourcesJar',
@@ -360,6 +362,7 @@ const okSource = {
   ok: true as const,
   source: 'class Outer {}',
   sourceAvailable: true,
+  sourceLanguage: 'java' as const,
   className: 'com.example.Outer',
   provenance: {
     kind: 'sourcesJar' as const,

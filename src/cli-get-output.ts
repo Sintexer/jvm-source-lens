@@ -28,6 +28,7 @@ export function writeCliGetResult(result: CliGetResult, options?: CliGetOutputOp
         JSON.stringify({
           source: result.source,
           sourceAvailable: result.sourceAvailable,
+          sourceLanguage: result.sourceLanguage,
           className: result.className,
           provenance: result.provenance,
           ...(result.excerpt !== undefined ? { excerpt: result.excerpt } : {}),
@@ -49,6 +50,7 @@ export function writeCliGetResult(result: CliGetResult, options?: CliGetOutputOp
       console.error(
         JSON.stringify({
           sourceAvailable: result.sourceAvailable,
+          sourceLanguage: result.sourceLanguage,
           className: result.className,
           provenance: result.provenance,
           ...(result.excerpt !== undefined ? { excerpt: result.excerpt } : {}),
