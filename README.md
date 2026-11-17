@@ -12,7 +12,7 @@
 </div>
 
 Your IDE knows which library version your build uses. Your coding agent does not. It guesses from `~/.gradle/caches` or `~/.m2` and often reads the wrong JAR.
-`jvmsrc` asks your build tool (**Gradle**, plus **experimental Maven**) for the resolved classpath. Then it gives the agent **real source**, **real signatures** and **real structure** for the exact version in use.
+`jvmsrc` asks your build tool (**Gradle** and **Maven**) for the resolved classpath. Then it gives the agent **real source**, **real signatures** and **real structure** for the exact version in use.
 
 ---
 
@@ -191,7 +191,7 @@ Set `JVMSRC_HOOK_DISABLE=1` to switch it off for a while. Other clients have the
 
 ## Target Audience
 
-Primarily **Java + Spring Boot** projects on **Gradle**, with **experimental Maven** support (external dependencies, nearest-wins mediation, sources JAR + CFR). Other JVM languages (Kotlin, Scala, Groovy) work today — see [PLAN.md](PLAN.md).
+Primarily **Java + Spring Boot** projects on **Gradle** and **Maven**. Other JVM languages (Kotlin, Scala, Groovy) work today — see [PLAN.md](PLAN.md).
 
 ---
 
@@ -207,7 +207,7 @@ Primarily **Java + Spring Boot** projects on **Gradle**, with **experimental Mav
 | Build system | Status |
 |---|---|
 | **Gradle** | Supported — multimodule included |
-| **Maven** | **Experimental** — external dependencies, nearest-wins conflict resolution, on-demand sources JARs, CFR fallback |
+| **Maven** | Supported — multimodule reactor, nearest-wins conflict resolution, `system` scope, sources JARs + CFR |
 | Bazel | Planned ([SPEC.md](SPEC.md)) |
 
 `-p` / `projectRoot` can be the build root or any directory inside it; jvmsrc walks up to the Gradle root (`gradlew` / `settings.gradle(.kts)`) or Maven reactor root (`pom.xml`). MCP tools can omit `projectRoot`, and the CLI can omit `-p` (it uses `JVMSRC_PROJECT_ROOT`, else the build that contains the working directory). Uses `./gradlew` / `./mvnw` when present, else `gradle` / `mvn`.
@@ -221,7 +221,7 @@ Early software; the supported path is narrow:
 
 | Area | Today |
 |---|---|
-| Build tool | **Gradle** (full) and **Maven** (**experimental**: external dependencies; multi-module reactor source/bytecode polish in Checkpoint 10) |
+| Build tool | **Gradle** and **Maven** (single-module and multi-module reactors) |
 | Integration | Bundled **Gradle init script** (`--init-script`) and **Maven core extension** (`-Dmaven.ext.class.path`) — zero project mutation |
 | Classpaths | Standard JVM + Kotlin MPP `jvm*` configurations when Gradle exposes them |
 | Output | Original source when available (`.java`, `.kt`, `.scala`, `.groovy` from a sources JAR or inter-project `src`; `sourceLanguage` names it), else CFR-decompiled Java. For Kotlin classes, structure and signatures add KDoc and real parameter names to the javap result, and `methodNames` excerpts work. For Scala and Groovy, use `startLine` / `endLine` |

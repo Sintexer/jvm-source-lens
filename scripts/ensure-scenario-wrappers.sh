@@ -14,6 +14,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCENARIOS_GRADLE="$ROOT/test/scenarios/gradle"
 SCENARIOS_MAVEN="$ROOT/test/scenarios/maven"
+EVALS_MAVEN="$ROOT/test/evals/maven-project"
 GRADLE_VERSION="9.3.1"
 MAVEN_VERSION="3.9.9"
 
@@ -42,6 +43,7 @@ maven_projects=(
   "version-conflict/app"
   "local-install-snapshot/producer"
   "local-install-snapshot/consumer"
+  "multi-module"
 )
 
 need_gradle=0
@@ -114,6 +116,9 @@ for project in "${maven_projects[@]}"; do
     break
   fi
 done
+if [[ -d "$EVALS_MAVEN" && ! -f "$EVALS_MAVEN/.mvn/wrapper/maven-wrapper.jar" ]]; then
+  need_maven=1
+fi
 
 if [[ "$need_maven" -eq 1 ]]; then
   if ! MVN_BIN="$(resolve_mvn_bin)"; then
@@ -137,6 +142,18 @@ if [[ "$need_maven" -eq 1 ]]; then
     fi
     echo "ensure-scenario-wrappers: maven/$project — done"
   done
+  if [[ -d "$EVALS_MAVEN" ]]; then
+    if [[ -f "$EVALS_MAVEN/.mvn/wrapper/maven-wrapper.jar" ]]; then
+      echo "ensure-scenario-wrappers: evals/maven-project — wrapper JAR already present, skipping"
+    else
+      echo "ensure-scenario-wrappers: evals/maven-project — generating wrapper JAR..."
+      (cd "$EVALS_MAVEN" && "$MVN_BIN" -B -q wrapper:wrapper -Dmaven="$MAVEN_VERSION" -Dtype=bin)
+      if [[ "$(uname -s)" != "MINGW"* ]] && [[ "${OSTYPE:-}" != "msys" ]]; then
+        chmod +x "$EVALS_MAVEN/mvnw" 2>/dev/null || true
+      fi
+      echo "ensure-scenario-wrappers: evals/maven-project — done"
+    fi
+  fi
 else
   for project in "${maven_projects[@]}"; do
     echo "ensure-scenario-wrappers: maven/$project — wrapper JAR already present, skipping"

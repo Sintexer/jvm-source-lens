@@ -83,11 +83,26 @@ function matchByFilesystemPath(raw: string, modules: ResolvedModule[], projectRo
   return best;
 }
 
+function isRootModule(
+  m: ResolvedModule,
+  modules: ResolvedModule[],
+  projectRoot?: string,
+): boolean {
+  if (m.name === ROOT_MODULE_NAME) {
+    return true;
+  }
+  return (
+    modules.length > 1 &&
+    projectRoot !== undefined &&
+    path.resolve(m.path) === path.resolve(projectRoot)
+  );
+}
+
 /**
  * Resolves user-supplied module text against resolved modules: exact → (file/directory inside a
  * submodule) → normalized → case-insensitive → unique directory-name match → unique path suffix match.
  * A path inside the project but outside every submodule maps to the root project.
- * The root project is named `root` in resolution output and also matches `:` / `` / `.`.
+ * The root project (`root` in Gradle, or the module at `projectRoot` in Maven) also matches `:` / `` / `.` / `root`.
  */
 export function matchModule(raw: string, modules: ResolvedModule[], projectRoot?: string): ModuleMatch {
   const exact = modules.find((m) => m.name === raw);
@@ -96,20 +111,21 @@ export function matchModule(raw: string, modules: ResolvedModule[], projectRoot?
   }
 
   const byFile = matchByFilesystemPath(raw, modules, projectRoot);
-  if (byFile !== null && byFile.name !== ROOT_MODULE_NAME) {
+  if (byFile !== null && !isRootModule(byFile, modules, projectRoot)) {
     return { kind: 'match', module: byFile };
   }
   const fileInRoot = byFile; // set only when the only containing module is root; used as a last resort
 
   const normalized = normalizeModulePath(raw);
   if (normalized === ':' || normalized.toLowerCase() === `:${ROOT_MODULE_NAME}`) {
-    const root = modules.find((m) => m.name === ROOT_MODULE_NAME);
+    const root = modules.find((m) => isRootModule(m, modules, projectRoot));
     if (root !== undefined) {
       return { kind: 'match', module: root };
     }
   }
 
-  const moduleColonPath = (m: ResolvedModule): string => (m.name === ROOT_MODULE_NAME ? ':' : m.name);
+  const moduleColonPath = (m: ResolvedModule): string =>
+    isRootModule(m, modules, projectRoot) ? ':' : m.name.startsWith(':') ? m.name : `:${m.name}`;
   const lower = normalized.toLowerCase();
 
   const byNormalized = pickUnique(modules.filter((m) => moduleColonPath(m).toLowerCase() === lower));
@@ -118,9 +134,11 @@ export function matchModule(raw: string, modules: ResolvedModule[], projectRoot?
   }
 
   const wantedSegment = lastSegment(lower);
-  const nonRoot = modules.filter((m) => m.name !== ROOT_MODULE_NAME);
+  const nonRoot = modules.filter((m) => !isRootModule(m, modules, projectRoot));
 
-  const bySuffix = pickUnique(nonRoot.filter((m) => m.name.toLowerCase().endsWith(lower)));
+  const bySuffix = pickUnique(
+    nonRoot.filter((m) => moduleColonPath(m).toLowerCase().endsWith(lower)),
+  );
   if (bySuffix !== undefined) {
     return bySuffix;
   }

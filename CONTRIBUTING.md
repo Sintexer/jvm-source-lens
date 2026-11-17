@@ -89,6 +89,7 @@ Current scenarios:
 | `maven/single-module/` | Maven external resolution (`compile` / `runtime` / `test`), on-demand `-sources.jar` (`sourceAvailable: true`), CFR fallback (`sourceAvailable: false`), `get_class_structure`, `search_classes`, `search_in_artifact`, and zero `target/` creation |
 | `maven/version-conflict/` | Direct dep (`1.0.0`) vs transitive dep (`2.0.0`) — verifies Maven **nearest-wins** selects `1.0.0` (opposite of Gradle highest-wins) |
 | `maven/local-install-snapshot/` | `producer/` runs `mvn install` for `1.0.0-SNAPSHOT` twice with a new method; `consumer/` invalidates `local-artifact.hash` automatically without `forceRefresh` |
+| `maven/multi-module/` | Uncompiled reactor sibling Java + Kotlin source (`origin: interproject`), `artifactId` + directory + file `modulePath`, `system`-scope JAR CFR decompilation (`origin: local-file`), and `core/target/classes` `javap` + `SourceFile` |
 
 Stub directory `scenarios/bazel/` reserves space for future build systems.
 

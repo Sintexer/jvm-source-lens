@@ -3,18 +3,21 @@ import { FailureSeverity, type FailureSeverity as FailureSeverityT } from './fai
 
 export type PublicFailureCode = ClassSourceError['code'] | 'INVALID_PROJECT_ROOT' | 'CACHE_WRITE_FAILED';
 
-/** Gradle failures with a known, user-fixable cause (checked before the generic JDK heuristic). */
-function classifyGradleFailure(blob: string): string | null {
-  if (/git lfs pointer|org\.gradle\.wrapper\.GradleWrapperMain/i.test(blob)) {
+/** Build-tool failures with a known, user-fixable cause (checked before the generic JDK heuristic). */
+function classifyBuildToolFailure(blob: string): string | null {
+  if (/git lfs pointer|org\.gradle\.wrapper\.GradleWrapperMain|org\.apache\.maven\.wrapper\.MavenWrapperMain/i.test(blob)) {
     return 'WRAPPER_BROKEN';
   }
-  if (/credentials .*not defined/i.test(blob)) {
+  if (/credentials .*not defined|status code:\s*40[13]\b|\b401\b.*unauthorized|\bnot authorized\b/i.test(blob)) {
     return 'BUILD_CREDENTIALS_MISSING';
+  }
+  if (/in offline mode/i.test(blob)) {
+    return 'MAVEN_OFFLINE_MISSING_ARTIFACT';
   }
   if (/task 'jvmsrc\w+' not found/i.test(blob)) {
     return 'INIT_SCRIPT_TASK_MISSING';
   }
-  if (/requires at least jvm runtime version/i.test(blob)) {
+  if (/requires at least jvm runtime version|release version .* not supported|unsupportedclassversionerror/i.test(blob)) {
     return 'JVM_VERSION_MISMATCH';
   }
   return null;
@@ -28,7 +31,6 @@ export type MapFailureResult = { severity: FailureSeverityT; errorCode: string }
 export function mapPublicFailureToDiagnostic(
   publicCode: PublicFailureCode,
   message: string,
-  /** Subprocess stderr, when available; lets Gradle failures be classified by cause. */
   stderr?: string,
 ): MapFailureResult {
   const m = message.toLowerCase();
@@ -51,17 +53,20 @@ export function mapPublicFailureToDiagnostic(
     case 'CACHE_WRITE_FAILED':
       return { severity: FailureSeverity.CACHE_FAIL, errorCode: 'RESOLUTION_CACHE_WRITE_FAILED' };
     case 'RESOLUTION_FAILED':
-      if (/not a gradle project|no supported build system|no settings\.gradle|unsupportedprojecterror/i.test(message)) {
+      if (/not a gradle project|not a maven project|no supported build system|no settings\.gradle|no pom\.xml|unsupportedprojecterror/i.test(message)) {
         return { severity: FailureSeverity.USER_ERROR, errorCode: 'NOT_GRADLE_PROJECT' };
       }
-      if (/could not parse gradle json|invalid resolution\.json|schemaversion|validate.*resolution/i.test(m)) {
+      if (/could not parse (?:gradle|maven) json|invalid resolution\.json|schemaversion|validate.*resolution/i.test(m)) {
         return { severity: FailureSeverity.PARSER_FAIL, errorCode: 'RESOLUTION_OUTPUT_PARSE_FAILED' };
       }
       if (/failed to start gradle/i.test(m)) {
         return { severity: FailureSeverity.ENV_ERROR, errorCode: 'GRADLE_SPAWN_FAILED' };
       }
+      if (/failed to start maven/i.test(m)) {
+        return { severity: FailureSeverity.ENV_ERROR, errorCode: 'MAVEN_SPAWN_FAILED' };
+      }
       {
-        const specific = classifyGradleFailure(`${message}\n${stderr ?? ''}`);
+        const specific = classifyBuildToolFailure(`${message}\n${stderr ?? ''}`);
         if (specific) {
           return { severity: FailureSeverity.ENV_ERROR, errorCode: specific };
         }
@@ -69,8 +74,14 @@ export function mapPublicFailureToDiagnostic(
       if (/\bjava\b.*not found|JAVA_HOME|spawn.*java/i.test(message)) {
         return { severity: FailureSeverity.ENV_ERROR, errorCode: 'JAVA_NOT_FOUND' };
       }
+      if (/\bmaven\b/i.test(message)) {
+        return { severity: FailureSeverity.RESOLVER_FAIL, errorCode: 'MAVEN_EXIT_NONZERO' };
+      }
       return { severity: FailureSeverity.RESOLVER_FAIL, errorCode: 'GRADLE_EXIT_NONZERO' };
     case 'SOURCES_RESOLVE_FAILED':
+      if (/\bmaven\b/i.test(message)) {
+        return { severity: FailureSeverity.RESOLVER_FAIL, errorCode: 'SOURCES_MAVEN_FAILED' };
+      }
       return { severity: FailureSeverity.RESOLVER_FAIL, errorCode: 'SOURCES_GRADLE_FAILED' };
     case 'DECOMPILE_FAILED':
       if (/timed out/i.test(message)) {
@@ -94,7 +105,6 @@ export function mapPublicFailureToDiagnostic(
     case 'FIND_SOURCE_TOO_LARGE':
       return { severity: FailureSeverity.USER_ERROR, errorCode: 'FIND_SOURCE_TOO_LARGE' };
     case 'SOURCE_OUTPUT_TOO_LARGE':
-      // Caller error (agent asked for an unscoped huge file), not a jvmsrc bug.
       return { severity: FailureSeverity.USER_ERROR, errorCode: 'SOURCE_OUTPUT_TOO_LARGE' };
     default:
       return { severity: FailureSeverity.INTERNAL, errorCode: 'UNKNOWN_FAILURE' };

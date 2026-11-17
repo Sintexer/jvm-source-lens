@@ -40,13 +40,13 @@ export function classifyClassSourceError(
         error,
         'validation',
         true,
-        `Unknown Gradle module ${JSON.stringify(error.modulePath)}.`,
+        `Unknown module ${JSON.stringify(error.modulePath)}.`,
         (error.message.includes('matches several modules')
           ? `Module ${JSON.stringify(error.modulePath)} matches several modules.`
           : `No resolved submodule matches modulePath ${JSON.stringify(error.modulePath)}.`) +
           listed +
           (listed.length === 0
-            ? ` Inspect resolve_dependencies output (resolution.modules[].name) or settings.gradle for valid names like ":app".`
+            ? ` Inspect resolve_dependencies output (resolution.modules[].name) for valid module names (e.g. ":app" or "app").`
             : ` Retry with modulePath set to one of these.`) +
           ` Omit modulePath when a single module owns the wanted configuration.`,
       );
@@ -98,7 +98,7 @@ export function classifyClassSourceError(
         true,
         `Could not read JAR ${JSON.stringify(error.jarPath)}.`,
         `${error.message} Reading a dependency archive failed (I/O or corrupt ZIP). ` +
-          `Retry once; if it persists, check disk permissions, antivirus locks, or re-download the artifact via Gradle.`,
+          `Retry once; if it persists, check disk permissions, antivirus locks, or re-download the artifact.`,
       );
     case 'DECOMPILE_FAILED':
       return classifyDecompileFailed(error);
@@ -214,9 +214,9 @@ function classifyResolutionFailed(
       error,
       'permission',
       false,
-      'Gradle resolution failed: repository authentication / credentials missing.',
-      `Dependency resolution for project ${JSON.stringify(query.projectRoot)} failed because Gradle could not authenticate ` +
-        `or required repository credential env/properties were missing. ${error.message} ` +
+      'Dependency resolution failed: repository authentication / credentials missing.',
+      `Dependency resolution for project ${JSON.stringify(query.projectRoot)} failed because the build tool could not authenticate ` +
+        `or required repository credential env/settings were missing. ${error.message} ` +
         authEnvGuidance() +
         diagnosticSuffix(error.stderr),
     );
@@ -227,8 +227,8 @@ function classifyResolutionFailed(
       'validation',
       true,
       'Cannot resolve project or classpath.',
-      `${error.message} Fix projectRoot (must be an existing Gradle project directory), ensure build.gradle/settings.gradle exist, ` +
-        `or install/use ./gradlew. Unsupported or misconfigured projects will fail the same way on every retry until inputs change.` +
+      `${error.message} Fix projectRoot (must be an existing project directory with build files or a wrapper). ` +
+        `Unsupported or misconfigured projects will fail the same way on every retry until inputs change.` +
         diagnosticSuffix(error.stderr),
     );
   }
@@ -237,7 +237,7 @@ function classifyResolutionFailed(
       error,
       'transient',
       true,
-      'Gradle resolution failed temporarily.',
+      'Dependency resolution failed temporarily.',
       `${error.message} The build tool could not complete resolution (timeout, network, or daemon issue). ` +
         `The request is valid — retry after a short delay or run with --force-refresh after fixing connectivity.` +
         diagnosticSuffix(error.stderr),
@@ -247,9 +247,9 @@ function classifyResolutionFailed(
     error,
     'transient',
     true,
-    'Gradle dependency resolution failed.',
+    'Dependency resolution failed.',
     `${error.message} Resolution did not produce a usable classpath. ` +
-      `Retry once; if it persists, inspect Gradle output, fix repository or plugin errors, then use forceRefresh.` +
+      `Retry once; if it persists, inspect build output, fix repository or plugin errors, then use forceRefresh.` +
       diagnosticSuffix(error.stderr),
   );
 }
@@ -265,8 +265,8 @@ function classifySourcesResolveFailed(
       'permission',
       false,
       `Sources resolution failed: repository authentication / credentials missing for ${coords}.`,
-      `On-demand sources resolution for ${coords} failed because Gradle could not authenticate ` +
-        `or required repository credential env/properties were missing. ${error.message} ` +
+      `On-demand sources resolution for ${coords} failed because the build tool could not authenticate ` +
+        `or required repository credential env/settings were missing. ${error.message} ` +
         authEnvGuidance() +
         diagnosticSuffix(error.stderr),
     );
@@ -288,7 +288,7 @@ function classifySourcesResolveFailed(
     'business',
     false,
     `Sources artifact unavailable for ${coords}.`,
-    `Gradle reported that sources for ${coords} could not be resolved (${error.message}). ` +
+    `Sources for ${coords} could not be resolved (${error.message}). ` +
       `The main JAR may still be on the classpath; decompilation is used when sources are missing. ` +
       `Do not retry the same coordinates unless repository content changed.` +
       diagnosticSuffix(error.stderr),
@@ -375,13 +375,13 @@ function joinDiagnosticBlob(message: string, stderr?: string): string {
 }
 
 function diagnosticSuffix(stderr?: string): string {
-  return stderr ? ` Gradle stderr: ${stderr.trim().slice(0, 500)}` : '';
+  return stderr ? ` Build stderr: ${stderr.trim().slice(0, 500)}` : '';
 }
 
 /** Shared next-step copy for repository auth / missing credential env. */
 function authEnvGuidance(): string {
   return (
-    `Do not retry blindly. If the project's Gradle scripts require repository credential environment variables ` +
+    `Do not retry blindly. If the project's build scripts or settings require repository credential environment variables ` +
     `(for example REPO_USER / REPO_PASS, or names documented by the project), set them in the jvmsrc process environment. ` +
     `MCP hosts often do not inherit interactive shell env — add those vars to the MCP server env config (or launch the host from a shell that exports them), ` +
     `restart the jvmsrc MCP server, then retry. Otherwise fix repository auth, VPN, or escalate for access.`
@@ -398,12 +398,12 @@ function matchesPermission(blob: string): boolean {
       blob,
     ) ||
     /credentials?\b[\s\S]{0,80}\b(not defined|are not defined|missing|not set|undefined)\b/i.test(blob) ||
-    /\b(status code|http)\s*40[13]\b/i.test(blob)
+    /\b(status code|http):?\s*40[13]\b/i.test(blob)
   );
 }
 
 function matchesValidation(blob: string): boolean {
-  return /\b(no supported build system|unsupported|schemaVersion|invalid|malformed|not found in resolution|gradle wrapper)\b/i.test(
+  return /\b(no supported build system|unsupported|schemaVersion|invalid|malformed|not found in resolution|wrapper\.jar is a git lfs pointer)\b/i.test(
     blob,
   );
 }

@@ -54,6 +54,7 @@ Current scenarios:
 - **`maven/single-module/`** — real Maven resolution (`resources/maven-analyzer.jar`), on-demand `-sources.jar` fetch, CFR decompilation fallback, `get_class_structure`, `search_classes`, `search_in_artifact`, and zero `target/` writes.
 - **`maven/version-conflict/`** — direct dep (v1) vs transitive dep (v2); verifies Maven **nearest-wins** selects v1.
 - **`maven/local-install-snapshot/`** — `producer/` runs `mvn install` for `1.0.0-SNAPSHOT` twice; verifies automatic `local-artifact.hash` invalidation without `forceRefresh`.
+- **`maven/multi-module/`** — reactor sibling Java + Kotlin sources (`origin: interproject`) without `mvn install`, `artifactId` + relative directory + file `modulePath` matching, `system`-scope JAR CFR decompilation (`origin: local-file`), and `target/classes` `javap` + Kotlin `*Kt` `SourceFile`.
 
 Wrapper JARs are generated once via `bun run ensure:scenario-wrappers` (calls `scripts/ensure-scenario-wrappers.sh`). All scenario tests use `describe.skipIf(!wrapperJar)` — silent no-op in CI.
 

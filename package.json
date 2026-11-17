@@ -51,6 +51,7 @@
     "dev:cli": "bun run src/cli.ts",
     "dev:mcp": "bun run src/mcp.ts",
     "eval": "bun test/evals/run-evals.ts",
+    "eval:maven": "bun test/evals/run-evals.ts --project test/evals/maven-project --prompts test/evals/maven-prompts.json",
     "measure:tokens": "bun scripts/measure-eager-tokens.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "check": "bun run typecheck && bun test",

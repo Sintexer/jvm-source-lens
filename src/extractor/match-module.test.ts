@@ -162,3 +162,43 @@ describe('inferIncludeTest', () => {
     expect(inferIncludeTest('/p/app/src/main/java/Foo.java', true)).toBe(true);
   });
 });
+
+describe('Maven reactor module matching', () => {
+  // Root folder itself is named `app`, while submodule `acme-app` lives at `services/app`.
+  const mavenRoot = '/work/app';
+  const mavenMods = [
+    mod('acme-parent', mavenRoot),
+    mod('acme-core', `${mavenRoot}/core`),
+    mod('acme-api', `${mavenRoot}/services/api`),
+    mod('acme-app', `${mavenRoot}/services/app`),
+  ];
+  const pick = (raw: string) => {
+    const m = matchModule(raw, mavenMods, mavenRoot);
+    return m.kind === 'match' ? m.module.name : m.kind === 'ambiguous' ? m.candidates : null;
+  };
+
+  test('matches artifactId, colon-prefixed artifactId, and case-insensitive artifactId', () => {
+    expect(pick('acme-api')).toBe('acme-api');
+    expect(pick(':acme-api')).toBe('acme-api');
+    expect(pick('ACME-API')).toBe('acme-api');
+  });
+
+  test('matches relative directory and bare directory basename without colliding with root folder name', () => {
+    expect(pick('services/api')).toBe('acme-api');
+    expect(pick('api')).toBe('acme-api');
+    expect(pick('core')).toBe('acme-core');
+    expect(pick('app')).toBe('acme-app');
+  });
+
+  test('maps root aliases (:, ., root) and root-only files to the reactor root module', () => {
+    expect(pick(':')).toBe('acme-parent');
+    expect(pick('.')).toBe('acme-parent');
+    expect(pick('root')).toBe('acme-parent');
+    expect(pick('pom.xml/')).toBe('acme-parent');
+  });
+
+  test('maps submodule file paths to owning Maven module', () => {
+    expect(pick('services/api/src/test/java/com/acme/ApiTest.java')).toBe('acme-api');
+    expect(pick(`${mavenRoot}/core/src/main/kotlin/com/acme/Core.kt`)).toBe('acme-core');
+  });
+});

@@ -6,6 +6,7 @@ import { readCachedJavaToolchainVersion } from '../../cache/cached-toolchain.js'
 import { buildCfrSpawnEnv } from '../../decompiler/cfr-spawn-env.js';
 import { resolveJdkForProject } from '../../jdk/resolve-jdk-for-project.js';
 import { awaitChildExit, readProcessStreamToText, spawnChild } from '../../spawn-child.js';
+import { formatMavenUserMessage } from './maven-failure-message.js';
 import { resolveMavenWrapperCommand } from './maven-wrapper-command.js';
 
 export { resolveMavenWrapperCommand } from './maven-wrapper-command.js';
@@ -174,7 +175,12 @@ export async function runMavenAnalyzer(
       const msg = e instanceof Error ? e.message : String(e);
       return {
         ok: false,
-        message: `Failed to start Maven (${argv[0] ?? 'mvn'}): ${msg}`,
+        message: formatMavenUserMessage({
+          kind: 'spawn',
+          message: `Failed to start Maven (${argv[0] ?? 'mvn'}): ${msg}`,
+          command: argv,
+          usedWrapper: useWrapper,
+        }),
         command: argv,
         exitCode: null,
       };
@@ -205,7 +211,12 @@ export async function runMavenAnalyzer(
       const msg = e instanceof Error ? e.message : String(e);
       return {
         ok: false,
-        message: `Failed to start Maven (${argv[0] ?? 'mvn'}): ${msg}`,
+        message: formatMavenUserMessage({
+          kind: 'spawn',
+          message: `Failed to start Maven (${argv[0] ?? 'mvn'}): ${msg}`,
+          command: argv,
+          usedWrapper: useWrapper,
+        }),
         command: argv,
         exitCode: null,
       };
@@ -215,7 +226,12 @@ export async function runMavenAnalyzer(
     if (timedOut) {
       return {
         ok: false,
-        message: `Maven timed out after ${timeoutMs}ms`,
+        message: formatMavenUserMessage({
+          kind: 'timeout',
+          message: `Maven timed out after ${timeoutMs}ms`,
+          command: argv,
+          usedWrapper: useWrapper,
+        }),
         stderr: stderr || undefined,
         stdout,
         command: argv,
@@ -226,7 +242,14 @@ export async function runMavenAnalyzer(
     if (exitCode !== 0) {
       return {
         ok: false,
-        message: formatMavenFailureTail(`Maven exited with code ${exitCode}`, stdout, stderr),
+        message: formatMavenUserMessage({
+          kind: 'exit',
+          message: formatMavenFailureTail(`Maven exited with code ${exitCode}`, stdout, stderr),
+          stderr,
+          stdout,
+          command: argv,
+          usedWrapper: useWrapper,
+        }),
         stderr: (stderr || stdout) || undefined,
         stdout,
         command: argv,

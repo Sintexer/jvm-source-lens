@@ -39,3 +39,23 @@ test('shouldTryKotlinScalaAndGroovyWhenTheRequestIsJava', () => {
   ];
   expect(paths).toEqual(rels.map((rel) => path.join('/mod', rel)));
 });
+
+test('shouldResolveMavenTargetClassesAndTargetTestClasses', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-mvn-ipath-'));
+  try {
+    const mainClass = 'com/example/MainType.class';
+    const testClass = 'com/example/TestType.class';
+    const mainRoot = path.join(dir, 'target/classes');
+    const testRoot = path.join(dir, 'target/test-classes');
+    fs.mkdirSync(path.dirname(path.join(mainRoot, mainClass)), { recursive: true });
+    fs.mkdirSync(path.dirname(path.join(testRoot, testClass)), { recursive: true });
+    fs.writeFileSync(path.join(mainRoot, mainClass), 'x');
+    fs.writeFileSync(path.join(testRoot, testClass), 'x');
+
+    expect(resolveInterprojectClasspathRootForBinary(dir, mainClass, false)).toBe(mainRoot);
+    expect(resolveInterprojectClasspathRootForBinary(dir, testClass, false)).toBeNull();
+    expect(resolveInterprojectClasspathRootForBinary(dir, testClass, true)).toBe(testRoot);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

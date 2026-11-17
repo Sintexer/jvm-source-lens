@@ -1,0 +1,61 @@
+[
+  {
+    "id": "mv01",
+    "category": "direct",
+    "prompt": "Show the implementation of com.google.common.collect.ImmutableList$Builder.build in the Guava version used by the worker module.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_source",
+      "get_class_structure",
+      "get_method_signature"
+    ]
+  },
+  {
+    "id": "mv02",
+    "category": "indirect",
+    "prompt": "Which version of jackson-databind does each module in this Maven build resolve to, and is there a version conflict?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "resolve_dependencies"
+    ]
+  },
+  {
+    "id": "mv03",
+    "category": "multimodule",
+    "prompt": "What overloads does com.fasterxml.jackson.databind.ObjectMapper.readTree have in this project?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature",
+      "get_class_structure",
+      "resolve_dependencies"
+    ]
+  },
+  {
+    "id": "mv04",
+    "category": "filecontext",
+    "prompt": "I am editing app/src/main/java/com/acme/app/OrderController.java. What constructors does org.springframework.retry.support.RetryTemplate have?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_method_signature",
+      "get_class_structure"
+    ],
+    "expectModule": "app"
+  },
+  {
+    "id": "mv05",
+    "category": "kotlin",
+    "prompt": "Show the Kotlin source and KDoc of the delay functions in kotlinx.coroutines.DelayKt from the worker module.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_source",
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "mv06",
+    "category": "negative",
+    "prompt": "Look at OrderValidator in this repository and tell me what prefix valid order IDs must start with.",
+    "expectJvmsrc": false,
+    "expectFirstTools": []
+  }
+]

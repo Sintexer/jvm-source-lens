@@ -53,7 +53,7 @@ export function buildClassNotFoundMessage(ctx: ClassNotFoundContext): string {
     );
   } else {
     parts.push(
-      'Confirm the fully-qualified className, that the dependency is declared in Gradle, and that modulePath matches the owning module (resolve_dependencies → resolution.modules[].name if unsure).',
+      'Confirm the fully-qualified className, that the dependency is declared in the build, and that modulePath matches the owning module (resolve_dependencies → resolution.modules[].name if unsure).',
     );
   }
   if (ctx.suggestions !== undefined && ctx.suggestions.length > 0) {

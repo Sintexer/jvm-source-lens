@@ -40,6 +40,7 @@ const { values: args } = parseArgs({
     timeout: { type: 'string', default: '240' },
     concurrency: { type: 'string', default: '1' },
     project: { type: 'string', default: path.join(evalDir, 'project') },
+    prompts: { type: 'string', default: path.join(evalDir, 'prompts.json') },
     out: { type: 'string' },
     rescore: { type: 'string' },
     'dry-run': { type: 'boolean', default: false },
@@ -50,7 +51,7 @@ if (args.mode !== 'default' && args.mode !== 'competing') {
   throw new Error(`--mode must be "default" or "competing", got ${JSON.stringify(args.mode)}`);
 }
 
-const allPrompts = JSON.parse(readFileSync(path.join(evalDir, 'prompts.json'), 'utf8')) as EvalPrompt[];
+const allPrompts = JSON.parse(readFileSync(path.resolve(args.prompts!), 'utf8')) as EvalPrompt[];
 const filters = (args.filter ?? '').split(',').map((f) => f.trim()).filter(Boolean);
 let prompts = allPrompts.filter((p) => filters.length === 0 || filters.includes(p.id) || filters.includes(p.category));
 if (args.limit) {
@@ -77,12 +78,22 @@ const allowedTools = [
 
 function buildMcpConfig(): string {
   const file = path.join(outDir, 'mcp-config.json');
+  const forwardedEnv: Record<string, string> = {
+    JVMSRC_CALL_LOG: '1',
+    JVMSRC_LOG_DIR: logDir,
+  };
+  for (const key of ['MAVEN_HOME', 'M2_HOME', 'JVMSRC_MAVEN_BIN', 'JAVA_HOME', 'JVMSRC_JAVA_HOME']) {
+    const val = process.env[key]?.trim();
+    if (val) {
+      forwardedEnv[key] = val;
+    }
+  }
   const config = {
     mcpServers: {
       jvmsrc: {
         command: process.execPath,
         args: [path.join(repoRoot, 'src/cli.ts'), 'mcp'],
-        env: { JVMSRC_CALL_LOG: '1', JVMSRC_LOG_DIR: logDir },
+        env: forwardedEnv,
       },
     },
   };

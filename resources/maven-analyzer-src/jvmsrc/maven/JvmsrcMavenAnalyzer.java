@@ -331,6 +331,9 @@ public final class JvmsrcMavenAnalyzer extends AbstractMavenLifecycleParticipant
           if (dep == null || dep.getArtifact() == null) {
             return true;
           }
+          if ("system".equals(dep.getScope())) {
+            return false;
+          }
           Artifact a = dep.getArtifact();
           String key = reactorKey(a.getGroupId(), a.getArtifactId(), a.getBaseVersion());
           return !reactorByGav.containsKey(key);
@@ -421,13 +424,7 @@ public final class JvmsrcMavenAnalyzer extends AbstractMavenLifecycleParticipant
             .append(jsonString(sibling.getBasedir().getAbsolutePath()));
         sb.append("}}");
       } else if ("system".equals(d.getScope())) {
-        File sysFile = a.getFile();
-        if (sysFile == null) {
-          String localPath = a.getProperty("localPath", null);
-          if (localPath != null && !localPath.isEmpty()) {
-            sysFile = new File(localPath);
-          }
-        }
+        File sysFile = resolveSystemArtifactFileOrNull(project, a);
         String groupOut =
             a.getGroupId() != null && !a.getGroupId().trim().isEmpty()
                 ? a.getGroupId().trim()
@@ -466,6 +463,35 @@ public final class JvmsrcMavenAnalyzer extends AbstractMavenLifecycleParticipant
     }
 
     sb.append("]}");
+  }
+
+  private File resolveSystemArtifactFileOrNull(MavenProject project, Artifact a) {
+    if (a.getFile() != null) {
+      return a.getFile();
+    }
+    String localPath = a.getProperty("localPath", null);
+    if (localPath == null || localPath.trim().isEmpty()) {
+      if (project.getDependencies() != null) {
+        for (org.apache.maven.model.Dependency md : project.getDependencies()) {
+          if ("system".equals(md.getScope())
+              && String.valueOf(a.getGroupId()).equals(md.getGroupId())
+              && String.valueOf(a.getArtifactId()).equals(md.getArtifactId())
+              && md.getSystemPath() != null
+              && !md.getSystemPath().trim().isEmpty()) {
+            localPath = md.getSystemPath().trim();
+            break;
+          }
+        }
+      }
+    }
+    if (localPath == null || localPath.trim().isEmpty()) {
+      return null;
+    }
+    File f = new File(localPath);
+    if (!f.isAbsolute()) {
+      f = new File(project.getBasedir(), localPath);
+    }
+    return f;
   }
 
   private String adjacentSourcesJarPathOrNull(File jarFile, String classifier) {

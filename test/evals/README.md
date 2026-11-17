@@ -5,7 +5,8 @@ It drives Claude Code headlessly (`claude -p`, your existing login, no API key).
 network + Gradle, so it is **not** part of `bun test` or CI (only `scoring.test.ts` runs there).
 
 ```bash
-bun run eval                              # all 52 prompts
+bun run eval                              # all 52 Gradle prompts (test/evals/project)
+bun run eval:maven                        # all 6 Maven prompts (test/evals/maven-project)
 bun run eval --filter negative            # a category or id; comma-separate several: d01,i05,m03
 bun run eval --limit 5                    # first N prompts (cheap smoke run)
 bun run eval --mode competing             # also allow WebSearch / WebFetch
@@ -79,6 +80,7 @@ Add one row for each full run. Write the model and the client version in the row
 | 2026-11-17 | Checkpoint 6 code, `--limit 5` (`d01`–`d05`) regression check, same setup | 100% (5/5) | 100% / 100% | 100% | 0% | All 5 passed, 1.0 calls/task. Not a full run |
 | 2026-11-17 | Checkpoint 7 code, `--filter kotlin` (4 Kotlin prompts), default mode, Claude Code 2.1.325, default model (not recorded), jvmsrc + read-only Bash | 100% (4/4) | 100% strict / 100% usable | 100% | 0% | All 4 passed, 1.0 calls/task, eager tokens 1,992 (`chars / 4`). `k01` now succeeds on the first call: `methodNames: "delay"` on `kotlinx.coroutines.DelayKt` returns both `delay` overloads with their KDoc (checkpoint 6 returned the Java-only message and needed a retry). Compare with the checkpoint 6 Kotlin row above |
 | 2026-11-17 | Checkpoint 7 code, `--limit 5` (`d01`–`d05`) regression check, same setup | 100% (5/5) | 100% / 100% | 100% | 0% | All 5 passed, 1.0 calls/task. Not a full run |
+| 2026-11-17 | Checkpoint 10 code, `bun run eval:maven` (6 Maven prompts `mv01`–`mv06` on `maven-project/`), Claude Code 2.1.325, default model, jvmsrc + read-only Bash | 100% (5/5; 1/1 negative) | 80% strict (4/5) / 100% usable (5/5) | 100% | 0% | All 6 passed, precision 100%, `filecontext` module passed/correct 100% (`mv04`), 1.6 calls/task, eager tokens 1,972 (`chars / 4`). The single strict non-ok (`mv03`) is the designed retry-ready `MODULE_AMBIGUOUS` on `ObjectMapper` (`2.15.2` in `app` vs `2.14.2` in `worker`), recovered immediately. Meets all Checkpoint 3 targets; Maven graduated from experimental |
 
 **Hook probe (2026-11-10, after the `--with-hook` run).** The prompt asked for `javap -version` with the hook installed, in `project/`, with the harness flags. The hook denied the call. The agent got the deny reason as the tool result (`PreToolUse:Bash hook error: Blocked: javap reads whatever version is on disk … Use the jvmsrc MCP tools instead …`) and reported it to the user. Cost $0.06. Scoring counts this as a hook denial (`isHookDenial`).
 The eval prompts never make the agent reach for a shell command, so the harness cannot test the hook on its own. The probe is the only check of the hook path.

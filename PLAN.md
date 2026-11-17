@@ -23,7 +23,7 @@ Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGEL
 
 Released together in 1.19.0: checkpoints 1 and 2.
 
-Checkpoints 3, 4, 5, 6, 7, 8 and 9 are done and not released. Release them in order: 3, 4, 5, 6, 7, 8, then 9.
+Checkpoints 3, 4, 5, 6, 7, 8, 9 and 10 are done and not released. Release them in order: 3, 4, 5, 6, 7, 8, 9, then 10.
 
 
 | # | Checkpoint | Why at this position | Size |
@@ -182,14 +182,19 @@ Checkpoints 3, 4, 5, 6, 7, 8 and 9 are done and not released. Release them in or
 
 **Done when:** `get`, `get_class_structure`, `search_classes` and `resolve_dependencies` work on a single-module Maven project, with sources and with CFR.
 
-## Checkpoint 10 — Maven: reactor modules and polish
+## Checkpoint 10 — Maven: reactor modules and polish (done)
 
-- [ ] Multi-module reactor: map sibling modules to `origin: interproject`. Read `src/main/java` (and the checkpoint 6 languages), and use `target/classes` for `javap`.
-- [ ] Module paths: use the `artifactId` or a relative directory. Document the `modulePath` format for Maven in SPEC §5.4. File-path inference works.
-- [ ] `local-file` / `system` scope JARs participate as in Gradle.
-- [ ] Failure messages: get a Maven version of `gradle-failure-message.ts` (offline, auth, missing artifact).
-- [ ] Scenario `maven/multi-module`. Add a Maven eval project and 6 prompts.
-- [ ] README: remove "experimental" when the evals meet the checkpoint 3 targets.
+- [x] Multi-module reactor: map sibling modules to `origin: interproject`. Read `src/main/java` (and the checkpoint 6 languages), and use `target/classes` for `javap`.
+  Result: added `target/classes` and `target/test-classes` to `interprojectBytecodeRootSuffixes` (`src/extractor/interproject-paths.ts`). Uncompiled reactors resolve `.java` / `.kt` / `.scala` / `.groovy` directly from `src/{main,test}/*`; compiled siblings also provide `javap` inheritance and `SourceFile` attributes for Kotlin `*Kt` facades.
+- [x] Module paths: use the `artifactId` or a relative directory. Document the `modulePath` format for Maven in SPEC §5.4. File-path inference works.
+  Result: `matchModule` (`src/extractor/match-module.ts`) normalizes Maven `artifactId`s (`acme-app`, `:acme-app`), recognizes the reactor root module via `m.path === projectRoot` (`:`, `.`, `root`), and resolves relative directories (`services/app`) and file paths (`services/app/src/test/...` with `includeTest: true`). Documented in SPEC §5.4.
+- [x] `local-file` / `system` scope JARs participate as in Gradle.
+  Result: `JvmsrcMavenAnalyzer` skips remote Aether download on `<scope>system</scope>` and resolves `<systemPath>` directly as `origin: 'local-file'`, `type: 'local-file'`.
+- [x] Failure messages: get a Maven version of `gradle-failure-message.ts` (offline, auth, missing artifact).
+  Result: `src/resolvers/maven/maven-failure-message.ts`, Maven classification in `src/diagnostics/map-failure.ts`, and build-tool-neutral copy in `src/copy/error-messages.ts` + `src/copy/empty-messages.ts` (both removed from `src/build-tool-neutral-core.test.ts`).
+- [x] Scenario `maven/multi-module`. Add a Maven eval project and 6 prompts.
+  Result: `test/scenarios/maven/multi-module/`, `test/evals/maven-project/` (`core`, `app`, `worker`), `test/evals/maven-prompts.json` (`mv01`–`mv06`), and `bun run eval:maven`. Live run (Claude Code 2.1.325): 6/6 passed, selection recall 100%, precision 100%, usable first-call success 100% (strict 80%: `mv03` `MODULE_AMBIGUOUS` on `ObjectMapper`), `filecontext` module correct 100%, first-tool accuracy 100%, shell fallback 0%, eager tokens 1,972 (`chars / 4`). Recorded in `test/evals/README.md`.
+- [x] README: remove "experimental" when the evals meet the checkpoint 3 targets.
 
 **Done when:** the Maven eval prompts meet the same targets as Gradle.
 

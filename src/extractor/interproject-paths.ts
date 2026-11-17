@@ -7,14 +7,16 @@ const JAVA_MAIN = 'build/classes/java/main';
 const JAVA_TEST = 'build/classes/java/test';
 const KOTLIN_MAIN = 'build/classes/kotlin/main';
 const KOTLIN_TEST = 'build/classes/kotlin/test';
+const MAVEN_MAIN = 'target/classes';
+const MAVEN_TEST = 'target/test-classes';
 
 /**
- * Classpath roots beneath a Gradle submodule that may contain compiled `.class` files.
- * Order prefers main over test sources; Kotlin outputs are secondary to Java JVM convention.
+ * Classpath roots beneath a submodule that may contain compiled `.class` files
+ * (Gradle `build/classes/...` and Maven `target/{classes,test-classes}`).
  */
 export function interprojectBytecodeRootSuffixes(includeTest: boolean): string[] {
-  const main = [JAVA_MAIN, KOTLIN_MAIN];
-  const test = [JAVA_TEST, KOTLIN_TEST];
+  const main = [JAVA_MAIN, KOTLIN_MAIN, MAVEN_MAIN];
+  const test = [JAVA_TEST, KOTLIN_TEST, MAVEN_TEST];
   return includeTest ? [...main, ...test] : main;
 }
 

@@ -220,4 +220,7 @@ test/evals/project/**/build/
 resources/maven-analyzer.jar
 test/scenarios/maven/**/.mvn/wrapper/maven-wrapper.jar
 test/scenarios/maven/**/target/
+test/scenarios/maven/**/libs/
+test/evals/maven-project/.mvn/wrapper/maven-wrapper.jar
+test/evals/maven-project/**/target/
 
