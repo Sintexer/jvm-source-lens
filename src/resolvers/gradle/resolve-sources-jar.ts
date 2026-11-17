@@ -1,13 +1,15 @@
-import type { ArtifactCoordinates } from '../../extractor/class-source-types.js';
-import type { GradleProcessCapture } from '../base.js';
+import type {
+  ArtifactCoordinates,
+  ResolveSourcesJarResult,
+  SubprocessCapture,
+  SubprocessHooks,
+} from '../base.js';
 import { parseSourcesJarJson } from './sources-jar-output.js';
 import { runGradleTask, type GradleSpawnResult } from './spawn-gradle.js';
 
-export type ResolveSourcesJarResult =
-  | { ok: true; sourcesJarPath: string | null }
-  | { ok: false; message: string; stderr?: string; gradle?: GradleProcessCapture };
+export type { ResolveSourcesJarResult } from '../base.js';
 
-function gradleCaptureFromSpawn(s: GradleSpawnResult): GradleProcessCapture {
+function captureFromSpawn(s: GradleSpawnResult): SubprocessCapture {
   if (s.ok) {
     return { command: s.command, exitCode: 0, stdout: s.stdout, stderr: s.stderr };
   }
@@ -29,9 +31,11 @@ export function withStderrTail(message: string, stderr: string | undefined, maxL
   return lines.length > 0 ? `${message}: ${lines.join(' | ')}` : message;
 }
 
-export type ResolveSourcesJarGradleOptions = {
-  inheritStderr?: boolean;
+/** @deprecated Use `SubprocessHooks`. Kept for one release. */
+export type ResolveSourcesJarGradleOptions = SubprocessHooks & {
+  /** @deprecated Use `onBeforeResolve`. Kept for one release. */
   onBeforeGradle?: () => void;
+  /** @deprecated Use `onAfterResolve`. Kept for one release. */
   onAfterGradle?: () => void;
 };
 
@@ -42,7 +46,7 @@ export type ResolveSourcesJarGradleOptions = {
 export async function resolveSourcesJar(
   projectRoot: string,
   coordinates: ArtifactCoordinates,
-  gradle?: ResolveSourcesJarGradleOptions,
+  hooks?: ResolveSourcesJarGradleOptions,
 ): Promise<ResolveSourcesJarResult> {
   const version = coordinates.version;
   if (version === null || version.length === 0) {
@@ -51,7 +55,11 @@ export async function resolveSourcesJar(
 
   let spawned: GradleSpawnResult;
   try {
-    gradle?.onBeforeGradle?.();
+    if (hooks?.onBeforeResolve) {
+      hooks.onBeforeResolve({ resolverId: 'gradle', displayName: 'Gradle' });
+    } else {
+      hooks?.onBeforeGradle?.();
+    }
     spawned = await runGradleTask(
       projectRoot,
       'jvmsrcResolveSources',
@@ -60,28 +68,36 @@ export async function resolveSourcesJar(
         jvmsrcName: coordinates.name,
         jvmsrcVersion: version,
       },
-      { inheritStderr: Boolean(gradle?.inheritStderr) },
+      { inheritStderr: Boolean(hooks?.inheritStderr) },
     );
   } finally {
-    gradle?.onAfterGradle?.();
+    if (hooks?.onAfterResolve) {
+      hooks.onAfterResolve();
+    } else {
+      hooks?.onAfterGradle?.();
+    }
   }
 
   if (!spawned.ok) {
+    const capture = captureFromSpawn(spawned);
     return {
       ok: false,
       message: withStderrTail(spawned.message, spawned.stderr),
       stderr: spawned.stderr,
-      gradle: gradleCaptureFromSpawn(spawned),
+      subprocess: capture,
+      gradle: capture,
     };
   }
 
   const parsed = parseSourcesJarJson(spawned.stdout);
   if (!parsed.ok) {
+    const capture = captureFromSpawn(spawned);
     return {
       ok: false,
       message: parsed.message,
       stderr: spawned.stderr || undefined,
-      gradle: gradleCaptureFromSpawn(spawned),
+      subprocess: capture,
+      gradle: capture,
     };
   }
 

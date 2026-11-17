@@ -40,8 +40,8 @@ export type ModuleMatch =
   | { kind: 'ambiguous'; candidates: string[] }
   | { kind: 'none' };
 
-function lastSegment(gradlePath: string): string {
-  return gradlePath.slice(gradlePath.lastIndexOf(':') + 1);
+function lastSegment(moduleColonPath: string): string {
+  return moduleColonPath.slice(moduleColonPath.lastIndexOf(':') + 1);
 }
 
 function pickUnique(candidates: ResolvedModule[]): ModuleMatch | undefined {
@@ -109,10 +109,10 @@ export function matchModule(raw: string, modules: ResolvedModule[], projectRoot?
     }
   }
 
-  const gradlePath = (m: ResolvedModule): string => (m.name === ROOT_MODULE_NAME ? ':' : m.name);
+  const moduleColonPath = (m: ResolvedModule): string => (m.name === ROOT_MODULE_NAME ? ':' : m.name);
   const lower = normalized.toLowerCase();
 
-  const byNormalized = pickUnique(modules.filter((m) => gradlePath(m).toLowerCase() === lower));
+  const byNormalized = pickUnique(modules.filter((m) => moduleColonPath(m).toLowerCase() === lower));
   if (byNormalized !== undefined) {
     return byNormalized;
   }

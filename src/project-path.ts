@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DependencyResolver } from './resolvers/base.js';
+import { allResolvers } from './resolvers/index.js';
 
 export type ProjectRootResult =
   | { ok: true; path: string }
@@ -44,8 +46,6 @@ export function assertProjectRootAllowed(resolved: string): ProjectRootResult {
   };
 }
 
-const GRADLE_ROOT_MARKERS = ['settings.gradle', 'settings.gradle.kts', 'gradlew'] as const;
-
 function isDirectory(p: string): boolean {
   try {
     return fs.statSync(p).isDirectory();
@@ -54,23 +54,19 @@ function isDirectory(p: string): boolean {
   }
 }
 
-function hasGradleRootMarker(dir: string): boolean {
-  return GRADLE_ROOT_MARKERS.some((m) => fs.existsSync(path.join(dir, m)));
+function findMatchingBuildRoot(start: string): { root: string; resolver: DependencyResolver } | null {
+  for (const resolver of allResolvers()) {
+    const root = resolver.findBuildRoot(start);
+    if (root !== null) {
+      return { root, resolver };
+    }
+  }
+  return null;
 }
 
-/** Nearest ancestor (or `start` itself) holding `gradlew` / `settings.gradle(.kts)`, or `null`. */
-export function findGradleRoot(start: string): string | null {
-  let dir = start;
-  for (;;) {
-    if (hasGradleRootMarker(dir)) {
-      return dir;
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) {
-      return null;
-    }
-    dir = parent;
-  }
+/** Nearest ancestor (or `start` itself) recognized by any registered resolver, or `null`. */
+export function findBuildRoot(start: string): string | null {
+  return findMatchingBuildRoot(start)?.root ?? null;
 }
 
 export type ResolvedProjectRoot =
@@ -87,16 +83,26 @@ function envProjectRoot(): string | undefined {
   return raw ? raw : undefined;
 }
 
-/** Walks up to the Gradle root; keeps `start` when none is found or the ancestor is outside the allowlist. */
-function liftToGradleRoot(start: string): { path: string; found: boolean } {
-  const found = findGradleRoot(start);
-  if (found !== null && assertProjectRootAllowed(found).ok) {
-    return { path: found, found: true };
+/** Walks up to the build root; keeps `start` when none is found or the ancestor is outside the allowlist. */
+function liftToBuildRoot(start: string): {
+  path: string;
+  found: boolean;
+  resolver?: DependencyResolver;
+} {
+  const match = findMatchingBuildRoot(start);
+  if (match !== null && assertProjectRootAllowed(match.root).ok) {
+    return { path: match.root, found: true, resolver: match.resolver };
   }
-  return { path: start, found: found !== null && found === start };
+  return {
+    path: start,
+    found: match !== null && match.root === start,
+    resolver: match !== null && match.root === start ? match.resolver : undefined,
+  };
 }
 
-function discoverFromWorkspace(opts: ResolveProjectRootOptions): string | null {
+function discoverFromWorkspace(
+  opts: ResolveProjectRootOptions,
+): { path: string; resolver: DependencyResolver } | null {
   const candidates = [
     ...(opts.workspaceRoots ?? []),
     ...(envProjectRoot() ? [path.resolve(envProjectRoot()!)] : []),
@@ -106,9 +112,9 @@ function discoverFromWorkspace(opts: ResolveProjectRootOptions): string | null {
     if (!isDirectory(dir)) {
       continue;
     }
-    const lifted = liftToGradleRoot(dir);
-    if (lifted.found) {
-      return lifted.path;
+    const lifted = liftToBuildRoot(dir);
+    if (lifted.found && lifted.resolver) {
+      return { path: lifted.path, resolver: lifted.resolver };
     }
   }
   return null;
@@ -121,12 +127,24 @@ function triedLocations(opts: ResolveProjectRootOptions): string {
   return dirs.join(', ');
 }
 
+function supportedProjectsLabel(): string {
+  return allResolvers()
+    .map((r) => r.displayName)
+    .join(' or ');
+}
+
+function supportedRootHintsLabel(): string {
+  return allResolvers()
+    .map((r) => r.rootHint)
+    .join(', or ');
+}
+
 /**
- * Resolves the Gradle project root for a tool call.
+ * Resolves the build project root for a tool call.
  *
  * With `input`: relative paths are tried against the workspace roots, `JVMSRC_PROJECT_ROOT` and `cwd`;
- * a subdirectory is lifted to the nearest `gradlew` / `settings.gradle(.kts)`.
- * Without `input`: first of workspace roots → `JVMSRC_PROJECT_ROOT` → `cwd` that sits inside a Gradle project.
+ * a subdirectory is lifted to the build root identified by the registered resolvers.
+ * Without `input`: first of workspace roots → `JVMSRC_PROJECT_ROOT` → `cwd` that sits inside a supported build.
  */
 export function resolveProjectRoot(
   input?: string,
@@ -139,11 +157,11 @@ export function resolveProjectRoot(
       return {
         ok: false,
         message:
-          `No Gradle project found in the workspace (looked in: ${triedLocations(opts)}). ` +
-          'Retry with projectRoot set to the absolute path of the directory containing gradlew or settings.gradle(.kts).',
+          `No ${supportedProjectsLabel()} project found in the workspace (looked in: ${triedLocations(opts)}). ` +
+          `Retry with projectRoot set to the absolute path of the directory containing ${supportedRootHintsLabel()}.`,
       };
     }
-    return assertProjectRootAllowed(found);
+    return assertProjectRootAllowed(found.path);
   }
 
   const bases = [
@@ -165,8 +183,8 @@ export function resolveProjectRoot(
       message:
         (exists ? `Project path is not a directory: ${shown}.` : `Project path does not exist: ${shown}.`) +
         (hint !== null
-          ? ` A Gradle project was found at ${hint}; retry with projectRoot=${JSON.stringify(hint)} or omit projectRoot.`
-          : ' Pass the absolute path of the directory containing gradlew or settings.gradle(.kts).'),
+          ? ` A ${hint.resolver.displayName} project was found at ${hint.path}; retry with projectRoot=${JSON.stringify(hint.path)} or omit projectRoot.`
+          : ` Pass the absolute path of the directory containing ${supportedRootHintsLabel()}.`),
     };
   }
 
@@ -174,12 +192,12 @@ export function resolveProjectRoot(
   if (!allowed.ok) {
     return allowed;
   }
-  const lifted = liftToGradleRoot(resolved);
-  if (lifted.path !== resolved) {
+  const lifted = liftToBuildRoot(resolved);
+  if (lifted.path !== resolved && lifted.resolver) {
     return {
       ok: true,
       path: lifted.path,
-      note: `projectRoot ${resolved} is inside the Gradle project at ${lifted.path}; using that.`,
+      note: `projectRoot ${resolved} is inside the ${lifted.resolver.displayName} project at ${lifted.path}; using that.`,
     };
   }
   return { ok: true, path: resolved };

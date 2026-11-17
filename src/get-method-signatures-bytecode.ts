@@ -37,7 +37,7 @@ export async function getMethodSignaturesBytecode(
 ): Promise<GetMethodSignatureResult> {
   const mn = methodName.trim();
   if (mn.length === 0) {
-    return methodSignatureFail(opts, className, methodName, {
+    return methodSignatureFail(opts, className, methodName, null, {
       code: 'INVALID_FQN',
       message: 'methodName must be non-empty (use <init> for constructors).',
     });
@@ -59,6 +59,8 @@ export async function getMethodSignaturesBytecode(
     };
   }
 
+  const buildSystem = resolved.output.buildSystem.type;
+
   const moduleScope = resolveClassScopeOrError(opts.projectRoot, resolved.output, {
     className,
     modulePath: opts.modulePath,
@@ -66,7 +68,7 @@ export async function getMethodSignaturesBytecode(
     includeTest: opts.includeTest,
   });
   if (!moduleScope.ok) {
-    return methodSignatureFail(opts, className, mn, enrichScopeError(opts, resolved.output, moduleScope.error));
+    return methodSignatureFail(opts, className, mn, buildSystem, enrichScopeError(opts, resolved.output, moduleScope.error));
   }
   const effectiveModulePath = moduleScope.modulePath;
   className = moduleScope.className;
@@ -80,7 +82,7 @@ export async function getMethodSignaturesBytecode(
 
   const ownerHit = findClasspathOwningClass(resolved.output, lookupOpts);
   if (!ownerHit.ok) {
-    return methodSignatureFail(opts, className, mn, enrichScopeError(opts, resolved.output, ownerHit.error));
+    return methodSignatureFail(opts, className, mn, buildSystem, enrichScopeError(opts, resolved.output, ownerHit.error));
   }
 
   const { hit } = ownerHit;
@@ -105,7 +107,7 @@ export async function getMethodSignaturesBytecode(
     methodName: mn,
   });
   if (!javap.ok) {
-    return methodSignatureFail(opts, className, mn, javap.error);
+    return methodSignatureFail(opts, className, mn, buildSystem, javap.error);
   }
 
   return {

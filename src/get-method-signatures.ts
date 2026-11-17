@@ -52,6 +52,7 @@ export function methodSignatureFail(
   opts: GetMethodSignatureOptions,
   className: string,
   methodName: string,
+  buildSystem: string | null,
   error: ClassSourceError,
   subprocess?: {
     command: string[];
@@ -65,7 +66,7 @@ export function methodSignatureFail(
     publicCode: error.code,
     message: error.message,
     projectRoot: opts.projectRoot,
-    buildSystem: 'gradle',
+    buildSystem,
     input: {
       className,
       methodName,
@@ -136,7 +137,7 @@ export async function getMethodSignatures(
 ): Promise<GetMethodSignatureResult> {
   const mn = methodName.trim();
   if (mn.length === 0) {
-    return methodSignatureFail(opts, className, methodName, {
+    return methodSignatureFail(opts, className, methodName, null, {
       code: 'INVALID_FQN',
       message: 'methodName must be non-empty (use <init> for constructors).',
     });
@@ -158,6 +159,8 @@ export async function getMethodSignatures(
     };
   }
 
+  const buildSystem = resolved.output.buildSystem.type;
+
   const moduleScope = resolveClassScopeOrError(opts.projectRoot, resolved.output, {
     className,
     modulePath: opts.modulePath,
@@ -165,7 +168,7 @@ export async function getMethodSignatures(
     includeTest: opts.includeTest,
   });
   if (!moduleScope.ok) {
-    return methodSignatureFail(opts, className, mn, enrichScopeError(opts, resolved.output, moduleScope.error));
+    return methodSignatureFail(opts, className, mn, buildSystem, enrichScopeError(opts, resolved.output, moduleScope.error));
   }
   const effectiveModulePath = moduleScope.modulePath;
   className = moduleScope.className;
@@ -179,6 +182,7 @@ export async function getMethodSignatures(
 
   const resolveSourcesJarFn = createSourcesJarResolver({
     projectRoot: opts.projectRoot,
+    buildSystem,
     operation: 'get_method_signature',
     input: { className, modulePath: opts.modulePath, includeTest: opts.includeTest },
   });
@@ -190,7 +194,7 @@ export async function getMethodSignatures(
   );
 
   if (!sourceRead.ok) {
-    return methodSignatureFail(opts, className, mn, enrichScopeError(opts, resolved.output, sourceRead.error));
+    return methodSignatureFail(opts, className, mn, buildSystem, enrichScopeError(opts, resolved.output, sourceRead.error));
   }
 
   if (sourceRead.hit && sourceRead.sourceLanguage === 'java') {
@@ -219,7 +223,7 @@ export async function getMethodSignatures(
     includeTest: opts.includeTest,
   });
   if (!ownerHit.ok) {
-    return methodSignatureFail(opts, className, mn, enrichScopeError(opts, resolved.output, ownerHit.error));
+    return methodSignatureFail(opts, className, mn, buildSystem, enrichScopeError(opts, resolved.output, ownerHit.error));
   }
 
   const { hit } = ownerHit;
@@ -246,7 +250,7 @@ export async function getMethodSignatures(
     methodName: mn,
   });
   if (!javap.ok) {
-    return methodSignatureFail(opts, className, mn, javap.error);
+    return methodSignatureFail(opts, className, mn, buildSystem, javap.error);
   }
 
   // Kotlin source names the parameters; javap still supplies the overloads and their types.

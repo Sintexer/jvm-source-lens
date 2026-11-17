@@ -246,6 +246,39 @@ describe('pickResolvedConfiguration', () => {
       expect(r.error.code).toBe('CONFIGURATION_NOT_FOUND');
     }
   });
+
+  test('falls back to scope match (compile / test-compile) for non-Gradle configuration names', () => {
+    const mavenLike: ResolutionOutput = {
+      schemaVersion: '1.2',
+      resolvedAt: '2026-01-01T00:00:00Z',
+      buildSystem: { type: 'maven', version: '3.9.9', wrapper: true },
+      projectRoot: '/tmp/m',
+      modules: [
+        {
+          name: 'my-app',
+          path: '/tmp/m',
+          configurations: [
+            {
+              name: 'compile',
+              scope: 'compile',
+              artifacts: [artifact({ group: 'g', name: 'main-dep', jarPath: '/m.jar' })],
+            },
+            {
+              name: 'test',
+              scope: 'test-compile',
+              artifacts: [artifact({ group: 'g', name: 'test-dep', jarPath: '/mt.jar' })],
+            },
+          ],
+        },
+      ],
+      errors: [],
+    };
+    const compilePick = pickResolvedConfiguration(mavenLike, {});
+    expect(compilePick.ok && compilePick.configuration.name).toBe('compile');
+
+    const testPick = pickResolvedConfiguration(mavenLike, { includeTest: true });
+    expect(testPick.ok && testPick.configuration.name).toBe('test');
+  });
 });
 
 describe('pickResolvedConfiguration loose modulePath', () => {

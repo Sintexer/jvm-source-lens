@@ -117,6 +117,20 @@ bun test                           # run all tests (scenarios auto-skip if no JA
    the new build tool).
 4. Add a `"ensure:{tool}-{scenario}"` script in `package.json` if convenient.
 
+## Adding a resolver
+
+Core modules do not import build-tool code directly. To add support for another build system:
+
+1. Create `src/resolvers/<tool>/index.ts` and implement [`DependencyResolver`](src/resolvers/base.ts):
+   - `id` (matches `ResolutionOutput.buildSystem.type`), `displayName`, and `rootHint`.
+   - `detect(projectRoot)` and `findBuildRoot(start)` (walks up to the build or reactor root).
+   - `cacheInputs(projectRoot)` using `walkProjectTree` from `src/cache/walk-project-tree.ts`.
+   - `isImmutableArtifact(artifact)` (`true` only for immutable downloaded cache artifacts; `false` for SNAPSHOT or mutable local repository JARs).
+   - `resolve(projectRoot, options)` and `resolveSourcesJar(projectRoot, coordinates, hooks)`. Never write files under `projectRoot`.
+2. Register an instance in `RESOLVERS` inside [`src/resolvers/index.ts`](src/resolvers/index.ts).
+3. Add unit tests, a synthetic end-to-end test (modeled on `test/fixtures/fake-resolver.test.ts`), and scenario tests under `test/scenarios/<tool>/`.
+4. Keep `src/build-tool-neutral-core.test.ts` green without adding core files to its allowlist.
+
 ## Branches
 
 - Open PRs against **`master`** (default integration and release branch).

@@ -2,12 +2,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import type { DependencyResolver } from '../resolvers/base.js';
+import { gradleUserHome, isGradleManagedJar } from '../resolvers/gradle/cache-inputs.js';
 import type { ResolutionOutput, ResolvedArtifact } from '../resolvers/resolution-output.js';
 import {
   collectLocalArtifactJarPaths,
   computeLocalArtifactDigest,
-  gradleUserHome,
-  isGradleManagedJar,
 } from './local-artifact-digest.js';
 
 // ---------------------------------------------------------------------------
@@ -131,6 +131,20 @@ describe('collectLocalArtifactJarPaths', () => {
     };
     const paths = collectLocalArtifactJarPaths(out);
     expect(paths).toHaveLength(1);
+  });
+
+  test('delegates immutability check with full artifact coordinates to resolver.isImmutableArtifact', () => {
+    const releaseJar = path.join(os.tmpdir(), 'm2', 'lib-1.0.0.jar');
+    const snapshotJar = path.join(os.tmpdir(), 'm2', 'lib-1.0.0-SNAPSHOT.jar');
+    const out = makeOutput([
+      makeArtifact({ version: '1.0.0', jarPath: releaseJar }),
+      makeArtifact({ version: '1.0.0-SNAPSHOT', jarPath: snapshotJar }),
+    ]);
+    const fakeM2Resolver: Pick<DependencyResolver, 'isImmutableArtifact'> = {
+      isImmutableArtifact: (art) => !art.version?.endsWith('-SNAPSHOT'),
+    };
+    const paths = collectLocalArtifactJarPaths(out, fakeM2Resolver as DependencyResolver);
+    expect(paths).toEqual([path.resolve(snapshotJar)]);
   });
 });
 

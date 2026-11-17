@@ -34,12 +34,16 @@ function configurationCandidates(
 function pickConfiguration(
   module: ResolvedModule,
   names: readonly string[],
+  fallbackScope?: ResolvedConfiguration['scope'],
 ): ResolvedConfiguration | undefined {
   for (const name of names) {
     const hit = module.configurations.find((c) => c.name === name);
     if (hit !== undefined) {
       return hit;
     }
+  }
+  if (fallbackScope !== undefined) {
+    return module.configurations.find((c) => c.scope === fallbackScope);
   }
   return undefined;
 }
@@ -76,6 +80,12 @@ export function pickResolvedConfiguration(
 ): PickClasspathResult {
   const opts = withoutAllModules(rawOpts);
   const candidates = configurationCandidates(opts.configuration, opts.includeTest);
+  const fallbackScope: ResolvedConfiguration['scope'] | undefined =
+    opts.configuration && opts.configuration.length > 0
+      ? undefined
+      : opts.includeTest
+        ? 'test-compile'
+        : 'compile';
   const availableModules = listModuleNames(output);
   const wantModule = opts.modulePath;
 
@@ -98,7 +108,7 @@ export function pickResolvedConfiguration(
       };
     }
     const module = match.module;
-    const configuration = pickConfiguration(module, candidates);
+    const configuration = pickConfiguration(module, candidates, fallbackScope);
     if (configuration === undefined) {
       const wanted = candidates.join(' or ');
       return {
@@ -120,7 +130,7 @@ export function pickResolvedConfiguration(
   const root = output.modules.find((m) => m.name === 'root');
   const withConfig: { module: ResolvedModule; configuration: ResolvedConfiguration }[] = [];
   for (const module of output.modules) {
-    const configuration = pickConfiguration(module, candidates);
+    const configuration = pickConfiguration(module, candidates, fallbackScope);
     if (configuration !== undefined) {
       withConfig.push({ module, configuration });
     }

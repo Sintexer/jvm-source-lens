@@ -87,4 +87,26 @@ describe('resolution-output', () => {
       expect(v.message).toContain('schemaVersion');
     }
   });
+
+  test('validate accepts any non-empty buildSystem.type and rejects empty string', () => {
+    const okMaven = validateResolutionOutput({
+      schemaVersion: '1.2',
+      resolvedAt: 'x',
+      buildSystem: { type: 'maven', version: '3.9.9', wrapper: true },
+      projectRoot: '/p',
+      modules: [],
+      errors: [],
+    });
+    expect(okMaven.ok).toBe(true);
+
+    const badEmpty = validateResolutionOutput({
+      schemaVersion: '1.2',
+      resolvedAt: 'x',
+      buildSystem: { type: '   ', version: '1.0', wrapper: false },
+      projectRoot: '/p',
+      modules: [],
+      errors: [],
+    });
+    expect(badEmpty.ok).toBe(false);
+  });
 });

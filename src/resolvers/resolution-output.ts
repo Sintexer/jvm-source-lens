@@ -2,8 +2,14 @@ export const SUPPORTED_RESOLUTION_SCHEMA_VERSIONS = ['1.0', '1.1', '1.2'] as con
 
 export type ResolutionSchemaVersion = (typeof SUPPORTED_RESOLUTION_SCHEMA_VERSIONS)[number];
 
+export type ArtifactCoordinates = {
+  group: string;
+  name: string;
+  version: string | null;
+};
+
 export interface BuildSystemInfo {
-  type: 'gradle' | 'maven';
+  type: string;
   version: string;
   wrapper: boolean;
 }
@@ -19,7 +25,7 @@ export interface ResolvedArtifact {
   version: string | null;
   type: 'jar' | 'project' | 'local-file';
   jarPath: string | null;
-  /** Omitted in Gradle 1.1 JSON when absent; normalized to `null` after parse. */
+  /** Omitted in schema 1.1 JSON when absent; normalized to `null` after parse. */
   sourcesJarPath?: string | null;
   origin: 'external' | 'interproject' | 'local-file';
   direct: boolean;
@@ -53,9 +59,8 @@ export interface ResolutionOutput {
   modules: ResolvedModule[];
   errors: ResolutionError[];
   /**
-   * Java major version required by the project's Gradle toolchain configuration, if any.
-   * Emitted by the init script (schema 1.2+) when `java { toolchain { languageVersion } }` is set.
-   * Used by jvmsrc on the next invocation to select the right JDK without re-running Gradle.
+   * Java major version required by the project's toolchain configuration, if any.
+   * Emitted by schema 1.2+ when a build-tool Java toolchain is configured.
    * Absent (undefined) when no toolchain is configured or on older schema versions.
    */
   javaToolchainVersion?: number;
@@ -79,7 +84,7 @@ export function parseResolutionJson(text: string): unknown {
     if (start >= 0 && end > start) {
       return JSON.parse(trimmed.slice(start, end + 1)) as unknown;
     }
-    throw new SyntaxError('No JSON object found in Gradle output');
+    throw new SyntaxError('No JSON object found in resolution output');
   }
 }
 
@@ -100,8 +105,15 @@ export function validateResolutionOutput(raw: unknown): ResolutionParseResult {
   }
 
   const buildSystem = raw.buildSystem;
-  if (!isRecord(buildSystem) || buildSystem.type !== 'gradle') {
-    return { ok: false, message: 'Missing or invalid buildSystem.type (expected "gradle")' };
+  if (
+    !isRecord(buildSystem) ||
+    typeof buildSystem.type !== 'string' ||
+    buildSystem.type.trim().length === 0
+  ) {
+    return {
+      ok: false,
+      message: 'Missing or invalid buildSystem.type (expected non-empty string)',
+    };
   }
 
   if (typeof buildSystem.version !== 'string' || typeof buildSystem.wrapper !== 'boolean') {

@@ -8,7 +8,7 @@ import { anonymousOrLocalClassError } from './extractor/nested-class-source.js';
 import { pickResolvedConfiguration } from './extractor/pick-classpath.js';
 import { readZipEntryUtf8, zipEntryExists } from './extractor/zip-entry.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
-import { resolveSourcesJar } from './resolvers/gradle/resolve-sources-jar.js';
+import { createSourcesJarResolver } from './sources-jar-resolver.js';
 import type { ResolvedArtifact, ResolutionOutput } from './resolvers/resolution-output.js';
 import {
   searchClassSourceTextAsync,
@@ -363,8 +363,21 @@ export async function searchInArtifactFromOutput(
     if (opts.resolveSourcesJarFn) {
       sourcesJarPath = await opts.resolveSourcesJarFn(projectRoot, coordinates);
     } else {
-      const sjResult = await resolveSourcesJar(projectRoot, coordinates);
-      sourcesJarPath = sjResult.ok ? sjResult.sourcesJarPath : null;
+      const resolveSources = createSourcesJarResolver({
+        projectRoot,
+        buildSystem: output.buildSystem.type,
+        operation: 'search_in_artifact',
+        input: {
+          query: opts.query,
+          regex,
+          coordinates: opts.selector.coordinates,
+          jarPath: opts.selector.jarPath,
+          modulePath: opts.modulePath,
+          configuration: opts.configuration,
+          includeTest: opts.includeTest,
+        },
+      });
+      sourcesJarPath = await resolveSources(coordinates);
     }
   }
 

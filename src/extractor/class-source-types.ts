@@ -1,6 +1,8 @@
-import type { ResolvedArtifact } from '../resolvers/resolution-output.js';
+import type { ArtifactCoordinates, ResolvedArtifact } from '../resolvers/resolution-output.js';
 import type { DecompileExternalClassFn } from '../decompiler/decompile-external-class.js';
 import type { SourceExcerptInfo } from '../source-excerpt.js';
+
+export type { ArtifactCoordinates } from '../resolvers/resolution-output.js';
 
 export type SourceLanguage = 'java' | 'kotlin' | 'scala' | 'groovy';
 
@@ -20,12 +22,6 @@ export function sourceLanguageFromPath(relPath: string | null | undefined): Sour
   const ext = dot < 0 ? '' : relPath.slice(dot).toLowerCase();
   return SOURCE_LANGUAGE_BY_EXT[ext] ?? 'java';
 }
-
-export type ArtifactCoordinates = {
-  group: string;
-  name: string;
-  version: string | null;
-};
 
 export type SourcesJarProvenance = {
   kind: 'sourcesJar';

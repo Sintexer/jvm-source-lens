@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import type { DependencyResolver } from '../resolvers/base.js';
+import { detectResolver, resolverById } from '../resolvers/index.js';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
 import { parseResolutionJson, validateResolutionOutput } from '../resolvers/resolution-output.js';
 import {
@@ -10,103 +12,41 @@ import {
   getProjectResolutionCacheDir,
   writeFileAtomicSameDir,
 } from './paths.js';
-import { computeLocalArtifactDigest, gradleUserHome } from './local-artifact-digest.js';
+import { computeLocalArtifactDigest } from './local-artifact-digest.js';
 
-const SKIP_DIR_NAMES = new Set([
-  'build',
-  '.gradle',
-  'node_modules',
-  '.git',
-  'dist',
-  'out',
-  'bin',
-  '.idea',
-  '.vscode',
-  'coverage',
-  '__pycache__',
-  '.svn',
-]);
+export { COMMON_SKIP_DIR_NAMES, walkProjectTree, type WalkProjectTreeOptions } from './walk-project-tree.js';
 
-/** Relative paths of Gradle build inputs (SPEC §6.1), sorted, POSIX-style separators. */
-export function listBuildInputRelativePaths(projectRoot: string): string[] {
+/** Relative paths of declared build inputs (SPEC §6.1), sorted, POSIX-style separators. */
+export function listBuildInputRelativePaths(
+  projectRoot: string,
+  resolver?: DependencyResolver,
+): string[] {
   const rootAbs = canonicalProjectRoot(projectRoot);
-  const files: string[] = [];
-
-  for (const name of ['settings.gradle', 'settings.gradle.kts']) {
-    if (fs.existsSync(path.join(rootAbs, name))) {
-      files.push(name);
-    }
-  }
-
-  function walk(dir: string): void {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const ent of entries) {
-      // Symlinks can form loops or point outside the project; never follow them.
-      if (ent.isSymbolicLink()) {
-        continue;
-      }
-      const joined = path.join(dir, ent.name);
-      if (ent.isDirectory()) {
-        if (SKIP_DIR_NAMES.has(ent.name)) {
-          continue;
-        }
-        walk(joined);
-      } else if (ent.isFile()) {
-        if (
-          ent.name === 'build.gradle' ||
-          ent.name === 'build.gradle.kts' ||
-          ent.name === 'gradle.properties'
-        ) {
-          const rel = path.relative(rootAbs, joined);
-          files.push(rel.split(path.sep).join('/'));
-        }
-      }
-    }
-  }
-
-  walk(rootAbs);
-
-  const toml = path.join(rootAbs, 'gradle', 'libs.versions.toml');
-  if (fs.existsSync(toml) && fs.statSync(toml).isFile()) {
-    files.push('gradle/libs.versions.toml');
-  }
-
-  const wrapperProps = path.join(rootAbs, 'gradle', 'wrapper', 'gradle-wrapper.properties');
-  if (fs.existsSync(wrapperProps) && fs.statSync(wrapperProps).isFile()) {
-    files.push('gradle/wrapper/gradle-wrapper.properties');
-  }
-
-  const lockDir = path.join(rootAbs, 'gradle', 'dependency-locks');
-  if (fs.existsSync(lockDir) && fs.statSync(lockDir).isDirectory()) {
-    for (const n of fs.readdirSync(lockDir).sort()) {
-      if (n.endsWith('.lockfile')) {
-        files.push(`gradle/dependency-locks/${n}`);
-      }
-    }
-  }
-
-  return [...new Set(files)].sort((a, b) => a.localeCompare(b));
+  const active = resolver ?? detectResolver(rootAbs);
+  return active.cacheInputs(rootAbs).files;
 }
 
-/** SHA-256 (64 lowercase hex) over sorted build-input paths and each file’s content hash. */
-export function computeBuildInputsDigest(projectRoot: string): string {
+/**
+ * SHA-256 (64 lowercase hex) over sorted build-input paths (`rel:sha256`) followed by synthetic
+ * `env:<key>:<value>` lines supplied by the resolver (`null` = synthetic empty inputs).
+ */
+export function computeBuildInputsDigest(
+  projectRoot: string,
+  resolver?: DependencyResolver | null,
+): string {
   const rootAbs = canonicalProjectRoot(projectRoot);
-  const rels = listBuildInputRelativePaths(rootAbs);
+  const active = resolver === undefined ? detectResolver(rootAbs) : resolver;
+  const inputs = active ? active.cacheInputs(rootAbs) : { files: [], env: [] };
   const lines: string[] = [];
-  for (const rel of rels) {
+  for (const rel of inputs.files) {
     const full = path.join(rootAbs, rel);
     const buf = fs.readFileSync(full);
     const fileHex = createHash('sha256').update(buf).digest('hex');
     lines.push(`${rel}:${fileHex}`);
   }
-  // Synthetic input: GRADLE_USER_HOME determines where Gradle stores artifacts.
-  // A change means previously-stored jarPath values in resolution.json may be wrong.
-  lines.push(`env:GRADLE_USER_HOME:${gradleUserHome()}`);
+  for (const [key, value] of inputs.env) {
+    lines.push(`env:${key}:${value}`);
+  }
   return createHash('sha256').update(lines.join('\n'), 'utf8').digest('hex');
 }
 
@@ -140,7 +80,10 @@ function removeLegacyClassSearchIndex(bucketDir: string): void {
   }
 }
 
-export function readCachedResolution(projectRoot: string): CachedResolutionRead {
+export function readCachedResolution(
+  projectRoot: string,
+  resolver?: DependencyResolver,
+): CachedResolutionRead {
   const canonical = canonicalProjectRoot(projectRoot);
   const bucketRes = getProjectResolutionCacheDir(canonical);
   if (!bucketRes.ok) {
@@ -148,6 +91,15 @@ export function readCachedResolution(projectRoot: string): CachedResolutionRead 
   }
   const bucketDir = bucketRes.dir;
   removeLegacyClassSearchIndex(bucketDir);
+
+  let activeResolver: DependencyResolver;
+  try {
+    activeResolver = resolver ?? detectResolver(canonical);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, reason: msg };
+  }
+
   const hashPath = path.join(bucketDir, 'resolution.hash');
   const jsonPath = path.join(bucketDir, 'resolution.json');
   const localHashPath = path.join(bucketDir, 'local-artifact.hash');
@@ -157,7 +109,7 @@ export function readCachedResolution(projectRoot: string): CachedResolutionRead 
     return { ok: false, reason: 'No resolution.hash in cache bucket' };
   }
 
-  const expectedDigest = computeBuildInputsDigest(canonical);
+  const expectedDigest = computeBuildInputsDigest(canonical, activeResolver);
   const trimmed = storedHash.trim().toLowerCase();
   if (trimmed !== expectedDigest.toLowerCase()) {
     return { ok: false, reason: 'resolution.hash does not match current build inputs' };
@@ -181,6 +133,13 @@ export function readCachedResolution(projectRoot: string): CachedResolutionRead 
     return { ok: false, reason: validated.message };
   }
 
+  if (validated.output.buildSystem.type !== activeResolver.id) {
+    return {
+      ok: false,
+      reason: `Cached resolution buildSystem.type (${validated.output.buildSystem.type}) does not match resolver (${activeResolver.id})`,
+    };
+  }
+
   const outRoot = path.resolve(validated.output.projectRoot);
   if (outRoot !== canonical) {
     return {
@@ -189,13 +148,13 @@ export function readCachedResolution(projectRoot: string): CachedResolutionRead 
     };
   }
 
-  // Validate local (non-Gradle-managed) artifact JARs — e.g. local Maven SNAPSHOTs can be
-  // republished without any build-file change, so their content is checked separately.
+  // Validate mutable local external JARs — e.g. local Maven SNAPSHOTs can be republished
+  // without any build-file change, so their content is checked separately.
   const storedLocalHash = readTextIfExists(localHashPath);
   if (storedLocalHash == null) {
     return { ok: false, reason: 'No local-artifact.hash in cache bucket' };
   }
-  const freshLocalHash = computeLocalArtifactDigest(validated.output);
+  const freshLocalHash = computeLocalArtifactDigest(validated.output, activeResolver);
   if (storedLocalHash.trim().toLowerCase() !== freshLocalHash.toLowerCase()) {
     return { ok: false, reason: 'local-artifact.hash does not match current local artifact content' };
   }
@@ -212,6 +171,7 @@ export function writeCachedResolution(
   projectRoot: string,
   output: ResolutionOutput,
   buildInputsDigest: string,
+  resolver?: DependencyResolver,
 ): WriteCachedResolutionResult {
   const canonical = canonicalProjectRoot(projectRoot);
   const reserved = ensureReservedCacheDirs();
@@ -233,12 +193,14 @@ export function writeCachedResolution(
     writtenAt: new Date().toISOString(),
   };
 
+  const activeResolver = resolver ?? resolverById(output.buildSystem.type);
+
   try {
     writeFileAtomicSameDir(path.join(bucketDir, 'resolution.json'), `${JSON.stringify(output)}\n`);
     writeFileAtomicSameDir(path.join(bucketDir, 'resolution.hash'), `${buildInputsDigest.toLowerCase()}\n`);
     writeFileAtomicSameDir(
       path.join(bucketDir, 'local-artifact.hash'),
-      `${computeLocalArtifactDigest(output).toLowerCase()}\n`,
+      `${computeLocalArtifactDigest(output, activeResolver).toLowerCase()}\n`,
     );
     writeFileAtomicSameDir(path.join(bucketDir, 'bucket-meta.json'), `${JSON.stringify(meta, null, 2)}\n`);
   } catch (e) {

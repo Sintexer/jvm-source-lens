@@ -114,7 +114,7 @@ program
     ) => {
       const json = Boolean(options.json);
       const showProgress = !options.quiet;
-      const verboseGradle = Boolean(options.verbose);
+      const verbose = Boolean(options.verbose);
       const root = cliProjectRoot(options.project, Boolean(options.quiet));
       if (!root.ok) {
         const d = recordFailureDiagnostic({
@@ -143,7 +143,7 @@ program
         return;
       }
       const cli =
-        showProgress || verboseGradle ? { progress: showProgress, verboseGradle } : undefined;
+        showProgress || verbose ? { progress: showProgress, verbose } : undefined;
       const methodNames = mergeSourceExcerptInputs(options.method);
       const result = await getClassSource(className, {
         projectRoot: root.path,
@@ -189,10 +189,11 @@ program
         forceRefresh: Boolean(options.forceRefresh),
         diagnosticOperation: 'cli_resolve',
         resolveOptions: verbose
-          ? { inheritGradleStderr: true }
+          ? { inheritStderr: true }
           : {
-              onBeforeGradle: () => progress.update('Resolving dependencies (Gradle)…'),
-              onAfterGradle: () => progress.finishPhase(),
+              onBeforeResolve: ({ displayName }) =>
+                progress.update(`Resolving dependencies (${displayName})…`),
+              onAfterResolve: () => progress.finishPhase(),
             },
       });
       if (!result.ok) {
@@ -267,9 +268,9 @@ program
         return;
       }
       const showProgress = !options.quiet;
-      const verboseGradle = Boolean(options.verbose);
+      const verbose = Boolean(options.verbose);
       const cli =
-        showProgress || verboseGradle ? { progress: showProgress, verboseGradle } : undefined;
+        showProgress || verbose ? { progress: showProgress, verbose } : undefined;
       const result = await findInClassSource(className, {
         projectRoot: root.path,
         modulePath: options.module,

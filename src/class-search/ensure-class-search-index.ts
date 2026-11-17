@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { computeBuildInputsDigest } from '../cache/index.js';
 import { canonicalProjectRoot } from '../cache/paths.js';
+import { resolverById } from '../resolvers/index.js';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
 import type { ResolvedConfiguration, ResolvedModule } from '../resolvers/resolution-output.js';
 import { buildClassSearchIndex } from './build-class-search-index.js';
@@ -27,7 +28,8 @@ export function ensureClassSearchIndex(
   scope: EnsureClassSearchIndexScope,
 ): { ok: true; file: ClassSearchIndexFileV1 } | { ok: false; message: string } {
   const canonical = canonicalProjectRoot(projectRoot);
-  const buildInputsDigest = computeBuildInputsDigest(canonical);
+  const resolver = resolverById(output.buildSystem.type) ?? null;
+  const buildInputsDigest = computeBuildInputsDigest(canonical, resolver);
   const fp = resolutionFingerprint(output);
 
   const cached = readClassSearchIndex(canonical, {

@@ -2,7 +2,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
-import { findGradleRoot, resolveProjectRoot } from './project-path.js';
+import { findBuildRoot, resolveProjectRoot } from './project-path.js';
+import type { DependencyResolver } from './resolvers/base.js';
+import { findGradleRoot } from './resolvers/gradle/index.js';
+import { registerResolverForTesting } from './resolvers/index.js';
 
 const repoRoot = path.resolve(import.meta.dir, '..');
 const fixtureRoot = path.join(repoRoot, 'test/fixtures/gradle-smoke');
@@ -93,11 +96,81 @@ describe('project root discovery', () => {
     process.chdir(plain);
     delete process.env.JVMSRC_PROJECT_ROOT;
     const none = resolveProjectRoot(undefined, { workspaceRoots: [] });
-    expect(none.ok).toBe(false);
-    if (!none.ok) expect(none.message).toContain('Retry with projectRoot');
+    expect(none).toEqual({
+      ok: false,
+      message:
+        `No Gradle project found in the workspace (looked in: ${plain}). ` +
+        'Retry with projectRoot set to the absolute path of the directory containing gradlew or settings.gradle(.kts).',
+    });
 
-    const missing = resolveProjectRoot(path.join(tmp, 'missing'), { workspaceRoots: [sub] });
-    expect(missing.ok).toBe(false);
-    if (!missing.ok) expect(missing.message).toContain(`retry with projectRoot=${JSON.stringify(project)}`);
+    const missingPath = path.join(tmp, 'missing');
+    const missing = resolveProjectRoot(missingPath, { workspaceRoots: [sub] });
+    expect(missing).toEqual({
+      ok: false,
+      message:
+        `Project path does not exist: ${missingPath}.` +
+        ` A Gradle project was found at ${project}; retry with projectRoot=${JSON.stringify(project)} or omit projectRoot.`,
+    });
+
+    const missingNoHint = resolveProjectRoot(missingPath, { workspaceRoots: [] });
+    expect(missingNoHint).toEqual({
+      ok: false,
+      message:
+        `Project path does not exist: ${missingPath}.` +
+        ' Pass the absolute path of the directory containing gradlew or settings.gradle(.kts).',
+    });
+
+    const filePath = path.join(project, 'settings.gradle.kts');
+    const notDir = resolveProjectRoot(filePath, { workspaceRoots: [] });
+    expect(notDir).toEqual({
+      ok: false,
+      message:
+        `Project path is not a directory: ${filePath}.` +
+        ' Pass the absolute path of the directory containing gradlew or settings.gradle(.kts).',
+    });
+  });
+
+  test('lifts subdirectory and names custom resolver via registry findBuildRoot', () => {
+    const fakeProj = path.join(tmp, 'fake-proj');
+    const fakeSub = path.join(fakeProj, 'mod', 'src');
+    fs.mkdirSync(fakeSub, { recursive: true });
+    fs.writeFileSync(path.join(fakeProj, 'custom.marker'), '');
+
+    const fake: DependencyResolver = {
+      id: 'custom',
+      displayName: 'CustomTool',
+      rootHint: 'custom.marker',
+      detect: (root) => fs.existsSync(path.join(root, 'custom.marker')),
+      findBuildRoot: (start) => {
+        let dir = start;
+        for (;;) {
+          if (fs.existsSync(path.join(dir, 'custom.marker'))) {
+            return dir;
+          }
+          const parent = path.dirname(dir);
+          if (parent === dir) {
+            return null;
+          }
+          dir = parent;
+        }
+      },
+      cacheInputs: () => ({ files: [], env: [] }),
+      isImmutableArtifact: () => false,
+      resolve: async () => ({ ok: false, message: 'unused' }),
+      resolveSourcesJar: async () => ({ ok: true, sourcesJarPath: null }),
+    };
+
+    const restore = registerResolverForTesting(fake);
+    try {
+      expect(findBuildRoot(fakeSub)).toBe(fakeProj);
+      const lifted = resolveProjectRoot(fakeSub);
+      expect(lifted).toEqual({
+        ok: true,
+        path: fakeProj,
+        note: `projectRoot ${fakeSub} is inside the CustomTool project at ${fakeProj}; using that.`,
+      });
+    } finally {
+      restore();
+    }
   });
 });

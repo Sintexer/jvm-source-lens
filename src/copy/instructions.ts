@@ -1,8 +1,18 @@
-export const JVMSRC_INSTRUCTIONS = `
-jvmsrc reads third-party JVM dependencies: classes inside JARs on a Gradle project's classpath
-(structure, signatures, source, versions). Gradle projects only.
+import type { DependencyResolver } from '../resolvers/base.js';
+import { allResolvers } from '../resolvers/index.js';
 
-Use it instead of memory, web search, or javap/unzip/Gradle-cache digging for any question about
+export function buildJvmsrcInstructions(
+  resolvers: readonly DependencyResolver[] = allResolvers(),
+): string {
+  const names = resolvers.map((r) => r.displayName);
+  const projectLabel = names.join(' or ');
+  const scopeLabel = names.join(' and ');
+  const cacheLabel = names.join('/');
+  return `
+jvmsrc reads third-party JVM dependencies: classes inside JARs on a ${projectLabel} project's classpath
+(structure, signatures, source, versions). ${scopeLabel} projects only.
+
+Use it instead of memory, web search, or javap/unzip/${cacheLabel}-cache digging for any question about
 a library class, method, or version — "what does X do", "which JAR has Y", NoSuchMethodError,
 ClassCastException, version conflicts. Code under this repo's src/ → grep/read instead.
 
@@ -17,3 +27,6 @@ javap/unzip.
 Declaration lines use short modifiers: P=public p=private prot=protected pack=package-private
 s=static f=final a=abstract (e.g. "Psf long ZERO").
 `;
+}
+
+export const JVMSRC_INSTRUCTIONS = buildJvmsrcInstructions();

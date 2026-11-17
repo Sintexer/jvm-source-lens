@@ -36,7 +36,7 @@ import { getMethodSignaturesBytecode } from './get-method-signatures-bytecode.js
 import { getMethodSignatures } from './get-method-signatures.js';
 import { searchClasses } from './search-classes.js';
 import { searchInArtifact } from './search-in-artifact.js';
-import { JVMSRC_INSTRUCTIONS, MCP_TOOL_COPY } from './copy/index.js';
+import { buildJvmsrcInstructions, MCP_TOOL_COPY } from './copy/index.js';
 import { withCallLog } from './diagnostics/call-log.js';
 import { installCompactToolList } from './mcp-advertised-schema.js';
 import { inferIncludeTest } from './extractor/match-module.js';
@@ -380,7 +380,7 @@ const getClassSourceInputSchema = z.looseObject({
 });
 
 const buildSystemInfoSchema = z.object({
-  type: z.literal('gradle'),
+  type: z.string(),
   version: z.string(),
   wrapper: z.boolean(),
 });
@@ -813,7 +813,7 @@ export function createMcpServer(): McpServer {
   const server = new McpServer(
     { name: 'jvmsrc', version: pkg.version ?? '0.0.0' },
     {
-      instructions: JVMSRC_INSTRUCTIONS
+      instructions: buildJvmsrcInstructions(),
     },
   );
 

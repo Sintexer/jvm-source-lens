@@ -906,3 +906,33 @@ test('mcpToolResultFromResolutionResult failure sets isError true', () => {
     error: { code: 'RESOLUTION_FAILED', message: 'Not a Gradle project' },
   });
 });
+
+test('mcpResolveDependenciesPayloadSchema and mcpListModulesPayloadSchema accept non-gradle buildSystem.type', () => {
+  const resolveParsed = mcpResolveDependenciesPayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    ...outcomeOk,
+    resolution: {
+      schemaVersion: '1.2',
+      resolvedAt: '2026-05-15T12:00:00Z',
+      buildSystem: { type: 'maven', version: '3.9.9', wrapper: true },
+      projectRoot: '/tmp/proj',
+      modules: [],
+      errors: [],
+    },
+  });
+  expect(resolveParsed.success).toBe(true);
+
+  const listParsed = mcpListModulesPayloadSchema.safeParse({
+    ok: true,
+    found: true,
+    ...outcomeOk,
+    projectRoot: '/tmp/proj',
+    resolvedAt: '2026-05-15T12:00:00Z',
+    schemaVersion: '1.2',
+    buildSystem: { type: 'fake', version: '1.0', wrapper: false },
+    modules: [],
+    resolutionWarningCount: 0,
+  });
+  expect(listParsed.success).toBe(true);
+});

@@ -83,7 +83,7 @@ export function recordFailureDiagnostic(params: RecordFailureParams): RecordFail
     stack,
     context: buildDiagnosticContextSync({
       projectRoot: params.projectRoot,
-      buildSystem: params.buildSystem === undefined ? 'gradle' : params.buildSystem,
+      buildSystem: params.buildSystem ?? null,
       includeJavaVersion,
     }),
     subprocess: subprocessForRecord(params.subprocess),

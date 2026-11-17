@@ -12,7 +12,7 @@ describe('dist/mcp.js bundle', () => {
       return;
     }
     const code = readFileSync(path, 'utf8');
-    expect(code.length).toBeLessThan(450_000);
+    expect(code.length).toBeLessThan(550_000);
     expect(code).not.toContain('this["~standard"] =');
   });
 });

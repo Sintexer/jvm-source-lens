@@ -1,4 +1,4 @@
-export { JVMSRC_INSTRUCTIONS } from './instructions.js';
+export { buildJvmsrcInstructions, JVMSRC_INSTRUCTIONS } from './instructions.js';
 export { MCP_TOOL_COPY, type McpToolCopy, type McpToolName } from './tool-descriptions.js';
 export {
   buildClassNotFoundMessage,

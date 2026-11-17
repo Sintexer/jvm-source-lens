@@ -102,55 +102,80 @@ The system is divided into four independent layers. Each layer communicates only
 
 ### 4.2 Core Interfaces (TypeScript)
 
-All resolver plugins implement the following contract. Resolution produces a **`ResolutionOutput`** document (stdout from Gradle today, and the same object persisted in the global resolution cache — see **§6.1** / §5.5.2). The extractor chooses one `ResolvedConfiguration` per call using `ResolveOptions` (`configuration`, `includeTest`, `modulePath`); it does not re-invoke Gradle.
+All resolver plugins implement `DependencyResolver`. Resolution emits one **`ResolutionOutput`** document and persists it in the global resolution cache (**§6.1** / §5.5.2). Core modules never hard-code a build tool: cache inputs, immutable-artifact checks, project-root lifting, progress labels, and on-demand sources-JAR downloads all go through the registered resolver. When `configuration` is omitted, `pickResolvedConfiguration` tries well-known Gradle classpath names first (`compileClasspath` / `jvmCompileClasspath`, or `testCompileClasspath` / `jvmTestCompileClasspath` with `includeTest`) and then falls back to the first configuration whose `scope` is `'compile'` (or `'test-compile'`).
 
-Gradle failures, parse errors, or unsupported `schemaVersion` are returned as **`ResolutionResult` errors** (`ok: false`) rather than thrown, so callers can surface actionable messages. Unexpected bugs and process spawn failures follow the same `ok: false` path for Gradle exits; only corrupted installation (e.g. missing bundled init script) may throw from resource helpers.
+Build-tool failures, parse errors, or unsupported `schemaVersion` values return **`ResolutionResult` errors** (`ok: false`) instead of throwing. Only corrupted installations (such as a missing bundled resource) throw.
 
 ```typescript
 interface DependencyResolver {
+  readonly id: string;           // matches ResolutionOutput.buildSystem.type (e.g. 'gradle')
+  readonly displayName: string;  // human label (e.g. 'Gradle')
+  readonly rootHint: string;     // root marker hint for error messages
   detect(projectRoot: string): boolean;
+  findBuildRoot(start: string): string | null;
+  cacheInputs(projectRoot: string): BuildCacheInputs;
+  isImmutableArtifact(artifact: ResolvedArtifact): boolean;
   resolve(projectRoot: string, options?: ResolveOptions): Promise<ResolutionResult>;
+  resolveSourcesJar(
+    projectRoot: string,
+    coordinates: ArtifactCoordinates,
+    hooks?: SubprocessHooks,
+  ): Promise<ResolveSourcesJarResult>;
 }
+
+type BuildCacheInputs = {
+  files: string[];               // sorted relative POSIX paths under projectRoot
+  env: Array<[string, string]>;  // hashed as env:<key>:<value>
+};
+
+type SubprocessCapture = {
+  command: string[];
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+};
 
 type ResolutionResult =
   | { ok: true; output: ResolutionOutput }
-  | { ok: false; message: string; stderr?: string };
+  | {
+      ok: false;
+      message: string;
+      stderr?: string;
+      subprocess?: SubprocessCapture;
+      diagnosticId?: string;
+      hint?: string;
+    };
 
 interface ResolveOptions {
-  modulePath?:    string;   // e.g. ':core:utils' — scope class lookup to one submodule
-  configuration?: string;   // e.g. 'compileClasspath' — which resolved configuration to read
-  includeTest?:   boolean;  // when defaulting configuration, include test classpaths (default: false)
+  modulePath?: string;
+  configuration?: string;
+  includeTest?: boolean;
+  inheritStderr?: boolean;
+  onBeforeResolve?: (info: { resolverId: string; displayName: string }) => void;
+  onAfterResolve?: () => void;
 }
-
-// Full JSON shape: schemaVersion, resolvedAt, buildSystem, projectRoot, modules[], errors[]
-// and nested ResolvedModule / ResolvedConfiguration / ResolvedArtifact — see §5.5.2.
 ```
 
-The exhaustive TypeScript definitions in this repo live in `src/resolvers/resolution-output.ts` and match §5.5.2.
+**Compatibility aliases (kept for one release):** `ResolveOptions.inheritGradleStderr`, `onBeforeGradle`, `onAfterGradle`, `ResolutionResult.gradle`, `GradleProcessCapture`, `ResolveSourcesJarGradleOptions`, `GetClassSourceCliOptions.verboseGradle`, and the top-level `resolveSourcesJar` helper remain exported as `@deprecated` aliases over the neutral fields and registry lookup. `ResolveWithResolutionCacheOptions.resolver` is `@internal` (for tests).
+
+The exhaustive TypeScript definitions live in `src/resolvers/base.ts` and `src/resolvers/resolution-output.ts`.
 
 ### 4.3 Resolver Registry
 
-The registry is the single extension point. Adding a new build system requires: (1) creating a folder under `src/resolvers/`, (2) implementing `DependencyResolver`, (3) adding one line to the registry array. Nothing else in the codebase changes.
+The registry (`src/resolvers/index.ts`) is the single build-system extension point. Adding a new build system requires: (1) creating a folder under `src/resolvers/`, (2) implementing `DependencyResolver`, and (3) adding one instance to `RESOLVERS`.
 
 ```typescript
-// src/resolvers/index.ts
 const RESOLVERS: DependencyResolver[] = [
   new GradleResolver(),
-  // new MavenResolver(),   ← future: one line to enable
-  // new BazelResolver(),
+  // new MavenResolver(),
 ];
 
-export function detectResolver(projectRoot: string): DependencyResolver {
-  const resolver = RESOLVERS.find(r => r.detect(projectRoot));
-  if (!resolver) {
-    throw new UnsupportedProjectError(
-      `No supported build system found in ${projectRoot}. ` +
-      `Currently supported: Gradle. Contributions welcome.`
-    );
-  }
-  return resolver;
-}
+export function allResolvers(): readonly DependencyResolver[];
+export function resolverById(id: string): DependencyResolver | undefined;
+export function detectResolver(projectRoot: string): DependencyResolver;
 ```
+
+`detectResolver` lists every registered `displayName` in `UnsupportedProjectError`. `resolverById(output.buildSystem.type)` pairs a cached or pre-resolved `ResolutionOutput` with its owning resolver for on-demand sources JARs, local-artifact hashing, and class-search index digests. Tests can prepend an in-process resolver with `@internal` `registerResolverForTesting`.
 
 ### 4.4 Repository Structure
 
@@ -160,11 +185,13 @@ resources/
   analyzer-init.gradle    ← bundled Gradle init script (--init-script path)
 src/
   resolvers/
-    index.ts              ← registry + detectResolver()
-    base.ts               ← DependencyResolver + ResolutionResult types
+    index.ts              ← registry (detectResolver, resolverById, allResolvers)
+    base.ts               ← DependencyResolver + ResolutionResult + SubprocessHooks types
     resolution-output.ts  ← ResolutionOutput + JSON validators
     gradle/
-      index.ts            ← GradleResolver (Bun.spawn → Gradle)
+      index.ts            ← GradleResolver
+      cache-inputs.ts     ← Gradle build-input walk + GRADLE_USER_HOME managed-JAR check
+      resolve-sources-jar.ts ← on-demand jvmsrcResolveSources task runner
     maven/                ← future
       index.ts
   bundled-resources.ts    ← getBundledResource(), package-root resolution
@@ -184,6 +211,7 @@ src/
   get-method-signatures.ts       ← resolve + source-first + javap overload listing
   get-method-signatures-bytecode.ts  ← javap-only overload listing (no source fallback)
   method-signature-from-javap.ts ← shared javap parse helper for method overloads
+  sources-jar-resolver.ts   ← per-request memoized sources-JAR lookup via resolverById
   public-api.ts             ← library entry (`package.json` `main` / `exports`)
   cli-get-output.ts         ← `get` stdout/stderr JSON formatting
   cli-progress.ts           ← phased stderr progress (CLI)
@@ -195,7 +223,9 @@ src/
   cache/
     paths.ts              ← global cache root (env-paths) + project bucket paths
     decompiled-paths.ts   ← global `decompiled/<g>/<a>/<v>/jf1/<Class>.java` paths
-    index.ts              ← build-input digest, read/write resolution cache files
+    walk-project-tree.ts  ← generic symlink-safe project file walker
+    local-artifact-digest.ts ← content hash for mutable external JARs (via resolver.isImmutableArtifact)
+    index.ts              ← build-input digest (via resolver.cacheInputs), read/write resolution cache
   resolve-with-cache.ts   ← resolveWithResolutionCache() — cache gate + resolver on miss
   cli.ts                  ← CLI entry point (`get`, `resolve`, `mcp`, …)
   mcp.ts                  ← MCP server entry point
@@ -302,9 +332,9 @@ interface ResolutionOutput {
 }
 
 interface BuildSystemInfo {
-  type: "gradle" | "maven";         // extensible as new resolvers are added
-  version: string;                  // e.g. "8.7" — the actual Gradle version used
-  wrapper: boolean;                 // true = ./gradlew used; false = system gradle
+  type: string;                     // non-empty resolver id matching DependencyResolver.id (e.g. "gradle")
+  version: string;                  // e.g. "8.7" — the actual build-tool version used
+  wrapper: boolean;                 // true = project wrapper used; false = system binary
 }
 
 interface ResolvedModule {
@@ -542,9 +572,11 @@ The following behaviors were validated against real Gradle builds before folding
 
 ### 6.1 Resolution Cache
 
-Gradle invocation is expensive (often ~5–10 seconds; less when the Gradle daemon is already warm). The tool caches the full **`ResolutionOutput`** JSON (same structure as §5.5.2 / Gradle stdout) and invalidates it when **declared build inputs** change.
+Build-tool invocation is expensive (often ~5–10 seconds; less when a daemon is warm). The tool caches the full **`ResolutionOutput`** JSON (§5.5.2) and invalidates it when **declared build inputs** change, when `output.buildSystem.type !== resolver.id`, or when mutable local external JARs change.
 
-**Cache key:** SHA-256 digest over the content of all build-relevant files in the project (sorted paths, stable manifest — see implementation `computeBuildInputsDigest`):
+**Cache key:** `computeBuildInputsDigest` asks the active `DependencyResolver.cacheInputs(projectRoot)` for `{ files, env }` and hashes `relPath:sha256(file)` lines followed by `env:<key>:<value>` lines. Core provides `walkProjectTree`, which skips common output folders and never follows symlinks.
+
+For **`GradleResolver`**, the tracked inputs are:
 
 - `build.gradle` / `build.gradle.kts` (all submodules; common output directories such as `build/`, `.gradle/`, and `node_modules/` are excluded from the walk; symlinked files and directories are never followed)
 - `gradle.properties` (root and per-submodule; commonly holds dependency version variables)
@@ -567,7 +599,7 @@ Gradle invocation is expensive (often ~5–10 seconds; less when the Gradle daem
 | `resolution.json` | Strict `ResolutionOutput` only (no extra fields) |
 | `resolution.hash` | Single line: lowercase hex digest of the build-input set above |
 | `bucket-meta.json` | Small envelope: `cacheMetaVersion`, `projectRootAbsolute`, `projectRootDigestFull`, `writtenAt` (ISO UTC) |
-| `local-artifact.hash` | Single line: digest of local (not Gradle-managed) artifact JAR content, such as local Maven SNAPSHOTs. A mismatch is a cache miss |
+| `local-artifact.hash` | Single line: digest of mutable external artifact JAR content (artifacts where `resolver.isImmutableArtifact(artifact)` is `false`, such as local Maven SNAPSHOTs). A mismatch is a cache miss |
 | `class-search-index.<hash>.json` | Optional sidecars: one per (module, configuration, `includeTest`) scope, `<hash>` = first 12 hex chars of SHA-1 of that scope. Built for **`search_classes`** and simple-name lookups (format version 3); invalidated when resolution fingerprint / scope changes. The old single-slot `class-search-index.json` is deleted when the bucket loads |
 | `jar-fqn-cache.json` | Optional sidecar: per-binary-JAR FQN lists keyed by absolute `jarPath` with **`mtimeMs:size`** stat keys; reused when a JAR file is unchanged so class-search rebuilds skip re-reading unchanged ZIP central directories |
 

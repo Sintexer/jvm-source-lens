@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { DependencyResolver, ResolutionResult } from '../resolvers/base.js';
+import { GradleResolver } from '../resolvers/gradle/index.js';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
 import {
   computeBuildInputsDigest,
@@ -73,6 +74,24 @@ function minimalResolutionOutput(projectRoot: string): ResolutionOutput {
     projectRoot: canonicalProjectRoot(projectRoot),
     modules: [],
     errors: [],
+  };
+}
+
+function makeGradleDelegatingStub(
+  resolveImpl: DependencyResolver['resolve'],
+  idOverride?: string,
+): DependencyResolver {
+  const base = new GradleResolver();
+  return {
+    id: idOverride ?? base.id,
+    displayName: base.displayName,
+    rootHint: base.rootHint,
+    detect: () => true,
+    findBuildRoot: (s) => base.findBuildRoot(s),
+    cacheInputs: (r) => base.cacheInputs(r),
+    isImmutableArtifact: (a) => base.isImmutableArtifact(a),
+    resolve: resolveImpl,
+    resolveSourcesJar: (r, c, h) => base.resolveSourcesJar(r, c, h),
   };
 }
 
@@ -179,6 +198,30 @@ describe('computeBuildInputsDigest', () => {
       const d2 = computeBuildInputsDigest(dir);
 
       expect(d1).not.toBe(d2);
+    } finally {
+      if (savedGuh === undefined) {
+        delete process.env.GRADLE_USER_HOME;
+      } else {
+        process.env.GRADLE_USER_HOME = savedGuh;
+      }
+    }
+  });
+
+  test.skipIf(path.sep !== '/')('matches golden hex on gradle-smoke with fixed GRADLE_USER_HOME', () => {
+    const smokeRoot = path.resolve(import.meta.dir, '../../test/fixtures/gradle-smoke');
+    const savedGuh = process.env.GRADLE_USER_HOME;
+    try {
+      process.env.GRADLE_USER_HOME = '/fixed/gradle-user-home';
+      expect(listBuildInputRelativePaths(smokeRoot)).toEqual([
+        'app/build.gradle',
+        'build.gradle',
+        'core/build.gradle',
+        'gradle/wrapper/gradle-wrapper.properties',
+        'settings.gradle',
+      ]);
+      expect(computeBuildInputsDigest(smokeRoot)).toBe(
+        '7ebe56ddcbb78c1b4de64427e73cfa78f62b5b55a08adb54bc4ce197ef3b1278',
+      );
     } finally {
       if (savedGuh === undefined) {
         delete process.env.GRADLE_USER_HOME;
@@ -371,6 +414,23 @@ describe('resolution cache read/write', () => {
       expect(r2.reason).toContain('local-artifact');
     }
   });
+
+  test('read misses when cached buildSystem.type does not match resolver.id', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-bstype-'));
+    writeGradleStubs(dir);
+    const foreignOut: ResolutionOutput = {
+      ...minimalResolutionOutput(dir),
+      buildSystem: { type: 'other-tool', version: '1.0', wrapper: false },
+    };
+    const digest = computeBuildInputsDigest(dir);
+    expect(writeCachedResolution(dir, foreignOut, digest).ok).toBe(true);
+
+    const r = readCachedResolution(dir);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toContain('buildSystem.type');
+    }
+  });
 });
 
 describe('resolveWithResolutionCache', () => {
@@ -391,13 +451,10 @@ describe('resolveWithResolutionCache', () => {
     expect(wr.ok).toBe(true);
 
     let calls = 0;
-    const resolver: DependencyResolver = {
-      detect: () => true,
-      resolve: async (): Promise<ResolutionResult> => {
-        calls++;
-        return { ok: true, output: out };
-      },
-    };
+    const resolver = makeGradleDelegatingStub(async (): Promise<ResolutionResult> => {
+      calls++;
+      return { ok: true, output: out };
+    });
 
     const first = await resolveWithResolutionCache(dir, { resolver });
     expect(first.ok).toBe(true);
@@ -410,19 +467,16 @@ describe('resolveWithResolutionCache', () => {
     expect(calls).toBe(2);
   });
 
-  test('forwards resolveOptions to resolver.resolve', async () => {
+  test('forwards normalized neutral resolveOptions to resolver.resolve', async () => {
     const { resolveWithResolutionCache } = await import('../resolve-with-cache.js');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-ropts-'));
     writeGradleStubs(dir);
     const out = minimalResolutionOutput(dir);
     let seen: unknown;
-    const resolver: DependencyResolver = {
-      detect: () => true,
-      resolve: async (_root, opts): Promise<ResolutionResult> => {
-        seen = opts;
-        return { ok: true, output: out };
-      },
-    };
+    const resolver = makeGradleDelegatingStub(async (_root, opts): Promise<ResolutionResult> => {
+      seen = opts;
+      return { ok: true, output: out };
+    });
     await resolveWithResolutionCache(dir, {
       forceRefresh: true,
       resolver,
@@ -430,9 +484,28 @@ describe('resolveWithResolutionCache', () => {
     });
     expect(seen).toEqual(
       expect.objectContaining({
-        inheritGradleStderr: true,
-        onBeforeGradle: expect.any(Function),
+        inheritStderr: true,
+        onBeforeResolve: expect.any(Function),
       }),
     );
+  });
+
+  test('populates both subprocess and deprecated gradle capture on failure', async () => {
+    const { resolveWithResolutionCache } = await import('../resolve-with-cache.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-failcap-'));
+    writeGradleStubs(dir);
+    const capture = { command: ['fake-cmd'], exitCode: 2, stdout: '', stderr: 'bad' };
+    const resolver = makeGradleDelegatingStub(async () => ({
+      ok: false,
+      message: 'Fake failed',
+      stderr: 'bad',
+      subprocess: capture,
+    }));
+    const res = await resolveWithResolutionCache(dir, { forceRefresh: true, resolver });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.subprocess).toEqual(capture);
+      expect(res.gradle).toEqual(capture);
+    }
   });
 });

@@ -23,7 +23,7 @@ Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGEL
 
 Released together in 1.19.0: checkpoints 1 and 2.
 
-Checkpoints 3, 4, 5, 6 and 7 are done and not released. Release them in order: 3, 4, 5, 6, then 7.
+Checkpoints 3, 4, 5, 6, 7 and 8 are done and not released. Release them in order: 3, 4, 5, 6, 7, then 8.
 
 
 | # | Checkpoint | Why at this position | Size |
@@ -143,22 +143,27 @@ Checkpoints 3, 4, 5, 6 and 7 are done and not released. Release them in order: 3
 
 **Done when:** `get_class_structure` and `methodNames` excerpts on a Kotlin library class show KDoc and real parameter names.
 
-## Checkpoint 8 — Build-tool-neutral core
+## Checkpoint 8 — Build-tool-neutral core (done)
 
 **Goal:** core code does not know Gradle. A new resolver is a new folder plus one line in the registry. **There is no behavior change.**
 
-- [ ] Extend `DependencyResolver`: `id`, `rootMarkers`, `cacheInputs(projectRoot)`, `resolveSourcesJar(coordinates)`.
-- [ ] Use neutral names in `ResolveOptions` / `ResolutionResult`: `inheritStderr`, `onBeforeResolve` / `onAfterResolve`, `subprocess` instead of `gradle`. Keep the old names as deprecated aliases in `public-api.ts` for one release.
-- [ ] Remove Gradle imports from core files (`sources-jar-resolver.ts`, `get-class-source.ts`, `get-class-structure.ts`, `get-method-signatures.ts`, `search-in-artifact.ts`, `inherited-method-excerpt.ts`, `extractor/*`). Get `buildSystem` from `ResolutionOutput`; do not hard-code it.
-- [ ] `project-path.ts` gets the root markers from the registry.
-- [ ] Copy, progress labels and MCP instructions use the name of the resolver ("Resolving dependencies (Gradle)…" comes from the resolver).
-- [ ] A test-only fake resolver runs `get`, `search_classes` and `search_in_artifact` end to end. This proves that the core is pluggable.
+- [x] **Characterization tests and ratchet guard** before refactoring: golden hex of `computeBuildInputsDigest` on `test/fixtures/gradle-smoke`, snapshots of MCP `instructions` / `tools/list` and `resolveProjectRoot` messages, plus `src/build-tool-neutral-core.test.ts` (zero `resolvers/gradle` imports outside the registry, and a checkpoint-tagged allowlist for remaining Gradle references in `jdk/`, diagnostics, CLI help, copy, and 1-release aliases).
+- [x] Extend `DependencyResolver` (`id`, `displayName`, `rootHint`, `detect`, `findBuildRoot`, `cacheInputs`, `isImmutableArtifact`, `resolve`, `resolveSourcesJar`) and add `allResolvers()`, `resolverById(id)` and `@internal` `registerResolverForTesting` in `src/resolvers/index.ts`.
+- [x] Move Gradle cache-input walking and `isGradleManagedJar` into `src/resolvers/gradle/cache-inputs.ts` (over a generic symlink-safe `walkProjectTree` in core). Keep the Gradle build-input digest byte-identical (`7ebe56ddcbb78c1b4de64427e73cfa78f62b5b55a08adb54bc4ce197ef3b1278`). Miss the cache when `output.buildSystem.type !== resolver.id`.
+- [x] Relax `validateResolutionOutput` and `mcp.ts` schemas to accept any non-empty `buildSystem.type` string (`BuildSystemInfo.type: string`), and fall back to configuration `scope` (`compile` / `test-compile`) in `pick-classpath.ts` when Gradle configuration names are absent.
+- [x] Route on-demand sources JARs through `resolverById(output.buildSystem.type)` in `createSourcesJarResolver`, and make `search-in-artifact.ts` use `createSourcesJarResolver`.
+- [x] Add neutral `ResolveOptions` (`inheritStderr`, `onBeforeResolve`, `onAfterResolve`), `ResolutionResult.subprocess`, `SubprocessCapture`, and `SubprocessHooks`. Keep `inheritGradleStderr`, `onBeforeGradle`, `onAfterGradle`, `ResolutionResult.gradle`, `GradleProcessCapture`, `ResolveSourcesJarGradleOptions`, `GetClassSourceCliOptions.verboseGradle`, and `public-api.ts` `resolveSourcesJar` as `@deprecated` aliases for one release; mark `ResolveWithResolutionCacheOptions.resolver` `@internal`.
+- [x] Lift `projectRoot` and build guidance messages in `src/project-path.ts` from registered resolvers (`findBuildRoot`, `displayName`, `rootHint`) with identical Gradle snapshots. Build CLI progress labels and MCP `instructions` from `displayName`, and pass `output.buildSystem.type` / `resolver.id` / `null` to `recordFailureDiagnostic` (no `'gradle'` default).
+- [x] End-to-end fake resolver test (`test/fixtures/fake-resolver.test.ts`) running `resolveProjectRoot`, cached `resolveWithResolutionCache`, `getClassSource`, `searchClasses`, `searchInArtifact`, CLI progress labels, and MCP `resolve_dependencies` without spawning Gradle.
+- [x] Update SPEC §4.2–§4.4, §5.5.2 and §6.1, and add "Adding a resolver" to CONTRIBUTING.
+  Note (found during research, out of scope because it changes runtime behavior): `GradleResolver.resolve` calls `runGradleTask` without passing cached `javaToolchainVersion` as `cachedToolchainVersion`, so the cached-toolchain JDK hint in `src/jdk/detect-required-version.ts` is currently unwired. Land as a standalone `fix:` commit.
 
-**Done when:** `grep -r "resolvers/gradle" src` finds only the registry and Gradle tests, and all tiers pass with no change.
+**Done when:** `src/build-tool-neutral-core.test.ts` passes (zero `resolvers/gradle` imports outside the registry, allowlist reduced to checkpoint 9/10 items and 1-release aliases), golden digest and copy snapshots match, `test/fixtures/fake-resolver.test.ts` passes, and all tiers pass with no behavior change.
 
 ## Checkpoint 9 — Maven: external dependencies
 
 - [ ] **Spike first** and record the result here: a command that gives coordinates, scope and absolute JAR path for each reactor module **without writing under the project** (check for no `target/`). Candidates: `dependency:list -DoutputAbsoluteArtifactFilename=true -DoutputFile=<temp>`, or a small bundled extension or plugin. Check sibling modules that are not installed in a reactor.
+- [ ] Remove the one-release `@deprecated` Gradle option aliases from checkpoint 8 (`inheritGradleStderr`, `onBeforeGradle`, `onAfterGradle`, `ResolutionResult.gradle`, `GradleProcessCapture`, `ResolveSourcesJarGradleOptions`, `GetClassSourceCliOptions.verboseGradle`, top-level `resolveSourcesJar`) and remove those files from `src/build-tool-neutral-core.test.ts`.
 - [ ] `MavenResolver`: detect `pom.xml`; use `./mvnw`, else `mvn`; remove JVM-injection env vars as for Gradle; use timeouts. Produce `ResolutionOutput` with configurations `compile`, `runtime` and `test`. If the schema changes, bump `schemaVersion`.
 - [ ] Cache inputs: all `pom.xml` files in the reactor, `.mvn/maven.config`, `.mvn/extensions.xml`, `.mvn/wrapper/maven-wrapper.properties`.
 - [ ] Sources: on-demand `dependency:get` / `dependency:copy` of the `sources` classifier into a temp or cache directory. Credentials and mirrors come from the user's `settings.xml`.

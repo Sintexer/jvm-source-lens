@@ -3,7 +3,12 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createMcpServer } from './mcp.js';
 
-type ToolInfo = { name: string; inputSchema: { properties?: Record<string, { description?: string }>; required?: string[] } };
+type ToolInfo = {
+  name: string;
+  title?: string;
+  description?: string;
+  inputSchema: { properties?: Record<string, { description?: string }>; required?: string[] };
+};
 
 let client: Client;
 let tools: ToolInfo[];
@@ -67,6 +72,71 @@ describe('advertised input schemas', () => {
       enum?: string[];
     };
     expect(scope.enum).toEqual(['overview', 'declared', 'effective']);
+  });
+
+  test('server instructions and tool titles/descriptions stay byte-identical', () => {
+    expect(client.getInstructions()).toBe(
+      "\njvmsrc reads third-party JVM dependencies: classes inside JARs on a Gradle project's classpath\n" +
+        '(structure, signatures, source, versions). Gradle projects only.\n\n' +
+        'Use it instead of memory, web search, or javap/unzip/Gradle-cache digging for any question about\n' +
+        'a library class, method, or version — "what does X do", "which JAR has Y", NoSuchMethodError,\n' +
+        "ClassCastException, version conflicts. Code under this repo's src/ → grep/read instead.\n\n" +
+        'Flow: search_classes (only if the name is unknown) → get_class_structure → get_class_source with\n' +
+        'methodNames. For version problems start with resolve_dependencies.\n\n' +
+        "When you are working inside a specific module, pass modulePath (':app', or the\n" +
+        "file you are editing) so you get that module's dependency versions; otherwise omit it to search\n" +
+        'all modules. If a call fails, fix the arguments as the error says and retry; never fall back to\n' +
+        'javap/unzip.\n\n' +
+        'Declaration lines use short modifiers: P=public p=private prot=protected pack=package-private\n' +
+        's=static f=final a=abstract (e.g. "Psf long ZERO").\n',
+    );
+
+    expect(
+      tools.map((t) => ({ name: t.name, title: t.title, description: t.description })),
+    ).toEqual([
+      {
+        name: 'get_class_source',
+        title: 'Get Java source for a class',
+        description:
+          "Read a dependency class's Java source, ideally only specific methods via methodNames (or startLine/endLine; Scala/Groovy: startLine/endLine only). Use only when you need the implementation, not names or signatures. Sources JAR if present, else decompiled (sourceAvailable=false). Whole files over ~64KiB are refused: pass methodNames.",
+      },
+      {
+        name: 'find_in_class_source',
+        title: 'Find text in resolved Java source',
+        description:
+          "Grep one known dependency class's source for a string, identifier, or pattern (literal; regex optional). Unknown class: search_classes. Whole JAR: search_in_artifact.",
+      },
+      {
+        name: 'resolve_dependencies',
+        title: 'Resolve Gradle dependencies',
+        description:
+          'List Gradle modules and, with query, the exact dependency versions on the classpath with module counts (conflicts flagged); add modules to name the modules (a path filter, or "all"). Start here for NoSuchMethodError, AbstractMethodError, ClassCastException, or "which version of X is used?"; use instead of reading Gradle files or ~/.gradle caches.',
+      },
+      {
+        name: 'search_classes',
+        title: 'Search classes on the resolved classpath',
+        description:
+          'Find which dependency JAR provides a class when you only have a simple name, partial name, or keyword (e.g. ObjectMapper, retry). Use for unknown types in stack traces or imports, instead of unzip/jar searches. Returns FQN + library per hit; next call get_class_structure.',
+      },
+      {
+        name: 'get_method_signature',
+        title: 'Get Java method overload signatures',
+        description:
+          'List every overload (parameters, generics, return type) of one or more methods or constructors ("<init>") of a dependency class. Use to verify a call or pick an overload. Not for bodies: use get_class_source.',
+      },
+      {
+        name: 'get_class_structure',
+        title: 'Get structured Java class API',
+        description:
+          "Show what a third-party library (JAR) class is and does: purpose and method names; scope=declared adds all signatures and fields, scope=effective adds inherited members. First call for any dependency class you can name; use instead of reading source or javap. One method's overloads: get_method_signature.",
+      },
+      {
+        name: 'search_in_artifact',
+        title: 'Search text across all classes in one resolved dependency JAR',
+        description:
+          'Grep every class in one dependency JAR for a string (log message, exception text, constant). Use when you know the library but not the class. Pass coordinates {group, name, version} (see resolve_dependencies with query) or jarPath.',
+      },
+    ]);
   });
 });
 

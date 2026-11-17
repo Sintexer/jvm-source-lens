@@ -78,6 +78,7 @@ function enrichClassStructureError(
 function classStructureFail(
   opts: GetClassStructureOptions,
   className: string,
+  buildSystem: string | null,
   error: ClassSourceError,
   subprocess?: {
     command: string[];
@@ -91,7 +92,7 @@ function classStructureFail(
     publicCode: error.code,
     message: error.message,
     projectRoot: opts.projectRoot,
-    buildSystem: 'gradle',
+    buildSystem,
     input: {
       className,
       modulePath: opts.modulePath,
@@ -288,6 +289,8 @@ export async function getClassStructure(
     };
   }
 
+  const buildSystem = resolved.output.buildSystem.type;
+
   const moduleScope = resolveClassScopeOrError(opts.projectRoot, resolved.output, {
     className,
     modulePath: opts.modulePath,
@@ -295,7 +298,7 @@ export async function getClassStructure(
     includeTest: opts.includeTest,
   });
   if (!moduleScope.ok) {
-    return classStructureFail(opts, className, enrichClassStructureError(opts, resolved.output, moduleScope.error));
+    return classStructureFail(opts, className, buildSystem, enrichClassStructureError(opts, resolved.output, moduleScope.error));
   }
   const effectiveModulePath = moduleScope.modulePath;
   className = moduleScope.className;
@@ -309,6 +312,7 @@ export async function getClassStructure(
 
   const resolveSourcesJarFn = createSourcesJarResolver({
     projectRoot: opts.projectRoot,
+    buildSystem,
     operation: 'get_class_structure',
     input: { className, modulePath: opts.modulePath, includeTest: opts.includeTest },
   });
@@ -320,7 +324,7 @@ export async function getClassStructure(
   );
 
   if (!sourceRead.ok) {
-    return classStructureFail(opts, className, enrichClassStructureError(opts, resolved.output, sourceRead.error));
+    return classStructureFail(opts, className, buildSystem, enrichClassStructureError(opts, resolved.output, sourceRead.error));
   }
 
   // Kotlin source adds KDoc and parameter names to what javap reports; it never replaces javap.
@@ -340,7 +344,7 @@ export async function getClassStructure(
   });
 
   if (!ownerHit.ok && !effectiveRead.hit) {
-    return classStructureFail(opts, className, enrichClassStructureError(opts, resolved.output, ownerHit.error));
+    return classStructureFail(opts, className, buildSystem, enrichClassStructureError(opts, resolved.output, ownerHit.error));
   }
 
   let parsedPrimary: ParsedJavaTypeMetadata | null = null;
@@ -367,7 +371,7 @@ export async function getClassStructure(
   }
 
   if (!primaryHeader) {
-    return classStructureFail(opts, className, {
+    return classStructureFail(opts, className, buildSystem, {
       code: 'SIGNATURE_EXTRACT_FAILED',
       message:
         'Could not obtain class header from Java source parse or javap — ensure the type is valid bytecode and/or readable source on the classpath.',

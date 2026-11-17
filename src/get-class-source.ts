@@ -20,7 +20,9 @@ import {
 export type GetClassSourceCliOptions = {
   /** stderr phase labels (TTY: in-place updating line). */
   progress?: boolean;
-  /** Stream Gradle stderr during dependency resolution / sources JAR fetch. */
+  /** Stream build-tool stderr during dependency resolution / sources JAR fetch. */
+  verbose?: boolean;
+  /** @deprecated Use `verbose`. Kept for one release. */
   verboseGradle?: boolean;
 };
 
@@ -155,16 +157,17 @@ export async function getClassSource(
 ): Promise<ClassSourceLookupResult> {
   const cli = opts.cli;
   const progressEnabled = Boolean(cli?.progress);
-  const verboseGradle = Boolean(cli?.verboseGradle);
+  const verbose = Boolean(cli?.verbose ?? cli?.verboseGradle);
   const reporter = createCliProgressReporter(progressEnabled);
 
   let resolveOpts: ResolveOptions | undefined;
-  if (verboseGradle) {
-    resolveOpts = { inheritGradleStderr: true };
+  if (verbose) {
+    resolveOpts = { inheritStderr: true };
   } else if (progressEnabled) {
     resolveOpts = {
-      onBeforeGradle: () => reporter.update('Resolving dependencies (Gradle)…'),
-      onAfterGradle: () => reporter.finishPhase(),
+      onBeforeResolve: ({ displayName }) =>
+        reporter.update(`Resolving dependencies (${displayName})…`),
+      onAfterResolve: () => reporter.finishPhase(),
     };
   }
 
@@ -186,6 +189,8 @@ export async function getClassSource(
       };
     }
 
+    const buildSystem = resolved.output.buildSystem.type;
+
     const moduleScope = resolveClassScopeOrError(opts.projectRoot, resolved.output, {
       className,
       modulePath: opts.modulePath,
@@ -203,7 +208,7 @@ export async function getClassSource(
         publicCode: error.code,
         message: error.message,
         projectRoot: opts.projectRoot,
-        buildSystem: 'gradle',
+        buildSystem,
         input: commonInput(opts, className),
       });
       return { ok: false, error, ...diag };
@@ -213,14 +218,16 @@ export async function getClassSource(
 
     const resolveSourcesJarFn = createSourcesJarResolver({
       projectRoot: opts.projectRoot,
+      buildSystem,
       operation: 'get_class_source',
       input: commonInput(opts, className),
-      gradle: verboseGradle
+      hooks: verbose
         ? { inheritStderr: true }
         : progressEnabled
           ? {
-              onBeforeGradle: () => reporter.update('Resolving sources JAR (Gradle)…'),
-              onAfterGradle: () => reporter.finishPhase(),
+              onBeforeResolve: ({ displayName }) =>
+                reporter.update(`Resolving sources JAR (${displayName})…`),
+              onAfterResolve: () => reporter.finishPhase(),
             }
           : undefined,
     });
@@ -254,7 +261,7 @@ export async function getClassSource(
         publicCode: e.code,
         message: e.message,
         projectRoot: opts.projectRoot,
-        buildSystem: 'gradle',
+        buildSystem,
         input: commonInput(opts, className),
         subprocess,
       });
@@ -277,7 +284,7 @@ export async function getClassSource(
         publicCode: err.code,
         message: err.message,
         projectRoot: opts.projectRoot,
-        buildSystem: 'gradle',
+        buildSystem,
         input: {
           ...commonInput(opts, className),
           ...(err.code === 'SOURCE_OUTPUT_TOO_LARGE'
