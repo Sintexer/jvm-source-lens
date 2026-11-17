@@ -156,7 +156,7 @@ interface ResolveOptions {
 }
 ```
 
-**Compatibility aliases (kept for one release):** `ResolveOptions.inheritGradleStderr`, `onBeforeGradle`, `onAfterGradle`, `ResolutionResult.gradle`, `GradleProcessCapture`, `ResolveSourcesJarGradleOptions`, `GetClassSourceCliOptions.verboseGradle`, and the top-level `resolveSourcesJar` helper remain exported as `@deprecated` aliases over the neutral fields and registry lookup. `ResolveWithResolutionCacheOptions.resolver` is `@internal` (for tests).
+`ResolveWithResolutionCacheOptions.resolver` is `@internal` (for tests).
 
 The exhaustive TypeScript definitions live in `src/resolvers/base.ts` and `src/resolvers/resolution-output.ts`.
 
@@ -167,7 +167,7 @@ The registry (`src/resolvers/index.ts`) is the single build-system extension poi
 ```typescript
 const RESOLVERS: DependencyResolver[] = [
   new GradleResolver(),
-  // new MavenResolver(),
+  new MavenResolver(),
 ];
 
 export function allResolvers(): readonly DependencyResolver[];
@@ -183,6 +183,8 @@ export function detectResolver(projectRoot: string): DependencyResolver;
 resources/
   cfr.jar                 ← bundled CFR (also validated in prepack)
   analyzer-init.gradle    ← bundled Gradle init script (--init-script path)
+  maven-analyzer.jar      ← bundled Maven lifecycle extension (-Dmaven.ext.class.path; built from maven-analyzer-src/)
+  maven-analyzer-src/     ← Java 8 source + Plexus descriptor for maven-analyzer.jar
 src/
   resolvers/
     index.ts              ← registry (detectResolver, resolverById, allResolvers)
@@ -192,8 +194,12 @@ src/
       index.ts            ← GradleResolver
       cache-inputs.ts     ← Gradle build-input walk + GRADLE_USER_HOME managed-JAR check
       resolve-sources-jar.ts ← on-demand jvmsrcResolveSources task runner
-    maven/                ← future
-      index.ts
+    maven/
+      index.ts            ← MavenResolver + aggregator-aware findMavenBuildRoot
+      maven-wrapper-command.ts ← ./mvnw / mvnw.cmd + JVMSRC_USE_SYSTEM_MAVEN / JVMSRC_MAVEN_BIN
+      spawn-maven.ts      ← stripped env + .mvn/maven.config ext classpath merge + timeout
+      cache-inputs.ts     ← reactor pom.xml walk + .mvn/* + M2_LOCAL_REPO + SNAPSHOT mutability
+      resolve-sources-jar.ts ← on-demand -Djvmsrc.mode=sources runner
   bundled-resources.ts    ← getBundledResource(), package-root resolution
   extractor/
     class-source-types.ts   ← lookup options + ClassSourceLookupResult / errors
@@ -568,6 +574,13 @@ The following behaviors were validated against real Gradle builds before folding
 
 **Android:** variant-specific classpaths (for example **`debugCompileClasspath`**, **`releaseCompileClasspath`**) are **not** collected by default — Android modules can expose many variants, which would multiply Gradle configuration work. Prefer JVM library modules for default **`jvmsrc`** classpath queries, pass **`--configuration`** when your graph exposes a stable custom configuration, or extend the init script locally if you need a dedicated Android scope.
 
+### 5.6 Maven Resolver (Experimental)
+
+- **Detection & root lifting:** `MavenResolver.detect()` checks for `pom.xml` at the candidate root (`GradleResolver` runs first when both `build.gradle*` and `pom.xml` exist). `findMavenBuildRoot()` walks up to the nearest `pom.xml` and continues climbing parent aggregator `pom.xml` files whose `<modules>` lists the child directory, without crossing into unrelated outer POMs.
+- **Executable selection:** prefers `./mvnw` (`mvnw.cmd` on Windows), unless **`JVMSRC_USE_SYSTEM_MAVEN=1`** forces system Maven (**`JVMSRC_MAVEN_BIN`** → **`MAVEN_HOME`** / **`M2_HOME`** → `mvn` on `PATH`). Git LFS pointers on `.mvn/wrapper/maven-wrapper.jar` fail fast with an actionable message; `only-script` wrappers without `maven-wrapper.jar` are allowed. `MAVEN_OPTS` is stripped alongside JVM injection variables.
+- **Zero-mutation resolution (`resources/maven-analyzer.jar`):** runs `mvn -B -q -Dmaven.ext.class.path=<jar> -Djvmsrc.mode=resolve validate` with `cwd = projectRoot` (appending to any `-Dmaven.ext.class.path` declared in `.mvn/maven.config`) and writes JSON to a temp file outside `projectRoot`. Inside `AbstractMavenLifecycleParticipant.afterProjectsRead`, the analyzer reads effective compiler target hints (`maven.compiler.release` / `source` / `target` / `java.version` and `maven-compiler-plugin` `<configuration>`), clears in-memory `project.getBuild().getPlugins()` so `validate` runs zero goals and never creates `target/`, and resolves **`compile`** (`scope: "compile"`), **`runtime`** (`scope: "runtime"`), and **`test`** (`scope: "test-compile"`) independently using Maven's **nearest-wins** mediation.
+- **On-demand sources JARs:** `-Djvmsrc.mode=sources -Djvmsrc.group=<g> -Djvmsrc.artifact=<a> -Djvmsrc.version=<v>` resolves `classifier="sources"` through Maven's `RepositorySystem` using the project's remote repositories and the user's `settings.xml` mirrors, proxies, and server credentials.
+
 ## 6. Caching Strategy
 
 ### 6.1 Resolution Cache
@@ -585,6 +598,13 @@ For **`GradleResolver`**, the tracked inputs are:
 - `gradle/wrapper/gradle-wrapper.properties` (Gradle distribution version; different Gradle releases may resolve conflicts differently)
 - `gradle/dependency-locks/*.lockfile` (if present)
 - `GRADLE_USER_HOME` environment variable (normalized path; changes where Gradle stores artifacts, making cached JAR paths stale)
+
+For **`MavenResolver`**, the tracked inputs are:
+
+- `pom.xml` in the project root and all reactor submodules (`target/` and `.mvn/` are excluded from the walk; symlinks are never followed)
+- `.mvn/maven.config`, `.mvn/jvm.config`, `.mvn/extensions.xml`, and `.mvn/wrapper/maven-wrapper.properties` (when present)
+- `M2_LOCAL_REPO` (effective local repository from `.mvn/maven.config` `-Dmaven.repo.local`, `~/.m2/settings.xml` `<localRepository>`, or `~/.m2/repository`) and `M2_SETTINGS_SHA256` (SHA-256 hex of `~/.m2/settings.xml`, or `absent` — raw XML is never stored)
+- `isImmutableArtifact` returns `true` only for non-`-SNAPSHOT` release JARs inside the local Maven repository; `-SNAPSHOT` JARs in `~/.m2/repository` stay mutable (`false`) so `mvn install` republications invalidate `local-artifact.hash` without `forceRefresh`
 
 **Cache location (nothing under the scanned project tree):** resolution data lives under the OS cache directory from [`env-paths`](https://github.com/sindresorhus/env-paths) with app name **`jvmsrc`** (same as the CLI binary) and **no** `nodejs` suffix (`suffix: ''`), so typical roots are:
 
@@ -797,7 +817,10 @@ Once a **`ResolutionOutput`** is loaded (from cache or a fresh Gradle run), the 
 | **`JVMSRC_MAX_JAR_BYTES`** | 524288000 (500 MB) | JARs read fully into memory (sources-JAR entry reads, class presence checks, class-search / `search_in_artifact` listing) are checked with `stat` first. A larger JAR fails with **`ZIP_READ_ERROR`**; `message` names the size, the limit and the setting. JAR content hashes are streamed and have no limit. |
 | **`JVMSRC_REGEX_TIMEOUT_MS`** | 2000 | Regex mode of **`find_in_class_source`** / **`search_in_artifact`** runs in a worker thread. When the scan does not finish in time, the worker is terminated and the tool returns **`FIND_QUERY_INVALID`** with a `message` that contains `timed out`. `search_in_artifact` stops at the first timeout. Literal mode has no deadline. The library export `searchClassSourceText` stays synchronous and has no deadline. |
 | **`JVMSRC_USE_SYSTEM_GRADLE`** | unset | `1` = run `gradle` on `PATH`, not `./gradlew` (§5.2). |
-| **`JVMSRC_PROJECT_ROOT`** | unset | Default project root when `projectRoot` is omitted. Order: the argument → MCP `roots` → this setting → the working directory. The first candidate inside a Gradle project is lifted to the nearest `gradlew` / `settings.gradle(.kts)` (§8.2). |
+| **`JVMSRC_USE_SYSTEM_MAVEN`** | unset | `1` = run system `mvn`, not `./mvnw` (§5.6). |
+| **`JVMSRC_MAVEN_BIN`** | unset | Explicit path to the `mvn` executable when not using `./mvnw` (checked before `MAVEN_HOME` / `M2_HOME` / `PATH`). |
+| **`JVMSRC_MAVEN_TIMEOUT_MS`** | 600000 | Wall-clock deadline (ms) per Maven subprocess invocation (§5.6). |
+| **`JVMSRC_PROJECT_ROOT`** | unset | Default project root when `projectRoot` is omitted. Order: the argument → MCP `roots` → this setting → the working directory. The first candidate inside a Gradle or Maven project is lifted to the build root (§8.2). |
 
 **`MODULE_NOT_FOUND` variants:** an unknown `modulePath` gives `No resolved module named "<x>".` with **`availableModules`** set to every module. A loose `modulePath` that matches more than one module (for example a directory name used by two modules) gives `Module "<x>" matches several modules (<a>, <b>).` with **`availableModules`** set to the matched candidates only. Both are `validation` and retryable; retry with one of the listed names.
 

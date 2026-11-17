@@ -28,10 +28,11 @@ Include steps to reproduce, impact, and affected versions. We aim to acknowledge
 
 | Process | When | Input |
 |---------|------|--------|
-| `gradlew` / `gradle` | Resolution, sources JAR fetch | Fixed task names + bundled init script path (see [Gradle wrapper trust](#gradle-wrapper-trust)) |
-| `java` (CFR) | Decompile when no sources JAR | JAR path from Gradle resolution |
+| `gradlew` / `gradle` | Gradle resolution, sources JAR fetch | Fixed task names + bundled init script path (see [Gradle wrapper trust](#gradle-wrapper-trust)) |
+| `mvnw` / `mvn` | Maven resolution, sources JAR fetch | `validate` + bundled `maven-analyzer.jar` path (see [Maven wrapper trust](#maven-wrapper-trust)) |
+| `java` (CFR) | Decompile when no sources JAR | JAR path from build-tool resolution |
 | `javap` | Signatures / structure fallback | Class name + classpath from resolution |
-| `sh` (Unix only) | Run non-executable `gradlew` | Wrapper script path only — not user-controlled |
+| `sh` (Unix only) | Run non-executable `gradlew` / `mvnw` | Wrapper script path only — not user-controlled |
 
 Subprocesses use an **argv array** via `cross-spawn` / `Bun.spawn` with **`shell: false`** (never `/bin/sh -c …` with interpolated user input). See [src/spawn-child.ts](src/spawn-child.ts).
 
@@ -45,6 +46,12 @@ For a repository you do not trust:
 - Or set **`JVMSRC_USE_SYSTEM_GRADLE=1`** so jvmsrc runs `gradle` from your `PATH` and does not run the project's wrapper.
 
 `JVMSRC_USE_SYSTEM_GRADLE` does not make the build safe: the build scripts still run. Use jvmsrc only on projects you would build yourself.
+
+### Maven wrapper trust
+
+On Maven projects, resolution runs `./mvnw` when present (executing `.mvn/wrapper/maven-wrapper.jar` and downloading the distribution in `.mvn/wrapper/maven-wrapper.properties`), plus any project extensions declared in `.mvn/extensions.xml` and JVM flags in `.mvn/jvm.config`. `MAVEN_OPTS` from the parent environment is stripped before spawn.
+
+For a repository whose wrapper you have not reviewed, set **`JVMSRC_USE_SYSTEM_MAVEN=1`** so jvmsrc runs system `mvn` instead of `./mvnw`. Project POMs, `.mvn/extensions.xml`, and `.mvn/jvm.config` still load; inspect only repositories you trust.
 
 ### Untrusted bytecode
 
@@ -71,4 +78,4 @@ Runtime dependencies are pinned in **`bun.lock`**. CI runs `bun install --frozen
 - Prefer **`npx -y jvmsrc@<version> mcp`** with a pinned version in MCP config for reproducibility.
 - Set **`JVMSRC_ALLOWED_ROOTS`** in shared/CI environments when MCP agents can pass arbitrary paths.
 - Override **`JVMSRC_CFR_PATH`** only with JARs your organization has reviewed.
-- Set **`JVMSRC_USE_SYSTEM_GRADLE=1`** when agents can point jvmsrc at repositories whose Gradle wrapper you have not reviewed.
+- Set **`JVMSRC_USE_SYSTEM_GRADLE=1`** and **`JVMSRC_USE_SYSTEM_MAVEN=1`** when agents can point jvmsrc at repositories whose build-tool wrappers you have not reviewed.

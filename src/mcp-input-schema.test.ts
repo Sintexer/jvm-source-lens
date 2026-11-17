@@ -74,11 +74,11 @@ describe('advertised input schemas', () => {
     expect(scope.enum).toEqual(['overview', 'declared', 'effective']);
   });
 
-  test('server instructions and tool titles/descriptions stay byte-identical', () => {
+  test('server instructions and tool titles/descriptions match registered Gradle + Maven copy', () => {
     expect(client.getInstructions()).toBe(
-      "\njvmsrc reads third-party JVM dependencies: classes inside JARs on a Gradle project's classpath\n" +
-        '(structure, signatures, source, versions). Gradle projects only.\n\n' +
-        'Use it instead of memory, web search, or javap/unzip/Gradle-cache digging for any question about\n' +
+      "\njvmsrc reads third-party JVM dependencies: classes inside JARs on a Gradle or Maven project's classpath\n" +
+        '(structure, signatures, source, versions). Gradle and Maven projects only.\n\n' +
+        'Use it instead of memory, web search, or javap/unzip/Gradle/Maven-cache digging for any question about\n' +
         'a library class, method, or version — "what does X do", "which JAR has Y", NoSuchMethodError,\n' +
         "ClassCastException, version conflicts. Code under this repo's src/ → grep/read instead.\n\n" +
         'Flow: search_classes (only if the name is unknown) → get_class_structure → get_class_source with\n' +
@@ -108,9 +108,9 @@ describe('advertised input schemas', () => {
       },
       {
         name: 'resolve_dependencies',
-        title: 'Resolve Gradle dependencies',
+        title: 'Resolve project dependencies',
         description:
-          'List Gradle modules and, with query, the exact dependency versions on the classpath with module counts (conflicts flagged); add modules to name the modules (a path filter, or "all"). Start here for NoSuchMethodError, AbstractMethodError, ClassCastException, or "which version of X is used?"; use instead of reading Gradle files or ~/.gradle caches.',
+          'List modules and, with query, exact dependency versions on the classpath with module counts (conflicts flagged); add modules to name them (path filter or "all"). Start here for NoSuchMethodError, AbstractMethodError, ClassCastException, or "which version of X is used?"; use instead of build files or local caches.',
       },
       {
         name: 'search_classes',

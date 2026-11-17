@@ -75,12 +75,6 @@ const GRADLE_IMPORT_ALLOWLIST: Record<string, string> = {};
  * Every entry names the checkpoint that owns removing it; stale entries fail the ratchet test.
  */
 const GRADLE_REFERENCE_ALLOWLIST: Record<string, string> = {
-  // Deprecated compatibility aliases kept for one release (removed in checkpoint 9):
-  'get-class-source.ts': 'checkpoint 9 — remove deprecated verboseGradle CLI option alias',
-  'public-api.ts': 'checkpoint 9 — remove deprecated GradleProcessCapture / ResolveSourcesJarGradleOptions aliases',
-  'resolve-with-cache.ts': 'checkpoint 9 — remove deprecated Gradle option aliases',
-  'resolvers/base.ts': 'checkpoint 9 — remove deprecated Gradle option aliases',
-
   // Registry wires built-in resolvers by design:
   'resolvers/index.ts': 'permanent — resolver registry wires GradleResolver',
 
@@ -96,8 +90,6 @@ const GRADLE_REFERENCE_ALLOWLIST: Record<string, string> = {
   'cli-config-command.ts': 'checkpoint 9/10 — public config JSON hasGradleWrapper hint',
   'copy/empty-messages.ts': 'checkpoint 9/10 — user-facing empty-result guidance copy',
   'copy/error-messages.ts': 'checkpoint 9/10 — user-facing error copy',
-  'copy/tool-descriptions.ts': 'checkpoint 9 — MCP tool titles and descriptions',
-  'mcp.ts': 'checkpoint 9 — MCP parameter descriptions',
   'diagnostics/build-context.ts': 'checkpoint 10 — diagnostic context gradleVersion field',
   'diagnostics/diagnostic-record.ts': 'checkpoint 10 — documented DiagnosticRecord.context.gradleVersion field',
   'diagnostics/map-failure.ts': 'checkpoint 10 — resolver-specific failure classification',
@@ -133,25 +125,6 @@ describe('build-tool-neutral core guard', () => {
     const stale = Object.keys(GRADLE_REFERENCE_ALLOWLIST).filter((rel) => !matching.includes(rel));
 
     expect({ unexpected, stale }).toEqual({ unexpected: [], stale: [] });
-  });
-
-  test('deprecated-alias files contain no gradle tokens other than the 1-release compatibility aliases', () => {
-    const deprecatedAliasFiles = new Set([
-      'get-class-source.ts',
-      'public-api.ts',
-      'resolve-with-cache.ts',
-      'resolvers/base.ts',
-    ]);
-    const aliasPattern =
-      /\b(inheritGradleStderr|onBeforeGradle|onAfterGradle|GradleProcessCapture|ResolveSourcesJarGradleOptions|verboseGradle)\b|(\.gradle\b|\bgradle\??:)/g;
-
-    const leaks = allRelCode
-      .filter(({ rel }) => deprecatedAliasFiles.has(rel))
-      .map(({ rel, code }) => ({ rel, remaining: code.replace(aliasPattern, '') }))
-      .filter(({ remaining }) => /gradle/i.test(remaining))
-      .map(({ rel }) => rel);
-
-    expect(leaks).toEqual([]);
   });
 
   test('stripCommentsPreservingStrings removes comments without mangling URLs in strings', () => {

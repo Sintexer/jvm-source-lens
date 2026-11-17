@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { getBundledResource } from '../../bundled-resources.js';
+import { readCachedJavaToolchainVersion } from '../../cache/cached-toolchain.js';
 import { buildCfrSpawnEnv } from '../../decompiler/cfr-spawn-env.js';
 import { resolveJdkForProject } from '../../jdk/resolve-jdk-for-project.js';
 import { awaitChildExit, readProcessStreamToText, spawnChild } from '../../spawn-child.js';
@@ -83,7 +84,9 @@ export async function runGradleTask(
   // Resolve the JDK to use before spawning Gradle.
   // A failed resolution (no matching JDK found) is a hard stop — no point spawning Gradle
   // with the wrong JDK and getting a cryptic error from it.
-  const jdkResult = resolveJdkForProject(root, spawnOptions?.cachedToolchainVersion);
+  const cachedToolchainVersion =
+    spawnOptions?.cachedToolchainVersion ?? readCachedJavaToolchainVersion(root);
+  const jdkResult = resolveJdkForProject(root, cachedToolchainVersion);
   if (!jdkResult.ok) {
     return {
       ok: false,

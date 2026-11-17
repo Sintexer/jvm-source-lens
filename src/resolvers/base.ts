@@ -32,9 +32,6 @@ export type SubprocessCapture = {
   stderr: string;
 };
 
-/** @deprecated Use `SubprocessCapture`. Kept for one release. */
-export type GradleProcessCapture = SubprocessCapture;
-
 export type SubprocessHooks = {
   inheritStderr?: boolean;
   onBeforeResolve?: (info: ResolvePhaseInfo) => void;
@@ -51,12 +48,6 @@ export interface ResolveOptions {
   onBeforeResolve?: (info: ResolvePhaseInfo) => void;
   /** Invoked when the build-tool subprocess has exited (success or failure). */
   onAfterResolve?: () => void;
-  /** @deprecated Use `inheritStderr`. Kept for one release. */
-  inheritGradleStderr?: boolean;
-  /** @deprecated Use `onBeforeResolve`. Kept for one release. */
-  onBeforeGradle?: () => void;
-  /** @deprecated Use `onAfterResolve`. Kept for one release. */
-  onAfterGradle?: () => void;
 }
 
 export type BuildCacheInputs = {
@@ -73,8 +64,6 @@ export type ResolveSourcesJarResult =
       message: string;
       stderr?: string;
       subprocess?: SubprocessCapture;
-      /** @deprecated Use `subprocess`. Kept for one release. */
-      gradle?: GradleProcessCapture;
     };
 
 export type ResolutionResult =
@@ -84,16 +73,14 @@ export type ResolutionResult =
       message: string;
       stderr?: string;
       subprocess?: SubprocessCapture;
-      /** @deprecated Use `subprocess`. Kept for one release. */
-      gradle?: GradleProcessCapture;
       diagnosticId?: string;
       hint?: string;
     };
 
 export interface DependencyResolver {
-  /** Matches `ResolutionOutput.buildSystem.type` (e.g. `'gradle'`). */
+  /** Matches `ResolutionOutput.buildSystem.type` (e.g. `'gradle'`, `'maven'`). */
   readonly id: string;
-  /** Human-facing build tool name (e.g. `'Gradle'`). */
+  /** Human-facing build tool name (e.g. `'Gradle'`, `'Maven'`). */
   readonly displayName: string;
   /** Root marker hint for error guidance (e.g. `'gradlew or settings.gradle(.kts)'`). */
   readonly rootHint: string;

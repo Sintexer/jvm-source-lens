@@ -16,7 +16,8 @@ git clone https://github.com/Sintexer/jvm-source-lens.git
 cd jvm-source-lens
 
 bun install
-bun run setup:cfr    # once — downloads CFR into resources/cfr.jar
+bun run setup:cfr             # once — downloads CFR into resources/cfr.jar
+bun run setup:maven-analyzer  # once — compiles resources/maven-analyzer.jar
 ```
 
 ## Day to day
@@ -84,9 +85,12 @@ Current scenarios:
 | `gradle/local-maven-publish/` | Snapshot publish → resolve → republish with new method → automatic cache invalidation via local-artifact digest (no `forceRefresh` required) |
 | `gradle/dependency-change/` | Edit `build.gradle` to bump a stable dependency version → build-input digest changes → automatic re-resolution; cache hit when nothing changes |
 | `gradle/version-conflict/` | Direct dep (v2) and transitive dep (v1) of the same library — tool reports exactly the version Gradle selected (highest-wins), not a stale or wrong-version JAR |
-| `gradle/kotlin-library/` | A Kotlin library published with a sources JAR, used from a Java project — `get` returns the `.kt` source (class and `*Kt` facade) with `sourceLanguage: kotlin`; `methodNames` gives the Java-only message; line ranges work; structure uses `javap` |
+| `gradle/kotlin-library/` | A Kotlin library published with a sources JAR, used from a Java project — `get` returns the `.kt` source (class and `*Kt` facade) with `sourceLanguage: kotlin`; `methodNames` excerpts work; line ranges work; structure adds KDoc + parameter names over `javap` |
+| `maven/single-module/` | Maven external resolution (`compile` / `runtime` / `test`), on-demand `-sources.jar` (`sourceAvailable: true`), CFR fallback (`sourceAvailable: false`), `get_class_structure`, `search_classes`, `search_in_artifact`, and zero `target/` creation |
+| `maven/version-conflict/` | Direct dep (`1.0.0`) vs transitive dep (`2.0.0`) — verifies Maven **nearest-wins** selects `1.0.0` (opposite of Gradle highest-wins) |
+| `maven/local-install-snapshot/` | `producer/` runs `mvn install` for `1.0.0-SNAPSHOT` twice with a new method; `consumer/` invalidates `local-artifact.hash` automatically without `forceRefresh` |
 
-Stub directories `scenarios/maven/` and `scenarios/bazel/` reserve space for future build systems.
+Stub directory `scenarios/bazel/` reserves space for future build systems.
 
 **Generating wrapper JARs** (one-time, requires `gradle` on `PATH`):
 

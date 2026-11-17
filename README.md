@@ -11,8 +11,8 @@
 
 </div>
 
-Your IDE knows which library version your build uses. Your coding agent does not. It guesses from `~/.gradle/caches` and often reads the wrong JAR.
-`jvmsrc` asks your build tool (Gradle) for the resolved classpath. Then it gives the agent **real source**, **real signatures** and **real structure** for the exact version in use.
+Your IDE knows which library version your build uses. Your coding agent does not. It guesses from `~/.gradle/caches` or `~/.m2` and often reads the wrong JAR.
+`jvmsrc` asks your build tool (**Gradle**, plus **experimental Maven**) for the resolved classpath. Then it gives the agent **real source**, **real signatures** and **real structure** for the exact version in use.
 
 ---
 
@@ -191,9 +191,7 @@ Set `JVMSRC_HOOK_DISABLE=1` to switch it off for a while. Other clients have the
 
 ## Target Audience
 
-Primarily **Java + Spring Boot** projects on Gradle. Other JVM languages (Kotlin, Scala) and Android work today on a best-effort basis and are on the roadmap as first-class targets — see [PLAN.md](PLAN.md).
-
-*If you're on Maven or Bazel, it's planned but not shipping yet. Star the repo or open an issue and I'll prioritize accordingly.*
+Primarily **Java + Spring Boot** projects on **Gradle**, with **experimental Maven** support (external dependencies, nearest-wins mediation, sources JAR + CFR). Other JVM languages (Kotlin, Scala, Groovy) work today — see [PLAN.md](PLAN.md).
 
 ---
 
@@ -209,9 +207,10 @@ Primarily **Java + Spring Boot** projects on Gradle. Other JVM languages (Kotlin
 | Build system | Status |
 |---|---|
 | **Gradle** | Supported — multimodule included |
-| Maven, Bazel | Planned ([SPEC.md](SPEC.md)) |
+| **Maven** | **Experimental** — external dependencies, nearest-wins conflict resolution, on-demand sources JARs, CFR fallback |
+| Bazel | Planned ([SPEC.md](SPEC.md)) |
 
-`-p` / `projectRoot` can be the Gradle root or any directory inside it; jvmsrc walks up to the nearest `gradlew` / `settings.gradle(.kts)`. MCP tools can omit `projectRoot`, and the CLI can omit `-p` (it uses `JVMSRC_PROJECT_ROOT`, else the Gradle build that contains the working directory). Uses `./gradlew` when present, else `gradle` on `PATH`. Maven-only trees get an explicit unsupported error.
+`-p` / `projectRoot` can be the build root or any directory inside it; jvmsrc walks up to the Gradle root (`gradlew` / `settings.gradle(.kts)`) or Maven reactor root (`pom.xml`). MCP tools can omit `projectRoot`, and the CLI can omit `-p` (it uses `JVMSRC_PROJECT_ROOT`, else the build that contains the working directory). Uses `./gradlew` / `./mvnw` when present, else `gradle` / `mvn`.
 
 </details>
 
@@ -222,8 +221,8 @@ Early software; the supported path is narrow:
 
 | Area | Today |
 |---|---|
-| Build tool | **Gradle only** |
-| Integration | **Groovy init script** (`--init-script`) — not a Gradle Portal plugin |
+| Build tool | **Gradle** (full) and **Maven** (**experimental**: external dependencies; multi-module reactor source/bytecode polish in Checkpoint 10) |
+| Integration | Bundled **Gradle init script** (`--init-script`) and **Maven core extension** (`-Dmaven.ext.class.path`) — zero project mutation |
 | Classpaths | Standard JVM + Kotlin MPP `jvm*` configurations when Gradle exposes them |
 | Output | Original source when available (`.java`, `.kt`, `.scala`, `.groovy` from a sources JAR or inter-project `src`; `sourceLanguage` names it), else CFR-decompiled Java. For Kotlin classes, structure and signatures add KDoc and real parameter names to the javap result, and `methodNames` excerpts work. For Scala and Groovy, use `startLine` / `endLine` |
 
@@ -301,6 +300,9 @@ jvmsrc mcp                                                     # run as MCP serv
 | `JVMSRC_MAX_FULL_SOURCE_CHARS` | Unscoped full-file `get_class_source` larger than this is refused with `SOURCE_OUTPUT_TOO_LARGE` (default 65536) |
 | `JVMSRC_GRADLE_TIMEOUT_MS` | Gradle timeout |
 | `JVMSRC_USE_SYSTEM_GRADLE` | `1` = run `gradle` on `PATH`, not the project's `./gradlew` (see [SECURITY.md](SECURITY.md#gradle-wrapper-trust)) |
+| `JVMSRC_MAVEN_TIMEOUT_MS` | Maven timeout (default 600000) |
+| `JVMSRC_USE_SYSTEM_MAVEN` | `1` = run system `mvn`, not the project's `./mvnw` (see [SECURITY.md](SECURITY.md#maven-wrapper-trust)) |
+| `JVMSRC_MAVEN_BIN` | Explicit `mvn` executable path when not using `./mvnw` |
 | `JVMSRC_MAX_JAR_BYTES` | Max size of a JAR read into memory (default 524288000 = 500 MB); larger JARs return `ZIP_READ_ERROR` |
 | `JVMSRC_REGEX_TIMEOUT_MS` | Wall-clock limit for regex mode in `find_in_class_source` / `search_in_artifact` (default 2000) |
 | `JVMSRC_CFR_PATH` | Custom CFR JAR |
@@ -339,7 +341,7 @@ When `JVMSRC_JAVA_HOME` is not set, jvmsrc auto-discovers local JDKs from common
 ```bash
 git clone https://github.com/Sintexer/jvm-source-lens.git
 cd jvm-source-lens
-bun install && bun run setup:cfr && bun run build
+bun install && bun run setup:cfr && bun run setup:maven-analyzer && bun run build
 node dist/cli.js --version
 ```
 

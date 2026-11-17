@@ -24,49 +24,6 @@ export type ResolveWithResolutionCacheOptions = {
 
 const defaultOptions: ResolveWithResolutionCacheOptions = { forceRefresh: false };
 
-function normalizeResolveOptions(options: ResolveOptions | undefined): ResolveOptions | undefined {
-  if (!options) {
-    return undefined;
-  }
-  const {
-    inheritGradleStderr,
-    onBeforeGradle,
-    onAfterGradle,
-    inheritStderr,
-    onBeforeResolve,
-    onAfterResolve,
-    ...rest
-  } = options;
-  return {
-    ...rest,
-    ...(inheritStderr !== undefined || inheritGradleStderr !== undefined
-      ? { inheritStderr: inheritStderr ?? inheritGradleStderr }
-      : {}),
-    ...(onBeforeResolve !== undefined || onBeforeGradle !== undefined
-      ? {
-          onBeforeResolve: (info) => {
-            if (onBeforeResolve) {
-              onBeforeResolve(info);
-            } else {
-              onBeforeGradle?.();
-            }
-          },
-        }
-      : {}),
-    ...(onAfterResolve !== undefined || onAfterGradle !== undefined
-      ? {
-          onAfterResolve: () => {
-            if (onAfterResolve) {
-              onAfterResolve();
-            } else {
-              onAfterGradle?.();
-            }
-          },
-        }
-      : {}),
-  };
-}
-
 /**
  * Returns cached `ResolutionOutput` when build-input digest matches and `forceRefresh` is false;
  * otherwise invokes the detected resolver and refreshes the global disk cache on success.
@@ -107,7 +64,7 @@ export async function resolveWithResolutionCache(
     }
   }
 
-  const result = await resolver.resolve(canonical, normalizeResolveOptions(options?.resolveOptions));
+  const result = await resolver.resolve(canonical, options?.resolveOptions);
 
   if (result.ok) {
     const digest = computeBuildInputsDigest(canonical, resolver);
@@ -124,7 +81,6 @@ export async function resolveWithResolutionCache(
       return { ok: false, message: written.message, ...diag };
     }
   } else {
-    const subprocess = result.subprocess ?? result.gradle;
     const diag = recordFailureDiagnostic({
       operation: diagnosticOp,
       publicCode: 'RESOLUTION_FAILED',
@@ -132,12 +88,12 @@ export async function resolveWithResolutionCache(
       projectRoot: canonical,
       buildSystem: resolver.id,
       input: { forceRefresh },
-      subprocess: subprocess
+      subprocess: result.subprocess
         ? {
-            command: subprocess.command,
-            exitCode: subprocess.exitCode,
-            stdout: subprocess.stdout,
-            stderr: subprocess.stderr,
+            command: result.subprocess.command,
+            exitCode: result.subprocess.exitCode,
+            stdout: result.subprocess.stdout,
+            stderr: result.subprocess.stderr,
           }
         : undefined,
     });
@@ -145,8 +101,7 @@ export async function resolveWithResolutionCache(
       ok: false,
       message: result.message,
       stderr: result.stderr,
-      subprocess,
-      gradle: subprocess,
+      subprocess: result.subprocess,
       ...diag,
     };
   }

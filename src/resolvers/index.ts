@@ -1,7 +1,8 @@
 import type { DependencyResolver } from './base.js';
 import { GradleResolver } from './gradle/index.js';
+import { MavenResolver } from './maven/index.js';
 
-const RESOLVERS: DependencyResolver[] = [new GradleResolver()];
+const RESOLVERS: DependencyResolver[] = [new GradleResolver(), new MavenResolver()];
 
 export class UnsupportedProjectError extends Error {
   constructor(message: string) {
@@ -47,12 +48,12 @@ export function registerResolverForTesting(resolver: DependencyResolver): () => 
 }
 
 export { GradleResolver } from './gradle/index.js';
+export { MavenResolver } from './maven/index.js';
 export type {
   ArtifactCoordinates,
   BuildCacheInputs,
   BuildSystemInfo,
   DependencyResolver,
-  GradleProcessCapture,
   InterprojectRef,
   ResolutionError,
   ResolutionOutput,

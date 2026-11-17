@@ -467,7 +467,7 @@ describe('resolveWithResolutionCache', () => {
     expect(calls).toBe(2);
   });
 
-  test('forwards normalized neutral resolveOptions to resolver.resolve', async () => {
+  test('forwards neutral resolveOptions to resolver.resolve', async () => {
     const { resolveWithResolutionCache } = await import('../resolve-with-cache.js');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-ropts-'));
     writeGradleStubs(dir);
@@ -480,7 +480,7 @@ describe('resolveWithResolutionCache', () => {
     await resolveWithResolutionCache(dir, {
       forceRefresh: true,
       resolver,
-      resolveOptions: { inheritGradleStderr: true, onBeforeGradle: () => {} },
+      resolveOptions: { inheritStderr: true, onBeforeResolve: () => {} },
     });
     expect(seen).toEqual(
       expect.objectContaining({
@@ -490,7 +490,7 @@ describe('resolveWithResolutionCache', () => {
     );
   });
 
-  test('populates both subprocess and deprecated gradle capture on failure', async () => {
+  test('preserves subprocess capture on failure', async () => {
     const { resolveWithResolutionCache } = await import('../resolve-with-cache.js');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-failcap-'));
     writeGradleStubs(dir);
@@ -505,7 +505,6 @@ describe('resolveWithResolutionCache', () => {
     expect(res.ok).toBe(false);
     if (!res.ok) {
       expect(res.subprocess).toEqual(capture);
-      expect(res.gradle).toEqual(capture);
     }
   });
 });

@@ -31,14 +31,6 @@ export function withStderrTail(message: string, stderr: string | undefined, maxL
   return lines.length > 0 ? `${message}: ${lines.join(' | ')}` : message;
 }
 
-/** @deprecated Use `SubprocessHooks`. Kept for one release. */
-export type ResolveSourcesJarGradleOptions = SubprocessHooks & {
-  /** @deprecated Use `onBeforeResolve`. Kept for one release. */
-  onBeforeGradle?: () => void;
-  /** @deprecated Use `onAfterResolve`. Kept for one release. */
-  onAfterGradle?: () => void;
-};
-
 /**
  * Resolves (and downloads if needed) the sources JAR for one Maven module using
  * Gradle's ArtifactResolutionQuery. Uses project repositories; caches under ~/.gradle.
@@ -46,7 +38,7 @@ export type ResolveSourcesJarGradleOptions = SubprocessHooks & {
 export async function resolveSourcesJar(
   projectRoot: string,
   coordinates: ArtifactCoordinates,
-  hooks?: ResolveSourcesJarGradleOptions,
+  hooks?: SubprocessHooks,
 ): Promise<ResolveSourcesJarResult> {
   const version = coordinates.version;
   if (version === null || version.length === 0) {
@@ -55,11 +47,7 @@ export async function resolveSourcesJar(
 
   let spawned: GradleSpawnResult;
   try {
-    if (hooks?.onBeforeResolve) {
-      hooks.onBeforeResolve({ resolverId: 'gradle', displayName: 'Gradle' });
-    } else {
-      hooks?.onBeforeGradle?.();
-    }
+    hooks?.onBeforeResolve?.({ resolverId: 'gradle', displayName: 'Gradle' });
     spawned = await runGradleTask(
       projectRoot,
       'jvmsrcResolveSources',
@@ -71,33 +59,25 @@ export async function resolveSourcesJar(
       { inheritStderr: Boolean(hooks?.inheritStderr) },
     );
   } finally {
-    if (hooks?.onAfterResolve) {
-      hooks.onAfterResolve();
-    } else {
-      hooks?.onAfterGradle?.();
-    }
+    hooks?.onAfterResolve?.();
   }
 
   if (!spawned.ok) {
-    const capture = captureFromSpawn(spawned);
     return {
       ok: false,
       message: withStderrTail(spawned.message, spawned.stderr),
       stderr: spawned.stderr,
-      subprocess: capture,
-      gradle: capture,
+      subprocess: captureFromSpawn(spawned),
     };
   }
 
   const parsed = parseSourcesJarJson(spawned.stdout);
   if (!parsed.ok) {
-    const capture = captureFromSpawn(spawned);
     return {
       ok: false,
       message: parsed.message,
       stderr: spawned.stderr || undefined,
-      subprocess: capture,
-      gradle: capture,
+      subprocess: captureFromSpawn(spawned),
     };
   }
 

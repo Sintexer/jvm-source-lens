@@ -1,5 +1,10 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
-import { DEFAULT_GRADLE_TIMEOUT_MS, gradleTimeoutMs } from './spawn-gradle.js';
+import { computeBuildInputsDigest, writeCachedResolution } from '../../cache/index.js';
+import { canonicalProjectRoot } from '../../cache/paths.js';
+import { DEFAULT_GRADLE_TIMEOUT_MS, gradleTimeoutMs, runGradleTask } from './spawn-gradle.js';
 
 describe('gradleTimeoutMs', () => {
   let saved: string | undefined;
@@ -28,5 +33,55 @@ describe('gradleTimeoutMs', () => {
     saved = process.env.JVMSRC_GRADLE_TIMEOUT_MS;
     process.env.JVMSRC_GRADLE_TIMEOUT_MS = '0';
     expect(gradleTimeoutMs()).toBe(DEFAULT_GRADLE_TIMEOUT_MS);
+  });
+});
+
+describe('runGradleTask cached toolchain wiring', () => {
+  test('reads persisted javaToolchainVersion from cache bucket when cachedToolchainVersion is omitted', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-spawn-tc-'));
+    const cacheDir = path.join(tmp, 'cache');
+    const projDir = path.join(tmp, 'proj');
+    fs.mkdirSync(projDir, { recursive: true });
+    fs.writeFileSync(path.join(projDir, 'build.gradle'), 'plugins { id("java") }\n', 'utf8');
+
+    const prevCache = process.env.JVMSRC_CACHE_ROOT;
+    const prevJavaHome = process.env.JVMSRC_JAVA_HOME;
+    process.env.JVMSRC_CACHE_ROOT = cacheDir;
+    delete process.env.JVMSRC_JAVA_HOME;
+    try {
+      const canonical = canonicalProjectRoot(projDir);
+      writeCachedResolution(
+        canonical,
+        {
+          schemaVersion: '1.2',
+          resolvedAt: '2026-11-17T00:00:00Z',
+          buildSystem: { type: 'gradle', version: '8.8', wrapper: false },
+          projectRoot: canonical,
+          modules: [],
+          errors: [],
+          javaToolchainVersion: 99,
+        },
+        computeBuildInputsDigest(canonical),
+      );
+      // Simulate build edit so hash no longer matches, then invoke runGradleTask without explicit hint.
+      fs.appendFileSync(path.join(projDir, 'build.gradle'), '// bump\n', 'utf8');
+
+      const res = await runGradleTask(canonical, 'jvmsrcResolve');
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.message).toContain('Java 99');
+        expect(res.message).toContain('previously resolved Gradle toolchain version');
+      }
+    } finally {
+      if (prevCache === undefined) {
+        delete process.env.JVMSRC_CACHE_ROOT;
+      } else {
+        process.env.JVMSRC_CACHE_ROOT = prevCache;
+      }
+      if (prevJavaHome !== undefined) {
+        process.env.JVMSRC_JAVA_HOME = prevJavaHome;
+      }
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

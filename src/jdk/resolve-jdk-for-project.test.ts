@@ -129,4 +129,42 @@ describe('resolveJdkForProject', () => {
     expect(result.message).toContain('jvmsrc config jdk-roots add /path/to/jdks');
     expect(result.message).toContain('Further operations for this project will fail');
   });
+
+  test('for maven-wrapper-inferred, passes through newer JAVA_HOME and upgrades too-old JAVA_HOME', () => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-resolve-mvn-jdk-'));
+    fs.writeFileSync(path.join(tmpRoot, 'pom.xml'), '<project/>', 'utf8');
+    fs.mkdirSync(path.join(tmpRoot, '.mvn', 'wrapper'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpRoot, '.mvn', 'wrapper', 'maven-wrapper.properties'),
+      'distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.9/apache-maven-3.9.9-bin.zip\n',
+      'utf8',
+    );
+
+    const jdk11 = path.join(tmpRoot, '.jdks', 'temurin-11');
+    const jdk21 = path.join(tmpRoot, '.jdks', 'temurin-21');
+    writeReleaseFile(jdk11, '11.0.20');
+    writeReleaseFile(jdk21, '21.0.4');
+
+    // Maven 3.9.9 requires Java >= 8: JDK 21 passes through without searching for JDK 8.
+    const pass21 = resolveJdkForProject(tmpRoot, undefined, { JAVA_HOME: jdk21 }, hermeticLinux(tmpRoot));
+    expect(pass21.ok).toBe(true);
+    if (pass21.ok) {
+      expect(pass21.jdkHome).toBe(jdk21);
+      expect(pass21.hint.source).toBe('maven-wrapper-inferred');
+    }
+
+    // Maven 4.0.0 requires Java >= 17: JDK 11 upgrades to installed JDK 21.
+    fs.writeFileSync(
+      path.join(tmpRoot, '.mvn', 'wrapper', 'maven-wrapper.properties'),
+      'distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/4.0.0-rc-3/apache-maven-4.0.0-rc-3-bin.zip\n',
+      'utf8',
+    );
+    const up = resolveJdkForProject(tmpRoot, undefined, { JAVA_HOME: jdk11 }, hermeticLinux(tmpRoot));
+    expect(up.ok).toBe(true);
+    if (up.ok) {
+      expect(up.jdkHome).toBe(jdk21);
+      expect(up.majorVersion).toBe(21);
+      expect(up.hint.source).toBe('maven-wrapper-inferred');
+    }
+  });
 });

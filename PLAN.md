@@ -23,7 +23,7 @@ Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGEL
 
 Released together in 1.19.0: checkpoints 1 and 2.
 
-Checkpoints 3, 4, 5, 6, 7 and 8 are done and not released. Release them in order: 3, 4, 5, 6, 7, then 8.
+Checkpoints 3, 4, 5, 6, 7, 8 and 9 are done and not released. Release them in order: 3, 4, 5, 6, 7, 8, then 9.
 
 
 | # | Checkpoint | Why at this position | Size |
@@ -156,20 +156,29 @@ Checkpoints 3, 4, 5, 6, 7 and 8 are done and not released. Release them in order
 - [x] Lift `projectRoot` and build guidance messages in `src/project-path.ts` from registered resolvers (`findBuildRoot`, `displayName`, `rootHint`) with identical Gradle snapshots. Build CLI progress labels and MCP `instructions` from `displayName`, and pass `output.buildSystem.type` / `resolver.id` / `null` to `recordFailureDiagnostic` (no `'gradle'` default).
 - [x] End-to-end fake resolver test (`test/fixtures/fake-resolver.test.ts`) running `resolveProjectRoot`, cached `resolveWithResolutionCache`, `getClassSource`, `searchClasses`, `searchInArtifact`, CLI progress labels, and MCP `resolve_dependencies` without spawning Gradle.
 - [x] Update SPEC §4.2–§4.4, §5.5.2 and §6.1, and add "Adding a resolver" to CONTRIBUTING.
-  Note (found during research, out of scope because it changes runtime behavior): `GradleResolver.resolve` calls `runGradleTask` without passing cached `javaToolchainVersion` as `cachedToolchainVersion`, so the cached-toolchain JDK hint in `src/jdk/detect-required-version.ts` is currently unwired. Land as a standalone `fix:` commit.
+  Also fixed: wired persisted `javaToolchainVersion` (`readCachedJavaToolchainVersion`) into `runGradleTask` and `runJavaDoctor` when `cachedToolchainVersion` is omitted.
 
 **Done when:** `src/build-tool-neutral-core.test.ts` passes (zero `resolvers/gradle` imports outside the registry, allowlist reduced to checkpoint 9/10 items and 1-release aliases), golden digest and copy snapshots match, `test/fixtures/fake-resolver.test.ts` passes, and all tiers pass with no behavior change.
 
-## Checkpoint 9 — Maven: external dependencies
+## Checkpoint 9 — Maven: external dependencies (done)
 
-- [ ] **Spike first** and record the result here: a command that gives coordinates, scope and absolute JAR path for each reactor module **without writing under the project** (check for no `target/`). Candidates: `dependency:list -DoutputAbsoluteArtifactFilename=true -DoutputFile=<temp>`, or a small bundled extension or plugin. Check sibling modules that are not installed in a reactor.
-- [ ] Remove the one-release `@deprecated` Gradle option aliases from checkpoint 8 (`inheritGradleStderr`, `onBeforeGradle`, `onAfterGradle`, `ResolutionResult.gradle`, `GradleProcessCapture`, `ResolveSourcesJarGradleOptions`, `GetClassSourceCliOptions.verboseGradle`, top-level `resolveSourcesJar`) and remove those files from `src/build-tool-neutral-core.test.ts`.
-- [ ] `MavenResolver`: detect `pom.xml`; use `./mvnw`, else `mvn`; remove JVM-injection env vars as for Gradle; use timeouts. Produce `ResolutionOutput` with configurations `compile`, `runtime` and `test`. If the schema changes, bump `schemaVersion`.
-- [ ] Cache inputs: all `pom.xml` files in the reactor, `.mvn/maven.config`, `.mvn/extensions.xml`, `.mvn/wrapper/maven-wrapper.properties`.
-- [ ] Sources: on-demand `dependency:get` / `dependency:copy` of the `sources` classifier into a temp or cache directory. Credentials and mirrors come from the user's `settings.xml`.
-- [ ] JDK detection: read `maven.compiler.release` / `source` and the Maven version requirements.
-- [ ] Scenarios in `test/scenarios/maven/`: `single-module`, `version-conflict` (Maven uses **nearest-wins**, not highest-wins), `local-install-snapshot`.
-- [ ] README: Maven is **experimental**. MCP instructions say "Gradle and Maven projects".
+- [x] **Spike first** and record the result here: a command that gives coordinates, scope and absolute JAR path for each reactor module **without writing under the project** (check for no `target/`). Candidates: `dependency:list -DoutputAbsoluteArtifactFilename=true -DoutputFile=<temp>`, or a small bundled extension or plugin. Check sibling modules that are not installed in a reactor.
+  Result (Apache Maven 3.9.9, uninstalled 3-module reactor `parent` + `lib` + `app` where `app` depends on `lib:0.0.1-SNAPSHOT` plus `compile`/`provided`/`runtime`/`test` external deps):
+  1. `dependency:list -DoutputAbsoluteArtifactFilename=true` **fails (`exit 1`)** when `lib` is not `mvn install`ed (`@Mojo(requiresDependencyResolution = TEST)` attempts to download `lib.jar` before the mojo runs), omits module headers in `-DoutputFile` with `-DappendOutput=true`, has no `direct: boolean`, merges all scopes under `TEST` conflict mediation (so a direct `test` version overrides a transitive `compile` version), and downloads ~45 plugin JARs (~12 MB) on first run (breaks offline repos).
+  2. `dependency:tree` succeeds (`0.31 s`, no `target/`), but only collects POMs — it neither downloads missing external JARs nor prints JAR file paths.
+  3. **Winner — bundled Maven core extension (`resources/maven-analyzer.jar`, ~11 KB, `--release 8`, `META-INF/plexus/components.xml`, zero external runtime dependencies)** invoked via `mvn -B -q -Dmaven.ext.class.path=<jar> -Djvmsrc.mode=resolve validate`:
+     - Runs in `AbstractMavenLifecycleParticipant.afterProjectsRead(MavenSession)`, reads compiler settings, then clears in-memory `project.getBuild().getPlugins()` so `validate` runs zero user plugins (verified against a hostile `maven-antrun-plugin` bound to `validate`), writes zero files under `projectRoot`, and exits `0` in ~0.95 s.
+     - Uses Maven's built-in `ProjectDependenciesResolver` + `RepositorySystem` with a depth-aware `ClasspathScopeSelector` to resolve `compile`, `runtime`, and `test` independently (verified: transitive `compile` `slf4j-api:2.0.9` from uninstalled `lib` is preserved on `app`'s `compile`/`runtime` classpaths while direct `test` `slf4j-api:2.0.7` wins on `test` via Maven nearest-wins), while skipping artifact-file download for reactor siblings via `setResolutionFilter`.
+     - The same extension handles on-demand sources JARs (`-Djvmsrc.mode=sources -Djvmsrc.group=g -Djvmsrc.artifact=a -Djvmsrc.version=v`) in ~0.95 s via `RepositorySystem.resolveArtifact` with `classifier="sources"`, inheriting `settings.xml` mirrors, proxies, credentials, `<localRepository>`, and `.mvn/maven.config`.
+- [x] Remove the `@deprecated` Gradle option aliases from checkpoint 8 (`inheritGradleStderr`, `onBeforeGradle`, `onAfterGradle`, `ResolutionResult.gradle`, `GradleProcessCapture`, `ResolveSourcesJarGradleOptions`, `GetClassSourceCliOptions.verboseGradle`, top-level `resolveSourcesJar`) and remove those files from `src/build-tool-neutral-core.test.ts`.
+  Result: removed all 8 aliases and dropped `get-class-source.ts`, `public-api.ts`, `resolve-with-cache.ts`, `resolvers/base.ts`, `copy/tool-descriptions.ts`, and `mcp.ts` from `GRADLE_REFERENCE_ALLOWLIST` (release note item).
+- [x] `MavenResolver`: detect `pom.xml`; use `./mvnw`, else `mvn` (`JVMSRC_USE_SYSTEM_MAVEN=1`, `JVMSRC_MAVEN_BIN`, `MAVEN_HOME` / `M2_HOME`); remove JVM-injection env vars (`MAVEN_OPTS` + `CFR_STRIPPED_ENV_KEYS`); use timeouts (`JVMSRC_MAVEN_TIMEOUT_MS`); merge `.mvn/maven.config` `-Dmaven.ext.class.path`; climb aggregator `<modules>` in `findMavenBuildRoot`. Produce `ResolutionOutput` (`1.2`) with configurations `compile`, `runtime` and `test`.
+  Result: `src/resolvers/maven/` + `resources/maven-analyzer-src/` built reproducibly via `bun run setup:maven-analyzer` (`scripts/build-maven-analyzer.ts`, wired into CI and `release-please.yml`).
+- [x] Cache inputs: all `pom.xml` files in the reactor, `.mvn/maven.config`, `.mvn/jvm.config`, `.mvn/extensions.xml`, `.mvn/wrapper/maven-wrapper.properties`, plus `M2_LOCAL_REPO` and `M2_SETTINGS_SHA256`; SNAPSHOT-aware `isImmutableArtifact`.
+- [x] Sources: on-demand `-Djvmsrc.mode=sources` lookup of the `sources` classifier via `RepositorySystem` (plus fast-path detection when `<stem>-sources.jar` already sits beside `<stem>.jar` in the local repository). Credentials and mirrors come from the user's `settings.xml`.
+- [x] JDK detection: read `maven.compiler.release` / `source` / `target` / `java.version` (with `${prop}` interpolation) and `maven-compiler-plugin` `<configuration>`, plus Maven wrapper minimum Java (Maven 3.x → Java 8+, Maven 4.x → Java 17+) and persisted `javaToolchainVersion`.
+- [x] Scenarios in `test/scenarios/maven/`: `single-module`, `version-conflict` (Maven uses **nearest-wins**, not highest-wins), `local-install-snapshot`.
+- [x] README: Maven is **experimental**. MCP instructions say "Gradle and Maven projects" (`1,972` eager approx tokens, below the 2,000 budget).
 
 **Done when:** `get`, `get_class_structure`, `search_classes` and `resolve_dependencies` work on a single-module Maven project, with sources and with CFR.
 

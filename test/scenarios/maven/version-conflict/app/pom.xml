@@ -1,0 +1,32 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example.mvnvc</groupId>
+  <artifactId>conflict-app</artifactId>
+  <version>1.0.0</version>
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+  <repositories>
+    <repository>
+      <id>jvmsrc-local-vc</id>
+      <url>file://${env.JVMSRC_LOCAL_MAVEN_REPO}</url>
+    </repository>
+  </repositories>
+  <dependencies>
+    <!-- Direct depth-1 dependency on 1.0.0 -->
+    <dependency>
+      <groupId>com.example.mvnvc</groupId>
+      <artifactId>widget-lib</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+    <!-- Adapter pulls widget-lib:2.0.0 transitively at depth 2; Maven nearest-wins keeps 1.0.0 -->
+    <dependency>
+      <groupId>com.example.mvnvc</groupId>
+      <artifactId>adapter</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+  </dependencies>
+</project>

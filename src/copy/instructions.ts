@@ -1,12 +1,22 @@
 import type { DependencyResolver } from '../resolvers/base.js';
 import { allResolvers } from '../resolvers/index.js';
 
+function joinNatural(items: readonly string[], conjunction: 'and' | 'or'): string {
+  if (items.length <= 1) {
+    return items[0] ?? '';
+  }
+  if (items.length === 2) {
+    return `${items[0]} ${conjunction} ${items[1]}`;
+  }
+  return `${items.slice(0, -1).join(', ')} ${conjunction} ${items[items.length - 1]}`;
+}
+
 export function buildJvmsrcInstructions(
   resolvers: readonly DependencyResolver[] = allResolvers(),
 ): string {
   const names = resolvers.map((r) => r.displayName);
-  const projectLabel = names.join(' or ');
-  const scopeLabel = names.join(' and ');
+  const projectLabel = joinNatural(names, 'or');
+  const scopeLabel = joinNatural(names, 'and');
   const cacheLabel = names.join('/');
   return `
 jvmsrc reads third-party JVM dependencies: classes inside JARs on a ${projectLabel} project's classpath

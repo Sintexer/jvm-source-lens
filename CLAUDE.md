@@ -51,9 +51,13 @@ Current scenarios:
 - **`gradle/version-conflict/`** — direct dep (v2) and transitive dep (v1) of the same library in `app/`. Tests verify the tool reports exactly the version Gradle selected (`highest-wins`) and that extracted source matches that version.
 - **`gradle/kotlin-library/`** — `producer/` publishes a Kotlin JAR plus sources JAR (a class and a top-level function in the `GreetKt` facade) to a temp Maven repo; `consumer/` is a Java project that uses it. Tests verify `get` returns `.kt` text (`sourceLanguage: kotlin`), `methodNames` returns the Java-only message, line ranges work, and `get_class_structure` uses `javap`.
 
+- **`maven/single-module/`** — real Maven resolution (`resources/maven-analyzer.jar`), on-demand `-sources.jar` fetch, CFR decompilation fallback, `get_class_structure`, `search_classes`, `search_in_artifact`, and zero `target/` writes.
+- **`maven/version-conflict/`** — direct dep (v1) vs transitive dep (v2); verifies Maven **nearest-wins** selects v1.
+- **`maven/local-install-snapshot/`** — `producer/` runs `mvn install` for `1.0.0-SNAPSHOT` twice; verifies automatic `local-artifact.hash` invalidation without `forceRefresh`.
+
 Wrapper JARs are generated once via `bun run ensure:scenario-wrappers` (calls `scripts/ensure-scenario-wrappers.sh`). All scenario tests use `describe.skipIf(!wrapperJar)` — silent no-op in CI.
 
-`test/scenarios/maven/` and `test/scenarios/bazel/` are stubs (`.gitkeep`) for future build systems.
+`test/scenarios/bazel/` is a stub (`.gitkeep`) for future build systems.
 
 ## Architecture (big picture)
 
@@ -73,6 +77,6 @@ Read SPEC.md §4–§7 before non-trivial changes. The shape that matters:
 - **`sourceAvailable`** is a public field on every source-bearing response (`true` = original source, `false` = decompiled). Preserve it across CLI / MCP / library.
 - **CLI `get` stdout/stderr split** is intentional (SPEC §8.1.1): raw `.java` on stdout, one JSON metadata line on stderr, so `jvmsrc get … > Foo.java` works. `--quiet` suppresses the stderr line on success only. Phased **`[jvmsrc]`** progress and **`--verbose`** Gradle stderr are stderr-only (SPEC §8.1.1).
 - **No project mutation.** Resolution must never write under the target project root — only `--init-script` with an external absolute path. Gradle's own global caches (`~/.gradle`) are fine.
-- **Bundled resources** resolve from the package root via `src/bundled-resources.ts` (`getBundledResource`), not relative to `import.meta.url` or `process.cwd()`. The `BundledResourceName` union (`cfr.jar` | `analyzer-init.gradle`) is the allowlist.
+- **Bundled resources** resolve from the package root via `src/bundled-resources.ts` (`getBundledResource`), not relative to `import.meta.url` or `process.cwd()`. The `BundledResourceName` union (`cfr.jar` | `analyzer-init.gradle` | `maven-analyzer.jar`) is the allowlist.
 - **Schema changes** to `ResolutionOutput` require bumping `schemaVersion` in `analyzer-init.gradle` and extending `SUPPORTED_RESOLUTION_SCHEMA_VERSIONS` in `resolution-output.ts`; cached `resolution.json` with unsupported versions are rejected, not migrated. **`1.1`** may omit null **`sourcesJarPath`** keys; **`normalizeResolutionOutput`** fills missing fields after parse.
 - **Imports use `.js` extensions** even from `.ts` sources (ESM + Node resolution). `type: "module"` is set in `package.json`.

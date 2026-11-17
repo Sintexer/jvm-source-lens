@@ -15,6 +15,7 @@ import {
 import { computeLocalArtifactDigest } from './local-artifact-digest.js';
 
 export { COMMON_SKIP_DIR_NAMES, walkProjectTree, type WalkProjectTreeOptions } from './walk-project-tree.js';
+export { readCachedJavaToolchainVersion } from './cached-toolchain.js';
 
 /** Relative paths of declared build inputs (SPEC §6.1), sorted, POSIX-style separators. */
 export function listBuildInputRelativePaths(

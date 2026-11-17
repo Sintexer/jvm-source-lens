@@ -125,6 +125,23 @@ export function resolveJdkForProject(
     return findAndOverride(required, hint, env, ctx);
   }
 
+  if (hint.source === 'maven-wrapper-inferred') {
+    if (currentMajor !== null && currentMajor >= required) {
+      return passThroughCurrentJdk(env, hint);
+    }
+    const compatible = findJdkInRange(required, 99, env, ctx);
+    if (compatible) {
+      return {
+        ok: true,
+        jdkHome: compatible.jdkHome,
+        fullVersion: compatible.fullVersion,
+        majorVersion: compatible.majorVersion,
+        hint,
+      };
+    }
+    return jdkNotFoundError(required, hint);
+  }
+
   // Exact-version hint (sdkmanrc, .java-version, toolchain, cached-toolchain):
   // Override only when the current JDK major doesn't already match.
   if (currentMajor !== null && currentMajor === required) {
@@ -303,9 +320,11 @@ function describeHintSource(hint: JavaVersionHint): string {
     case 'java-version-file':
       return '.java-version';
     case 'toolchain-script':
-      return 'JavaLanguageVersion.of() in build script';
+      return 'JavaLanguageVersion.of() / maven.compiler setting in build file';
     case 'gradle-wrapper-inferred':
       return 'Gradle wrapper version (minimum Java inferred)';
+    case 'maven-wrapper-inferred':
+      return 'Maven wrapper version (minimum Java inferred)';
     case 'cached-toolchain':
       return 'previously resolved Gradle toolchain version';
     default:

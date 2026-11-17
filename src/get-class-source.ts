@@ -22,8 +22,6 @@ export type GetClassSourceCliOptions = {
   progress?: boolean;
   /** Stream build-tool stderr during dependency resolution / sources JAR fetch. */
   verbose?: boolean;
-  /** @deprecated Use `verbose`. Kept for one release. */
-  verboseGradle?: boolean;
 };
 
 export type GetClassSourceOptions = {
@@ -157,7 +155,7 @@ export async function getClassSource(
 ): Promise<ClassSourceLookupResult> {
   const cli = opts.cli;
   const progressEnabled = Boolean(cli?.progress);
-  const verbose = Boolean(cli?.verbose ?? cli?.verboseGradle);
+  const verbose = Boolean(cli?.verbose);
   const reporter = createCliProgressReporter(progressEnabled);
 
   let resolveOpts: ResolveOptions | undefined;

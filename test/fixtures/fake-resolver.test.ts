@@ -246,7 +246,7 @@ describe('pluggable fake resolver end-to-end', () => {
       const [ct, st] = InMemoryTransport.createLinkedPair();
       await Promise.all([server.connect(st), client.connect(ct)]);
       try {
-        expect(client.getInstructions()).toContain('FakeBuild and Gradle projects only.');
+        expect(client.getInstructions()).toContain('FakeBuild, Gradle and Maven projects only.');
         const toolRes = await client.callTool({
           name: 'resolve_dependencies',
           arguments: { projectRoot: projectDir, full: true },

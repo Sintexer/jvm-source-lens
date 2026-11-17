@@ -215,3 +215,9 @@ test/fixtures/gradle-smoke/gradle/wrapper/gradle-wrapper.jar
 test/evals/results/
 test/evals/project/.gradle/
 test/evals/project/**/build/
+
+# Built Maven analyzer extension JAR (compiled by setup:maven-analyzer) and scenario outputs
+resources/maven-analyzer.jar
+test/scenarios/maven/**/.mvn/wrapper/maven-wrapper.jar
+test/scenarios/maven/**/target/
+

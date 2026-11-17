@@ -1,3 +1,4 @@
+import { readCachedJavaToolchainVersion } from '../cache/cached-toolchain.js';
 import { detectRequiredJavaVersion, readGradleWrapperMaxJava } from './detect-required-version.js';
 import { inspectJdkCandidates, type JdkSearchContext } from './find-jdk.js';
 import { readJdkReleaseFile } from './read-jdk-release-file.js';
@@ -24,6 +25,8 @@ function describeHint(hint: ReturnType<typeof detectRequiredJavaVersion>): strin
       return `cached toolchain (Java ${hint.majorVersion})`;
     case 'gradle-wrapper-inferred':
       return `gradle wrapper inferred minimum (Java ${hint.majorVersion})`;
+    case 'maven-wrapper-inferred':
+      return `maven wrapper inferred minimum (Java ${hint.majorVersion})`;
     case 'none':
       return 'no project-specific hint';
   }
@@ -55,6 +58,13 @@ function describeRequirement(
       text: `Java >= ${hint.majorVersion}`,
     };
   }
+  if (hint.source === 'maven-wrapper-inferred') {
+    return {
+      requiredMajor: hint.majorVersion,
+      range: { minMajor: hint.majorVersion, maxMajor: 99 },
+      text: `Java >= ${hint.majorVersion}`,
+    };
+  }
   return {
     requiredMajor: hint.majorVersion,
     text: `Java ${hint.majorVersion}`,
@@ -82,12 +92,14 @@ export function runJavaDoctor(
   } = {},
 ): JavaDoctorReport {
   const env = opts.env ?? process.env;
+  const cachedToolchainVersion =
+    opts.cachedToolchainVersion ?? readCachedJavaToolchainVersion(projectRoot);
   const hint = detectRequiredJavaVersion(projectRoot, {
     env,
-    cachedToolchainVersion: opts.cachedToolchainVersion,
+    cachedToolchainVersion,
   });
   const requirement = describeRequirement(projectRoot, hint);
-  const resolved = resolveJdkForProject(projectRoot, opts.cachedToolchainVersion, env, opts.ctx);
+  const resolved = resolveJdkForProject(projectRoot, cachedToolchainVersion, env, opts.ctx);
   const inspections = inspectJdkCandidates(requirement.requiredMajor, requirement.range, env, opts.ctx);
 
   const lines: string[] = [];

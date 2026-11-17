@@ -18,7 +18,7 @@ import {
   isGradleManagedJar,
   listGradleBuildInputRelativePaths,
 } from './cache-inputs.js';
-import { resolveSourcesJar, type ResolveSourcesJarGradleOptions } from './resolve-sources-jar.js';
+import { resolveSourcesJar } from './resolve-sources-jar.js';
 import { runGradleTask, type GradleSpawnResult } from './spawn-gradle.js';
 
 export {
@@ -27,11 +27,7 @@ export {
   isGradleManagedJar,
   listGradleBuildInputRelativePaths,
 } from './cache-inputs.js';
-export {
-  resolveSourcesJar,
-  type ResolveSourcesJarGradleOptions,
-  type ResolveSourcesJarResult,
-} from './resolve-sources-jar.js';
+export { resolveSourcesJar, type ResolveSourcesJarResult } from './resolve-sources-jar.js';
 
 const GRADLE_DETECT_MARKERS = [
   'settings.gradle',
@@ -108,31 +104,21 @@ export class GradleResolver implements DependencyResolver {
       };
     }
 
-    const inherit = Boolean(options?.inheritStderr ?? options?.inheritGradleStderr);
+    const inherit = Boolean(options?.inheritStderr);
     let spawned: GradleSpawnResult;
     try {
-      if (options?.onBeforeResolve) {
-        options.onBeforeResolve({ resolverId: this.id, displayName: this.displayName });
-      } else {
-        options?.onBeforeGradle?.();
-      }
+      options?.onBeforeResolve?.({ resolverId: this.id, displayName: this.displayName });
       spawned = await runGradleTask(root, 'jvmsrcResolve', undefined, { inheritStderr: inherit });
     } finally {
-      if (options?.onAfterResolve) {
-        options.onAfterResolve();
-      } else {
-        options?.onAfterGradle?.();
-      }
+      options?.onAfterResolve?.();
     }
 
     if (!spawned.ok) {
-      const capture = captureFromSpawn(spawned);
       return {
         ok: false,
         message: spawned.message,
         stderr: spawned.stderr,
-        subprocess: capture,
-        gradle: capture,
+        subprocess: captureFromSpawn(spawned),
       };
     }
 
@@ -141,25 +127,21 @@ export class GradleResolver implements DependencyResolver {
       raw = parseResolutionJson(spawned.stdout);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      const capture = captureFromSpawn({ ...spawned, exitCode: 0 });
       return {
         ok: false,
         message: `Could not parse Gradle JSON output: ${msg}`,
         stderr: spawned.stderr || undefined,
-        subprocess: capture,
-        gradle: capture,
+        subprocess: captureFromSpawn({ ...spawned, exitCode: 0 }),
       };
     }
 
     const validated = validateResolutionOutput(raw);
     if (!validated.ok) {
-      const capture = captureFromSpawn({ ...spawned, exitCode: 0 });
       return {
         ok: false,
         message: validated.message,
         stderr: spawned.stderr || undefined,
-        subprocess: capture,
-        gradle: capture,
+        subprocess: captureFromSpawn({ ...spawned, exitCode: 0 }),
       };
     }
 
@@ -171,6 +153,6 @@ export class GradleResolver implements DependencyResolver {
     coordinates: ArtifactCoordinates,
     hooks?: SubprocessHooks,
   ): Promise<ResolveSourcesJarResult> {
-    return resolveSourcesJar(projectRoot, coordinates, hooks as ResolveSourcesJarGradleOptions | undefined);
+    return resolveSourcesJar(projectRoot, coordinates, hooks);
   }
 }

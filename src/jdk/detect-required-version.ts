@@ -21,6 +21,7 @@ export type JavaVersionHintSource =
   | 'java-version-file'
   | 'toolchain-script'
   | 'gradle-wrapper-inferred'
+  | 'maven-wrapper-inferred'
   | 'cached-toolchain';
 
 export type JavaVersionHint =
@@ -344,6 +345,126 @@ export function readGradleWrapperMaxJava(projectRoot: string): number | null {
   return gradleVersionToMaxJava(wrapperVersion);
 }
 
+/**
+ * Returns the minimum Java major version required by a given Apache Maven version string.
+ * Maven 4.x requires Java 17+; Maven 3.x runs on Java 8+.
+ */
+export function mavenVersionToMinJava(mavenVersion: string): number {
+  const major = parseInt(mavenVersion.split('.')[0] ?? '', 10);
+  if (Number.isInteger(major) && major >= 4) {
+    return 17;
+  }
+  return 8;
+}
+
+/**
+ * Reads `.mvn/wrapper/maven-wrapper.properties` and extracts the Apache Maven version
+ * from `distributionUrl` (e.g. `3.9.9` from `apache-maven-3.9.9-bin.zip`).
+ */
+export function readMavenWrapperVersion(projectRoot: string): string | null {
+  const text = readFileSafe(
+    path.join(projectRoot, '.mvn', 'wrapper', 'maven-wrapper.properties'),
+  );
+  if (!text) {
+    return null;
+  }
+  const match = text.match(/distributionUrl\s*=\s*.*apache-maven-(\d+\.\d+(?:\.\d+)?(?:-[a-z0-9.-]+)?)-bin/i);
+  if (!match || !match[1]) {
+    return null;
+  }
+  return match[1];
+}
+
+export function readMavenWrapperMinJava(projectRoot: string): number | null {
+  const version = readMavenWrapperVersion(projectRoot);
+  if (!version) {
+    return null;
+  }
+  return mavenVersionToMinJava(version);
+}
+
+function parseCompilerJavaMajor(raw: string | undefined): number | null {
+  if (!raw) {
+    return null;
+  }
+  let s = raw.trim();
+  if (!s) {
+    return null;
+  }
+  if (s.startsWith('1.')) {
+    s = s.slice(2);
+  }
+  const major = parseInt(s.split('.')[0] ?? '', 10);
+  return Number.isInteger(major) && major > 0 ? major : null;
+}
+
+/**
+ * Best-effort scan of root `pom.xml` for compiler Java version:
+ *   1. `<properties>`: `maven.compiler.release`, `maven.compiler.source`, `maven.compiler.target`, `java.version`
+ *      (with single-pass `${prop}` interpolation within `<properties>`).
+ *   2. `<artifactId>maven-compiler-plugin</artifactId>` `<configuration>`: `<release>` or `<source>`.
+ */
+export function readMavenCompilerJavaVersion(projectRoot: string): number | null {
+  const raw = readFileSafe(path.join(projectRoot, 'pom.xml'));
+  if (!raw) {
+    return null;
+  }
+  const xml = raw.replace(/<!--[\s\S]*?-->/g, '');
+  const props = new Map<string, string>();
+  const propsBlock = xml.match(/<properties\b[^>]*>([\s\S]*?)<\/properties>/i);
+  if (propsBlock && propsBlock[1]) {
+    const tagRe = /<([A-Za-z0-9_.-]+)>([^<$]*(?:\$\{[^}]+\}[^<$]*)*)<\/\1>/g;
+    let m: RegExpExecArray | null;
+    while ((m = tagRe.exec(propsBlock[1])) !== null) {
+      if (m[1] && m[2] !== undefined) {
+        props.set(m[1].trim(), m[2].trim());
+      }
+    }
+  }
+
+  const interpolate = (val: string): string =>
+    val.replace(/\$\{([^}]+)\}/g, (_whole, key: string) => props.get(key.trim()) ?? '');
+
+  for (const key of [
+    'maven.compiler.release',
+    'maven.compiler.source',
+    'maven.compiler.target',
+    'java.version',
+  ]) {
+    const rawVal = props.get(key);
+    if (rawVal !== undefined) {
+      const parsed = parseCompilerJavaMajor(interpolate(rawVal));
+      if (parsed !== null) {
+        return parsed;
+      }
+    }
+  }
+
+  const pluginRe = /<plugin\b[^>]*>([\s\S]*?)<\/plugin>/gi;
+  let pm: RegExpExecArray | null;
+  while ((pm = pluginRe.exec(xml)) !== null) {
+    const block = pm[1] ?? '';
+    if (!/<artifactId>\s*maven-compiler-plugin\s*<\/artifactId>/i.test(block)) {
+      continue;
+    }
+    const cfgMatch = block.match(/<configuration\b[^>]*>([\s\S]*?)<\/configuration>/i);
+    if (!cfgMatch || !cfgMatch[1]) {
+      continue;
+    }
+    for (const tag of ['release', 'source']) {
+      const tm = cfgMatch[1].match(new RegExp(`<${tag}>\\s*([^<]+?)\\s*<\\/${tag}>`, 'i'));
+      if (tm && tm[1]) {
+        const parsed = parseCompilerJavaMajor(interpolate(tm[1]));
+        if (parsed !== null) {
+          return parsed;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Main detection entry point
 // ---------------------------------------------------------------------------
@@ -401,16 +522,20 @@ export function detectRequiredJavaVersion(
     return { source: 'java-version-file', majorVersion: javaVersionFile };
   }
 
-  // 6. Build script toolchain declaration
-  const toolchain = readToolchainFromBuildScript(projectRoot);
+  // 6. Build script / POM toolchain declaration
+  const toolchain = readToolchainFromBuildScript(projectRoot) ?? readMavenCompilerJavaVersion(projectRoot);
   if (toolchain !== null) {
     return { source: 'toolchain-script', majorVersion: toolchain };
   }
 
-  // 7. Gradle wrapper inferred minimum
+  // 7. Gradle or Maven wrapper inferred minimum
   const wrapperMin = readGradleWrapperMinJava(projectRoot);
   if (wrapperMin !== null) {
     return { source: 'gradle-wrapper-inferred', majorVersion: wrapperMin };
+  }
+  const mavenWrapperMin = readMavenWrapperMinJava(projectRoot);
+  if (mavenWrapperMin !== null) {
+    return { source: 'maven-wrapper-inferred', majorVersion: mavenWrapperMin };
   }
 
   // 8. Cached toolchain from a previous successful Gradle run

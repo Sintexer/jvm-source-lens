@@ -99,8 +99,8 @@ describe('project root discovery', () => {
     expect(none).toEqual({
       ok: false,
       message:
-        `No Gradle project found in the workspace (looked in: ${plain}). ` +
-        'Retry with projectRoot set to the absolute path of the directory containing gradlew or settings.gradle(.kts).',
+        `No Gradle or Maven project found in the workspace (looked in: ${plain}). ` +
+        'Retry with projectRoot set to the absolute path of the directory containing gradlew or settings.gradle(.kts), or pom.xml.',
     });
 
     const missingPath = path.join(tmp, 'missing');
@@ -117,7 +117,7 @@ describe('project root discovery', () => {
       ok: false,
       message:
         `Project path does not exist: ${missingPath}.` +
-        ' Pass the absolute path of the directory containing gradlew or settings.gradle(.kts).',
+        ' Pass the absolute path of the directory containing gradlew or settings.gradle(.kts), or pom.xml.',
     });
 
     const filePath = path.join(project, 'settings.gradle.kts');
@@ -126,7 +126,7 @@ describe('project root discovery', () => {
       ok: false,
       message:
         `Project path is not a directory: ${filePath}.` +
-        ' Pass the absolute path of the directory containing gradlew or settings.gradle(.kts).',
+        ' Pass the absolute path of the directory containing gradlew or settings.gradle(.kts), or pom.xml.',
     });
   });
 

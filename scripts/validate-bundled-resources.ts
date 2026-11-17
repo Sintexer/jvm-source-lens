@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const MIN_CFR_BYTES = 100_000;
 const MIN_INIT_GRADLE_BYTES = 20;
+const MIN_MAVEN_ANALYZER_BYTES = 1_000;
 
 function packageRoot(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -15,6 +16,7 @@ function main(): void {
   const resourcesDir = path.join(root, 'resources');
   const cfr = path.join(resourcesDir, 'cfr.jar');
   const analyzer = path.join(resourcesDir, 'analyzer-init.gradle');
+  const mavenAnalyzer = path.join(resourcesDir, 'maven-analyzer.jar');
 
   let failed = false;
 
@@ -41,6 +43,20 @@ function main(): void {
       console.error(
         `prepack: ${analyzer} is too small (${size} bytes; need >= ${MIN_INIT_GRADLE_BYTES}). ` +
           'Replace the placeholder with the real Gradle init script.',
+      );
+      failed = true;
+    }
+  }
+
+  if (!fs.existsSync(mavenAnalyzer)) {
+    console.error(`prepack: missing ${mavenAnalyzer} (run \`bun run setup:maven-analyzer\`)`);
+    failed = true;
+  } else {
+    const size = fs.statSync(mavenAnalyzer).size;
+    if (size < MIN_MAVEN_ANALYZER_BYTES) {
+      console.error(
+        `prepack: ${mavenAnalyzer} is too small (${size} bytes; need >= ${MIN_MAVEN_ANALYZER_BYTES}). ` +
+          'Build it via `bun run setup:maven-analyzer`.',
       );
       failed = true;
     }

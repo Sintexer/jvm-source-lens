@@ -40,6 +40,9 @@ jobs:
       - name: Fetch bundled CFR
         run: bun run setup:cfr
 
+      - name: Build bundled Maven analyzer
+        run: bun run setup:maven-analyzer
+
       - name: Test
         run: bun test
 
