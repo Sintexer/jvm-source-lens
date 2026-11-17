@@ -271,3 +271,105 @@ public class Builder {
     expect(skeleton.typeJavadoc).toContain('builder file');
   });
 });
+
+describe('parseJavaTypeMetadata type resolution and field initializers', () => {
+  const methodNames = (src: string, fqn: string): string[] =>
+    parseJavaTypeMetadata(src, fqn)!.methods.map((m) => m.jvmMethodName);
+  const fieldNames = (src: string, fqn: string): string[] =>
+    parseJavaTypeMetadata(src, fqn)!.fields.map((f) => f.jvmDescriptor.slice(`${JAVA_SOURCE_SYNTHETIC_DESC_PREFIX}field:`.length));
+
+  test('shouldResolveThrowsToStarImportAndJavaLangWhenNameIsNotImportedExplicitly', () => {
+    const src = `package com.x;
+import java.io.*;
+public class Foo {
+  public void run() throws IOException, Exception {}
+}`;
+    const run = parseJavaTypeMetadata(src, 'com.x.Foo')!.methods.find((m) => m.jvmMethodName === 'run');
+    expect(run!.thrownExceptions).toEqual(['java.io.IOException', 'java.lang.Exception']);
+  });
+
+  test('shouldKeepSimpleNameWhenSeveralStarImportsCouldDeclareIt', () => {
+    const src = `package com.x;
+import java.io.*;
+import java.nio.file.*;
+public class Foo {
+  public void run() throws WeirdException {}
+}`;
+    const run = parseJavaTypeMetadata(src, 'com.x.Foo')!.methods.find((m) => m.jvmMethodName === 'run');
+    expect(run!.thrownExceptions).toEqual(['WeirdException']);
+  });
+
+  test('shouldResolveNestedTypeToBinaryNameWhenDeclaredInSameFile', () => {
+    const src = `package com.x;
+public class Foo {
+  public static class MyEx extends Exception {}
+  public void run() throws MyEx {}
+}`;
+    const run = parseJavaTypeMetadata(src, 'com.x.Foo')!.methods.find((m) => m.jvmMethodName === 'run');
+    expect(run!.thrownExceptions).toEqual(['com.x.Foo$MyEx']);
+  });
+
+  test('shouldNotParseFieldInitializerAsMethodWhenInitializerCallsConstructor', () => {
+    const src = `package com.x;
+import java.util.concurrent.ConcurrentHashMap;
+public class Foo {
+  static final Object A = new Intro();
+  final ConcurrentHashMap<String, java.util.List<Object>> m
+      = new ConcurrentHashMap<String, java.util.List<Object>>(64, 0.6f, 2);
+  public void run() {}
+}`;
+    expect(methodNames(src, 'com.x.Foo')).toEqual(['run']);
+    expect(fieldNames(src, 'com.x.Foo')).toEqual(['A', 'm']);
+  });
+
+  test('shouldNameFieldByDeclaratorWhenInitializerIsLiteral', () => {
+    const src = `package q;
+public class Box {
+  private static final int X = 1;
+}`;
+    expect(fieldNames(src, 'q.Box')).toEqual(['X']);
+  });
+
+  test('shouldSkipInitializerBodyWhenFieldHoldsLambdaAnonymousClassOrArray', () => {
+    const src = `package q;
+public class Box {
+  Runnable r = () -> { run(); };
+  Object o = new Object() { void hidden() {} };
+  int[] a = {1, 2};
+  boolean b = x < y;
+  public void after() {}
+}`;
+    expect(methodNames(src, 'q.Box')).toEqual(['after']);
+    expect(fieldNames(src, 'q.Box')).toEqual(['r', 'o', 'a', 'b']);
+    const o = parseJavaTypeMetadata(src, 'q.Box')!.fields.find((f) => f.declarationLine.startsWith('Object'));
+    expect(o!.declarationLine).toBe('Object o = …');
+  });
+
+  test('shouldParseMethodWhenAnnotationArgumentContainsAssignment', () => {
+    const src = `package q;
+public class Box {
+  @Anno(v = 1) public void m() {}
+  @Anno(v = 2) abstract void n();
+}`;
+    expect(methodNames(src, 'q.Box')).toEqual(['m', 'n']);
+  });
+
+  test('shouldIgnoreTypeNameInJavadocWhenParsingNestedType', () => {
+    const src = `package p;
+class Outer {
+  /** Unlike class Inner here */
+  void m() { int x = 1; }
+  static class Inner { void inside() {} }
+}`;
+    expect(methodNames(src, 'p.Outer$Inner')).toEqual(['inside']);
+  });
+
+  test('shouldIgnoreTypeNameInFileHeaderJavadocWhenParsingTopLevelType', () => {
+    const src = `package p;
+/** The class Foo is documented here. */
+public class Foo extends Bar { void inside() {} }`;
+    const meta = parseJavaTypeMetadata(src, 'p.Foo')!;
+    expect(meta.header.superClass).toBe('p.Bar');
+    expect(meta.methods.map((m) => m.jvmMethodName)).toEqual(['inside']);
+  });
+});

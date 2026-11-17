@@ -159,6 +159,14 @@ function annotationEndingAt(src: string, end: number): number | null {
   return k - 1;
 }
 
+function precedingBackslashes(src: string, idx: number): number {
+  let n = 0;
+  while (idx - n - 1 >= 0 && src[idx - n - 1] === '\\') {
+    n++;
+  }
+  return n;
+}
+
 function matchingParenBackward(src: string, closeIdx: number): number {
   let depth = 1;
   let i = closeIdx - 1;
@@ -168,11 +176,7 @@ function matchingParenBackward(src: string, closeIdx: number): number {
       const quote = c;
       i--;
       while (i >= 0) {
-        if (src[i] === '\\') {
-          i -= 2;
-          continue;
-        }
-        if (src[i] === quote) {
+        if (src[i] === quote && precedingBackslashes(src, i) % 2 === 0) {
           i--;
           break;
         }

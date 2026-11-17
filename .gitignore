@@ -224,3 +224,6 @@ test/scenarios/maven/**/libs/
 test/evals/maven-project/.mvn/wrapper/maven-wrapper.jar
 test/evals/maven-project/**/target/
 
+
+# Local review notes, plans and repro scripts (not shared)
+.local/
