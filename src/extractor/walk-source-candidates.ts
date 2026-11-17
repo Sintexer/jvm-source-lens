@@ -20,11 +20,15 @@ import { findSourceEntriesByFileName, readZipEntryUtf8 } from './zip-entry.js';
 
 /** One source file read from a module tree or a sources JAR, before any accept rule. */
 export type RawSourceHit = {
+  /** True when the file was named by the class's `SourceFile` attribute (or found by that name). */
+  viaSourceFile: boolean;
   source: string;
   provenance: SourcesJarProvenance | InterprojectProvenance;
 };
 
 export type SourceWalkStrategy<T> = {
+  /** `get` opens the enclosing file for `Outer$1`; the structure tools reject it with `CLASS_NOT_FOUND`. */
+  allowAnonymous?: boolean;
   /** Whether a source file of this name may be opened (language filter). */
   allowsFile(sourceRelPath: string): boolean;
   /**
@@ -41,7 +45,7 @@ export type SourceWalkResult<T> =
   /** No source found. `jar` is the binary that owns the class (for the decompile tail). */
   | { kind: 'miss'; jar: ClasspathOwningClassHit };
 
-type RawRead = RawSourceHit | { error: ClassSourceError } | null;
+type RawRead = Omit<RawSourceHit, 'viaSourceFile'> | { error: ClassSourceError } | null;
 
 function readFromSourcesJar(sourcesJarPath: string, sourceRelPath: string, coordinates: ArtifactCoordinates): RawRead {
   const r = readZipEntryUtf8(sourcesJarPath, sourceRelPath);
@@ -77,7 +81,7 @@ export async function walkSourceCandidates<T>(
   if (!picked.ok) {
     return { kind: 'error', error: picked.error };
   }
-  const anonymous = anonymousOrLocalClassError(opts.className);
+  const anonymous = strategy.allowAnonymous ? null : anonymousOrLocalClassError(opts.className);
   if (anonymous) {
     return { kind: 'error', error: anonymous };
   }
@@ -93,6 +97,7 @@ export async function walkSourceCandidates<T>(
     rels: readonly string[],
     read: (rel: string) => RawRead | Promise<RawRead>,
     exactRel: string = rels[0]!,
+    viaSourceFile = false,
   ): Promise<SourceWalkResult<T> | null> {
     for (const rel of rels) {
       const hit = await read(rel);
@@ -103,7 +108,7 @@ export async function walkSourceCandidates<T>(
         return { kind: 'error', error: hit.error };
       }
       const opened = hit.provenance.kind === 'interproject' ? hit.provenance.sourceRelativePath : rel;
-      const value = accept(hit, className, opened, exactRel);
+      const value = accept({ ...hit, viaSourceFile }, className, opened, exactRel);
       if (value !== null) {
         return { kind: 'hit', value };
       }
@@ -200,13 +205,14 @@ export async function walkSourceCandidates<T>(
       withSourceFileCandidate(className, paths.sourceRelPaths, wantedSourceFile),
       readFromJar,
       exact,
+      wantedSourceFile !== null,
     );
     if (fromResolved === null && wantedSourceFile !== null) {
       const byName = findSourceEntriesByFileName(sjPath, wantedSourceFile, packageOfClassName(className));
       if (!byName.ok) {
         return { kind: 'error', error: byName.error };
       }
-      fromResolved = await firstCandidate(byName.entryRelPaths, readFromJar, exact);
+      fromResolved = await firstCandidate(byName.entryRelPaths, readFromJar, exact, true);
     }
     if (fromResolved !== null) {
       return fromResolved;

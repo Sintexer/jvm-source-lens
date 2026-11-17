@@ -1,5 +1,3 @@
-const HEAD_LIMIT = 8192;
-
 function isSpace(c: string): boolean {
   return c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f';
 }
@@ -69,35 +67,39 @@ function skipAnnotation(text: string, at: number, limit: number): number {
 }
 
 /**
- * The first `package` declaration in `text`, or null for the default package.
- * Skips comments, a BOM and file annotations (`@file:JvmName(...)`).
+ * The `package` declaration in `text`, or null for the default package.
+ * Skips comments (of any length), a BOM and file annotations (`@file:JvmName(...)`).
+ * Scala chained clauses (`package a.b` then `package c`) join to `a.b.c`. The scan stops at the
+ * first token that is not a comment, annotation, `;` or `package` clause, so it reads the file head only.
  */
 export function packageNameFromSource(text: string): string | null {
-  const limit = Math.min(text.length, HEAD_LIMIT);
+  const limit = text.length;
+  const parts: string[] = [];
+  const result = (): string | null => (parts.length === 0 ? null : parts.join('.'));
   let i = text.charCodeAt(0) === 0xfeff ? 1 : 0;
   while (i < limit) {
     const c = text[i]!;
-    if (isSpace(c)) {
+    if (isSpace(c) || (c === ';' && parts.length > 0)) {
       i++;
       continue;
     }
     if (c === '/' && text[i + 1] === '/') {
       const nl = text.indexOf('\n', i + 2);
-      if (nl < 0 || nl >= limit) {
-        return null;
+      if (nl < 0) {
+        return result();
       }
       i = nl + 1;
       continue;
     }
     if (c === '/' && text[i + 1] === '*') {
       const end = text.indexOf('*/', i + 2);
-      if (end < 0 || end >= limit) {
-        return null;
+      if (end < 0) {
+        return result();
       }
       i = end + 2;
       continue;
     }
-    if (c === '@') {
+    if (c === '@' && parts.length === 0) {
       const next = skipAnnotation(text, i, limit);
       if (next < 0) {
         return null;
@@ -115,9 +117,13 @@ export function packageNameFromSource(text: string): string | null {
         i++;
       }
       const name = text.slice(start, i);
-      return isPackageName(name) ? name : null;
+      if (!isPackageName(name)) {
+        return null;
+      }
+      parts.push(name);
+      continue;
     }
-    return null;
+    return result();
   }
-  return null;
+  return result();
 }

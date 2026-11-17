@@ -6,6 +6,9 @@ import {
   DEFAULT_MAVEN_TIMEOUT_MS,
   mavenTimeoutMs,
   mergeMavenExtClassPath,
+  captureFromSpawn,
+  MAVEN_OUTPUT_MISSING_MESSAGE,
+  readMavenOutputFile,
   runMavenAnalyzer,
 } from './spawn-maven.js';
 
@@ -109,5 +112,35 @@ describe('runMavenAnalyzer guards', () => {
       }
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('readMavenOutputFile', () => {
+  test('shouldReturnNullWhenAnalyzerWroteNoFile', () => {
+    expect(readMavenOutputFile(path.join(os.tmpdir(), 'jvmsrc-no-such-output.json'))).toBeNull();
+    expect(MAVEN_OUTPUT_MISSING_MESSAGE).toContain('.mvn/extensions.xml');
+  });
+
+  test('shouldReturnTextWhenAnalyzerWroteTheFile', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-out-'));
+    try {
+      const file = path.join(dir, 'out.json');
+      fs.writeFileSync(file, '{"a":1}\n');
+      expect(readMavenOutputFile(file)).toBe('{"a":1}\n');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('captureFromSpawn', () => {
+  test('shouldFillDefaultsWhenFieldsAreMissing', () => {
+    expect(captureFromSpawn({ command: ['mvn'] })).toEqual({ command: ['mvn'], exitCode: null, stdout: '', stderr: '' });
+    expect(captureFromSpawn({ command: ['mvn'], exitCode: 0, stdout: 'o', stderr: 'e' })).toEqual({
+      command: ['mvn'],
+      exitCode: 0,
+      stdout: 'o',
+      stderr: 'e',
+    });
   });
 });

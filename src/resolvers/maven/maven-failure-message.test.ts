@@ -84,4 +84,24 @@ describe('formatMavenUserMessage', () => {
     expect(m).toContain('Java 25');
     expect(m).toContain('JVMSRC_JAVA_HOME');
   });
+
+  test.each([
+    'Could not transfer artifact g:a:1 from/to corp (https://x/y): status code: 401, reason phrase: Unauthorized',
+    'Return code is: 403 , ReasonPhrase: Forbidden.',
+    'Failed to read artifact descriptor: 401 Unauthorized',
+    'transfer failed: HTTP 403',
+  ])('shouldAppendAuthHintWhenLogShowsHttpAuthFailure %#', (line) => {
+    const m = formatMavenUserMessage({ kind: 'exit', message: 'Maven exited with code 1', stderr: line, command: ['mvn'], usedWrapper: false });
+    expect(m).toContain('private repository authentication failed');
+  });
+
+  test.each([
+    '[ERROR] /p/src/Main.java:[401,12] cannot find symbol',
+    'Total time: 4012 ms, listening on port 403',
+    'Downloaded 401 artifacts in 12 s',
+  ])('shouldNotAppendAuthHintWhenNumberIsNotAnHttpStatus %#', (line) => {
+    const m = formatMavenUserMessage({ kind: 'exit', message: 'Maven exited with code 1', stderr: line, command: ['mvn'], usedWrapper: false });
+    expect(m).not.toContain('private repository authentication failed');
+  });
 });
+

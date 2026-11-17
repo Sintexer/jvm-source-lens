@@ -82,3 +82,24 @@ test('shouldDelegateToRegisteredResolverByBuildSystemIdAndReturnNullWhenUnknown'
     restore();
   }
 });
+
+test('shouldReturnNullAndLogReasonWhenNoSourcesJarIsPublished', async () => {
+  const resolve = createSourcesJarResolver({
+    projectRoot: '/tmp/sources-jar-resolver-reason',
+    buildSystem: 'maven',
+    operation: 'get_class_source',
+    input: { className: 'a.B' },
+    resolveSourcesJar: async () => ({
+      ok: true,
+      sourcesJarPath: null,
+      reason: 'Could not find artifact g:n:jar:sources:9.9.9 in central',
+    }),
+  });
+  expect(await resolve({ group: 'g', name: 'n', version: '9.9.9' })).toBeNull();
+  const root = resolveGlobalLogRoot();
+  expect(root.ok).toBe(true);
+  if (root.ok) {
+    const log = fs.readFileSync(path.join(root.path, 'current.log'), 'utf8');
+    expect(log).toContain('g:n:jar:sources:9.9.9');
+  }
+});

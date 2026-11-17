@@ -163,6 +163,41 @@ public final class JvmsrcMavenAnalyzer extends AbstractMavenLifecycleParticipant
     }
   }
 
+  /** Per-run state of resolve mode (the analyzer runs once per Maven invocation). */
+  private final List<String[]> resolutionErrors = new ArrayList<String[]>();
+
+  private Map<String, String> moduleNames = new HashMap<String, String>();
+
+  private static final int MAX_MESSAGE_CHARS = 400;
+
+  /** Drops credentials from URLs, collapses whitespace and caps the length. */
+  private static String sanitizeMessage(String raw) {
+    String m = raw.replaceAll("(?i)(https?://)[^/@\\s]+@", "$1").replaceAll("\\s+", " ").trim();
+    return m.length() > MAX_MESSAGE_CHARS ? m.substring(0, MAX_MESSAGE_CHARS) + "..." : m;
+  }
+
+  /** `artifactId`, or `groupId:artifactId` when two reactor modules share the artifactId. */
+  private Map<String, String> computeModuleNames(List<MavenProject> projects) {
+    Map<String, Integer> counts = new HashMap<String, Integer>();
+    for (MavenProject p : projects) {
+      Integer n = counts.get(p.getArtifactId());
+      counts.put(p.getArtifactId(), n == null ? 1 : n.intValue() + 1);
+    }
+    Map<String, String> names = new HashMap<String, String>();
+    for (MavenProject p : projects) {
+      boolean duplicate = counts.get(p.getArtifactId()).intValue() > 1;
+      names.put(
+          reactorKey(p.getGroupId(), p.getArtifactId(), p.getVersion()),
+          duplicate ? p.getGroupId() + ":" + p.getArtifactId() : p.getArtifactId());
+    }
+    return names;
+  }
+
+  private String moduleNameOf(MavenProject p) {
+    String name = moduleNames.get(reactorKey(p.getGroupId(), p.getArtifactId(), p.getVersion()));
+    return name != null ? name : p.getArtifactId();
+  }
+
   private String runSourcesMode(MavenSession session) throws MavenExecutionException {
     String group = System.getProperty("jvmsrc.group", "").trim();
     String artifactId = System.getProperty("jvmsrc.artifact", "").trim();
@@ -179,15 +214,22 @@ public final class JvmsrcMavenAnalyzer extends AbstractMavenLifecycleParticipant
     ArtifactRequest req = new ArtifactRequest(sourcesArtifact, repos, null);
 
     String sourcesPath = null;
+    String reason = null;
     try {
       ArtifactResult res = repositorySystem.resolveArtifact(session.getRepositorySession(), req);
       if (res.getArtifact() != null && res.getArtifact().getFile() != null) {
         sourcesPath = res.getArtifact().getFile().getAbsolutePath();
+      } else {
+        reason = "the repository returned no sources file";
       }
-    } catch (Exception ignored) {
+    } catch (Exception e) {
       // Artifact has no published -sources.jar (or unavailable); caller falls back to CFR.
+      reason = sanitizeMessage(e.getMessage() != null ? e.getMessage() : e.toString());
     }
 
+    if (sourcesPath == null && reason != null) {
+      return "{\"sourcesJarPath\":null,\"reason\":" + jsonString(reason) + "}";
+    }
     return "{\"sourcesJarPath\":" + jsonStringOrNull(sourcesPath) + "}";
   }
 
@@ -222,6 +264,9 @@ public final class JvmsrcMavenAnalyzer extends AbstractMavenLifecycleParticipant
       reactorByGav.put(reactorKey(p.getGroupId(), p.getArtifactId(), p.getVersion()), p);
     }
 
+    resolutionErrors.clear();
+    moduleNames = computeModuleNames(session.getProjects());
+
     StringBuilder sb = new StringBuilder(4096);
     sb.append("{");
     sb.append("\"schemaVersion\":\"1.2\",");
@@ -244,7 +289,18 @@ public final class JvmsrcMavenAnalyzer extends AbstractMavenLifecycleParticipant
     }
 
     sb.append("],");
-    sb.append("\"errors\":[]");
+    sb.append("\"errors\":[");
+    for (int i = 0; i < resolutionErrors.size(); i++) {
+      String[] e = resolutionErrors.get(i);
+      if (i > 0) {
+        sb.append(",");
+      }
+      sb.append("{\"module\":").append(jsonString(e[0]));
+      sb.append(",\"configuration\":").append(jsonString(e[1]));
+      sb.append(",\"message\":").append(jsonString(e[2]));
+      sb.append(",\"fatal\":false}");
+    }
+    sb.append("]");
     if (toolchainMajor != null && toolchainMajor.intValue() > 0) {
       sb.append(",\"javaToolchainVersion\":").append(toolchainMajor.intValue());
     }
@@ -258,7 +314,7 @@ public final class JvmsrcMavenAnalyzer extends AbstractMavenLifecycleParticipant
       MavenProject project,
       Map<String, MavenProject> reactorByGav)
       throws MavenExecutionException {
-    String moduleName = project.getArtifactId();
+    String moduleName = moduleNameOf(project);
     String moduleDir = project.getBasedir().getAbsolutePath();
 
     sb.append("{");
@@ -343,14 +399,20 @@ public final class JvmsrcMavenAnalyzer extends AbstractMavenLifecycleParticipant
     try {
       res = projectDependenciesResolver.resolve(req);
     } catch (DependencyResolutionException dre) {
-      throw new MavenExecutionException(
-          "Could not resolve dependencies for module "
-              + project.getArtifactId()
-              + " ("
-              + configName
-              + "): "
-              + dre.getMessage(),
-          dre);
+      // Keep the partial graph: artifacts that did resolve stay usable, the rest is reported.
+      resolutionErrors.add(
+          new String[] {
+            moduleNameOf(project),
+            configName,
+            sanitizeMessage(dre.getMessage() != null ? dre.getMessage() : dre.toString())
+          });
+      res = dre.getResult();
+      if (res == null) {
+        sb.append("{\"name\":").append(jsonString(configName)).append(",");
+        sb.append("\"scope\":").append(jsonString(schemaScope)).append(",");
+        sb.append("\"artifacts\":[]}");
+        return;
+      }
     }
 
     DependencyNode root = res.getDependencyGraph();
@@ -419,7 +481,7 @@ public final class JvmsrcMavenAnalyzer extends AbstractMavenLifecycleParticipant
         sb.append("\"origin\":\"interproject\",");
         sb.append("\"direct\":").append(isDirect).append(",");
         sb.append("\"interproject\":{");
-        sb.append("\"moduleName\":").append(jsonString(sibling.getArtifactId())).append(",");
+        sb.append("\"moduleName\":").append(jsonString(moduleNameOf(sibling))).append(",");
         sb.append("\"modulePath\":")
             .append(jsonString(sibling.getBasedir().getAbsolutePath()));
         sb.append("}}");

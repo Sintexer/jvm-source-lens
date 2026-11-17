@@ -1,4 +1,5 @@
 import type { ArtifactCoordinates } from './extractor/class-source-types.js';
+import { FailureSeverity } from './diagnostics/failure-severity.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import type {
   DependencyResolver,
@@ -71,6 +72,18 @@ export function createSourcesJarResolver(
       });
       cache.set(key, null);
       return null;
+    }
+    if (result.sourcesJarPath === null && result.reason !== undefined) {
+      // Expected for libraries without a published -sources.jar: one log line, no snapshot file.
+      recordFailureDiagnostic({
+        operation: params.operation,
+        publicCode: 'SOURCES_RESOLVE_FAILED',
+        message: `No sources JAR for ${coordinatesKey(coordinates)}: ${result.reason}`,
+        projectRoot: params.projectRoot,
+        buildSystem: params.buildSystem,
+        input: params.input,
+        forceSeverity: FailureSeverity.EXPECTED,
+      });
     }
     cache.set(key, result.sourcesJarPath);
     return result.sourcesJarPath;

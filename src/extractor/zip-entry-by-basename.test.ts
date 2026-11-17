@@ -32,4 +32,28 @@ describe('findSourceEntriesByFileName', () => {
     const jar = jarWith({ 'a/B.kt': 'package p\n' });
     expect(findSourceEntriesByFileName(jar, 'Job.kt', 'p')).toEqual({ ok: true, entryRelPaths: [] });
   });
+
+  test('shouldPreferJvmMainOverCommonMainWhenBothDeclareThePackage', () => {
+    const jar = jarWith({
+      'commonMain/Dispatchers.kt': 'package com.x\n\nexpect object Dispatchers\n',
+      'nativeMain/Dispatchers.kt': 'package com.x\n\nactual object Dispatchers\n',
+      'jvmMain/Dispatchers.kt': 'package com.x\n\nactual object Dispatchers\n',
+    });
+    expect(findSourceEntriesByFileName(jar, 'Dispatchers.kt', 'com.x')).toEqual({
+      ok: true,
+      entryRelPaths: ['jvmMain/Dispatchers.kt', 'commonMain/Dispatchers.kt', 'nativeMain/Dispatchers.kt'],
+    });
+  });
+
+  test('shouldRankNeutralPathsBetweenJvmAndCommonWhenFoldersAreUnknown', () => {
+    const jar = jarWith({
+      'commonMain/A.kt': 'package p\n',
+      'src/A.kt': 'package p\n',
+      'androidMain/A.kt': 'package p\n',
+    });
+    expect(findSourceEntriesByFileName(jar, 'A.kt', 'p')).toEqual({
+      ok: true,
+      entryRelPaths: ['androidMain/A.kt', 'src/A.kt', 'commonMain/A.kt'],
+    });
+  });
 });

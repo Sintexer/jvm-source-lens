@@ -84,11 +84,24 @@ export type FindSourceEntriesResult =
   | { ok: true; entryRelPaths: string[] }
   | { ok: false; error: ClassSourceError };
 
+const JVM_SOURCE_SET = /^(jvm|android)(Main)?$/i;
+const NON_JVM_SOURCE_SET = /^(common|native|js|wasm\w*|ios\w*|macos\w*|linux\w*|mingw\w*)Main$/i;
+
+/** 0 = JVM source set, 1 = unknown folder, 2 = common or non-JVM source set. */
+function sourceSetRank(entryPath: string): number {
+  const folders = entryPath.split('/').slice(0, -1);
+  if (folders.some((f) => JVM_SOURCE_SET.test(f))) {
+    return 0;
+  }
+  return folders.some((f) => NON_JVM_SOURCE_SET.test(f)) ? 2 : 1;
+}
+
 /**
  * Entries named `fileName` (any folder) whose `package` line is `packageName`. Kotlin
  * Multiplatform sources JARs store `commonMain/Job.kt`, not `kotlinx/coroutines/Job.kt`, so the
  * package line decides which same-named file belongs to the class. `packageName` is empty for
- * the default package. Results are sorted for a stable pick.
+ * the default package. Results are sorted for a stable pick: JVM source sets (`jvmMain`,
+ * `androidMain`) first, then unknown folders, then `commonMain` and other platforms.
  */
 export function findSourceEntriesByFileName(
   jarAbsPath: string,
@@ -113,7 +126,7 @@ export function findSourceEntriesByFileName(
     const entryRelPaths = Object.entries(files)
       .filter(([, bytes]) => (packageNameFromSource(decoder.decode(bytes)) ?? '') === packageName)
       .map(([name]) => normalizeZipEntryName(name))
-      .sort();
+      .sort((a, b) => sourceSetRank(a) - sourceSetRank(b) || (a < b ? -1 : a > b ? 1 : 0));
     return { ok: true, entryRelPaths };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

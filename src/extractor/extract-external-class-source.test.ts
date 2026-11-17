@@ -431,7 +431,7 @@ describe('extractExternalClassSource', () => {
     }
   });
 
-  test('a digit nested name does not return the enclosing file', async () => {
+  test('shouldReturnTheEnclosingFileWhenTheClassIsAnonymous', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-extract-'));
     const body = 'package com.example;\npublic class Outer { void m() {} }\n';
     const sourcesJar = path.join(dir, 'lib-sources.jar');
@@ -441,31 +441,21 @@ describe('extractExternalClassSource', () => {
     const out = baseOutput(dir, [
       artifact({ group: 'com.example', name: 'lib', jarPath: binJar, sourcesJarPath: sourcesJar }),
     ]);
-    let decompiled = '';
+    let decompiled = false;
     const r = await extractExternalClassSource(out, {
       className: 'com.example.Outer$1',
-      decompileExternalClass: async (opts) => {
-        decompiled = opts.entryRelPath;
-        return {
-          ok: false,
-          error: {
-            code: 'DECOMPILE_FAILED',
-            message: 'nope',
-            className: opts.className,
-            jarPath: opts.jarPath,
-            entryRelPath: opts.entryRelPath,
-            coordinates: opts.coordinates,
-          },
-        };
+      decompileExternalClass: async () => {
+        decompiled = true;
+        throw new Error('CFR must not run when the sources JAR has the enclosing file');
       },
     });
-    expect(decompiled).toBe('');
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.code).toBe('CLASS_NOT_FOUND');
-      expect(r.error.message).toBe(
-        'com.example.Outer$1 is an anonymous or local class. The enclosing class is com.example.Outer.',
-      );
+    expect(decompiled).toBe(false);
+    expect(r.ok).toBe(true);
+    if (r.ok && r.provenance.kind === 'sourcesJar') {
+      expect(r.source).toBe(body);
+      expect(r.sourceAvailable).toBe(true);
+      expect(r.provenance.nestedIn).toBe('com.example.Outer');
+      expect(r.provenance.sourceRelativePath).toBe('com/example/Outer.java');
     }
   });
 

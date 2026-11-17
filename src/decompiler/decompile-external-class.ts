@@ -1,7 +1,7 @@
 import { sha256File } from '../cache/sha256-file.js';
 import type { ArtifactCoordinates, DecompiledProvenance } from '../extractor/class-source-types.js';
 import { fqnToZipRelPaths } from '../extractor/fqn-paths.js';
-import { formatNestedSlice, nestedTypeNames } from '../extractor/nested-class-source.js';
+import { formatNestedSlice, isSyntheticNestedClassName, nestedTypeNames } from '../extractor/nested-class-source.js';
 import { locateTypeDeclaration } from '../class-structure/locate-type-declaration.js';
 import {
   getDecompiledCacheFilePath,
@@ -93,6 +93,18 @@ function presentDecompiled(
       sourceLanguage: 'java',
       className: opts.className,
       provenance,
+    };
+  }
+
+  if (isSyntheticNestedClassName(opts.className)) {
+    // Anonymous, local, companion-module and closure classes have no declaration of their own.
+    return {
+      ok: true,
+      source: fullSource,
+      sourceAvailable: false,
+      sourceLanguage: 'java',
+      className: opts.className,
+      provenance: { ...provenance, nestedIn: opts.className.slice(0, dollar) },
     };
   }
 

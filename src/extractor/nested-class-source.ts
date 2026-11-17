@@ -12,6 +12,20 @@ export function nestedTypeNames(className: string): string[] {
 }
 
 /**
+ * A `$` class that no member declaration in the source names: anonymous (`Outer$1`), local
+ * (`Outer$1Local`), a Scala companion module class (`Foo$`) or a Groovy closure
+ * (`Script$_run_closure1`). `get` returns the enclosing compilation unit for these.
+ */
+export function isSyntheticNestedClassName(className: string): boolean {
+  const dollar = className.lastIndexOf('$');
+  if (dollar < 0) {
+    return false;
+  }
+  const last = className.slice(dollar + 1);
+  return last === '' || /^\d/.test(last) || /^_+\w*closure\d+$/.test(last);
+}
+
+/**
  * `Outer$1` and `Outer$Inner$1` are anonymous or local classes. There is no source declaration to return.
  * Named local classes (`Outer$1Local`) are not matched.
  */
@@ -99,6 +113,9 @@ export function presentNestedSource(
     return nestedIn === null ? result : withSourceProvenance(result, nestedIn, sourceRelPath);
   }
   const marked = withSourceProvenance(result, nestedIn, sourceRelPath);
+  if (isSyntheticNestedClassName(className)) {
+    return marked;
+  }
   const names = nestedTypeNames(className);
   if (sourceRelPath.endsWith('.kt')) {
     if (nestedIn === null && fileStem(sourceRelPath) === names[0]) {

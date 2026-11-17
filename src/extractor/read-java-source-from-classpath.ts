@@ -41,12 +41,16 @@ function withNestedReadProvenance(
   return provenance;
 }
 
-function declaresType(source: string, className: string, language: SourceLanguage): boolean {
+function declaresType(source: string, className: string, language: SourceLanguage, viaSourceFile: boolean): boolean {
   const names = nestedTypeNames(className);
   if (language === 'java') {
     return locateTypeDeclaration(source, names) !== null;
   }
   if (language === 'kotlin') {
+    // The class file names this file, so a facade renamed by `@file:JvmName` belongs to it.
+    if (viaSourceFile) {
+      return true;
+    }
     // `FooKt` is the facade of the file's top-level declarations, not a declared type.
     return findKotlinTypeDeclaration(source, names) !== null || (names.length === 1 && names[0]!.endsWith('Kt'));
   }
@@ -65,7 +69,7 @@ function acceptFullCompilationUnit(
   exactSourceRelPath: string,
 ): Extract<TryReadSourceFromClasspathResult, { hit: true }> | null {
   const sourceLanguage = sourceLanguageFromPath(sourceRelPath);
-  if (sourceRelPath !== exactSourceRelPath && !declaresType(hit.source, className, sourceLanguage)) {
+  if (sourceRelPath !== exactSourceRelPath && !declaresType(hit.source, className, sourceLanguage, hit.viaSourceFile)) {
     return null;
   }
   return {

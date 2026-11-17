@@ -104,6 +104,32 @@ describe('source lookup parity: get and structure walks', () => {
     expect(structure.ok && structure.hit && structure.sourceText).toBe(src);
   });
 
+  test('shouldMissWhenSourceFileJavaDoesNotDeclareTheType', async () => {
+    const dir = tmp();
+    const jar = writeZip(path.join(dir, 'a.jar'), {
+      'p/Ghost.class': buildClassFile({ internalName: 'p/Ghost', sourceFile: 'Greeter.java' }),
+    });
+    const sj = writeZip(path.join(dir, 'a-sources.jar'), { 'p/Greeter.java': strToU8(GREETER) });
+    const { structure } = await both(
+      output(dir, [artifact({ group: 'g', name: 'a', jarPath: jar, sourcesJarPath: sj })]),
+      { className: 'p.Ghost' },
+    );
+    expect(structure).toEqual({ ok: true, hit: false });
+  });
+
+  test('shouldReturnEnclosingSourceInGetAndCodeInStructureWhenClassIsAnonymous', async () => {
+    const dir = tmp();
+    const jar = writeZip(path.join(dir, 'a.jar'), { 'p/Greeter$1.class': buildClassFile({ internalName: 'p/Greeter$1' }) });
+    const sj = writeZip(path.join(dir, 'a-sources.jar'), { 'p/Greeter.java': strToU8(GREETER) });
+    const { get, structure } = await both(
+      output(dir, [artifact({ group: 'g', name: 'a', jarPath: jar, sourcesJarPath: sj })]),
+      { className: 'p.Greeter$1' },
+    );
+    expect(get.ok && get.source).toBe(GREETER);
+    expect(structure.ok).toBe(false);
+    expect(!structure.ok && structure.error.code).toBe('CLASS_NOT_FOUND');
+  });
+
   test('shouldSkipKotlinFileWhenOnlyJavaIsAllowed', async () => {
     const dir = tmp();
     const jar = writeZip(path.join(dir, 'a.jar'), { 'p/Greeter.class': buildClassFile({ internalName: 'p/Greeter', sourceFile: 'Greeter.kt' }) });
@@ -124,7 +150,7 @@ describe('source lookup parity: get and structure walks', () => {
     expect(structure.ok).toBe(false);
   });
 
-  // Known difference, fixed in batch 6: a Kotlin file facade renamed with @file:JvmName("Utils")
+  // Fixed in batch 6: a Kotlin file facade renamed with @file:JvmName("Utils")
   // is found by `get` (SourceFile candidate) but rejected by the structure walk (no `Kt` suffix).
   describe('@file:JvmName facade without Kt suffix', () => {
     function fixture() {
@@ -144,7 +170,7 @@ describe('source lookup parity: get and structure walks', () => {
       expect(get.ok && get.sourceLanguage).toBe('kotlin');
     });
 
-    test.failing('shouldFindSourceInStructureWalk', async () => {
+    test('shouldFindSourceInStructureWalk', async () => {
       const { structure } = await both(fixture(), { className: 'p.Utils' });
       expect(structure.ok && structure.hit).toBe(true);
     });

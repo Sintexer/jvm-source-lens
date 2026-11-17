@@ -19,7 +19,7 @@ import {
   resolveMavenLocalRepository,
 } from './cache-inputs.js';
 import { resolveMavenSourcesJar } from './resolve-sources-jar.js';
-import { runMavenAnalyzer, type MavenSpawnResult } from './spawn-maven.js';
+import { captureFromSpawn, runMavenAnalyzer, type MavenSpawnResult } from './spawn-maven.js';
 
 export {
   isMavenImmutableArtifact,
@@ -105,20 +105,6 @@ export function findMavenBuildRoot(start: string): string | null {
   }
 
   return candidate;
-}
-
-function captureFromSpawn(spawned: {
-  command: string[];
-  exitCode?: number | null;
-  stdout?: string;
-  stderr?: string;
-}): SubprocessCapture {
-  return {
-    command: spawned.command,
-    exitCode: spawned.exitCode ?? null,
-    stdout: spawned.stdout ?? '',
-    stderr: spawned.stderr ?? '',
-  };
 }
 
 export class MavenResolver implements DependencyResolver {

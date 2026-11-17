@@ -174,4 +174,31 @@ public class ImmutableList {
       restoreCacheEnv();
     }
   });
+
+  test.each([
+    ['com.example.Outer$1', 'com.example.Outer'],
+    ['com.example.Outer$Inner$2', 'com.example.Outer$Inner'],
+    ['com.example.Outer$1Local', 'com.example.Outer'],
+    ['com.example.Foo$', 'com.example.Foo'],
+    ['com.example.Script$_run_closure1', 'com.example.Script'],
+  ])('shouldReturnTheEnclosingUnitWhenCfrOutputHasNoDeclarationFor %s', async (className, enclosing) => {
+    isolateCacheEnv();
+    try {
+      const full = 'package com.example;\npublic class Outer { void m() { new Runnable() { public void run() {} }; } }\n';
+      const r = await decompileExternalClass({
+        ...baseOpts,
+        className,
+        runCfr: async () => ({ ok: true, source: full }),
+      });
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.source).toBe(full);
+        expect(r.sourceAvailable).toBe(false);
+        expect(r.provenance.nestedIn).toBe(enclosing);
+      }
+    } finally {
+      restoreCacheEnv();
+    }
+  });
 });
+

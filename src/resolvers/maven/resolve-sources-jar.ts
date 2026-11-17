@@ -1,27 +1,10 @@
-import type {
-  ArtifactCoordinates,
-  ResolveSourcesJarResult,
-  SubprocessCapture,
-  SubprocessHooks,
-} from '../base.js';
+import type { ArtifactCoordinates, ResolveSourcesJarResult, SubprocessHooks } from '../base.js';
 import { parseResolutionJson } from '../resolution-output.js';
-import { runMavenAnalyzer, type MavenSpawnResult } from './spawn-maven.js';
+import { captureFromSpawn, runMavenAnalyzer, type MavenSpawnResult } from './spawn-maven.js';
 
-function captureFromSpawn(s: MavenSpawnResult): SubprocessCapture {
-  if (s.ok) {
-    return { command: s.command, exitCode: 0, stdout: s.stdout, stderr: s.stderr };
-  }
-  return {
-    command: s.command,
-    exitCode: s.exitCode,
-    stdout: s.stdout ?? '',
-    stderr: s.stderr ?? '',
-  };
-}
-
-function parseMavenSourcesJson(
+export function parseMavenSourcesJson(
   text: string,
-): { ok: true; sourcesJarPath: string | null } | { ok: false; message: string } {
+): { ok: true; sourcesJarPath: string | null; reason?: string } | { ok: false; message: string } {
   let raw: unknown;
   try {
     raw = parseResolutionJson(text);
@@ -40,9 +23,11 @@ function parseMavenSourcesJson(
   ) {
     return { ok: false, message: 'Invalid sourcesJarPath in Maven output' };
   }
+  const reason = (raw as Record<string, unknown>).reason;
   return {
     ok: true,
     sourcesJarPath: typeof sourcesJarPath === 'string' ? sourcesJarPath : null,
+    ...(typeof reason === 'string' && reason.length > 0 ? { reason } : {}),
   };
 }
 
@@ -92,9 +77,13 @@ export async function resolveMavenSourcesJar(
       ok: false,
       message: parsed.message,
       stderr: spawned.stderr || undefined,
-      subprocess: captureFromSpawn(spawned),
+      subprocess: captureFromSpawn({ ...spawned, exitCode: 0 }),
     };
   }
 
-  return { ok: true, sourcesJarPath: parsed.sourcesJarPath };
+  return {
+    ok: true,
+    sourcesJarPath: parsed.sourcesJarPath,
+    ...(parsed.reason !== undefined ? { reason: parsed.reason } : {}),
+  };
 }

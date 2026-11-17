@@ -6,6 +6,7 @@ import { readCachedJavaToolchainVersion } from '../../cache/cached-toolchain.js'
 import { buildCfrSpawnEnv } from '../../decompiler/cfr-spawn-env.js';
 import { resolveJdkForProject } from '../../jdk/resolve-jdk-for-project.js';
 import { awaitChildExit, readProcessStreamToText, spawnChild } from '../../spawn-child.js';
+import type { SubprocessCapture } from '../base.js';
 import { formatMavenUserMessage } from './maven-failure-message.js';
 import { resolveMavenWrapperCommand } from './maven-wrapper-command.js';
 
@@ -76,6 +77,29 @@ export type MavenSpawnResult =
       command: string[];
       exitCode: number | null;
     };
+
+/** Subprocess capture for diagnostics, from a spawn result or any `{ command, exitCode?, stdout?, stderr? }`. */
+export function captureFromSpawn(spawned: {
+  command: string[];
+  exitCode?: number | null;
+  stdout?: string;
+  stderr?: string;
+}): SubprocessCapture {
+  return {
+    command: spawned.command,
+    exitCode: spawned.exitCode ?? null,
+    stdout: spawned.stdout ?? '',
+    stderr: spawned.stderr ?? '',
+  };
+}
+
+export const MAVEN_OUTPUT_MISSING_MESSAGE =
+  'Maven finished but the jvmsrc analyzer wrote no output file. The analyzer extension probably did not load: check .mvn/extensions.xml, .mvn/maven.config (-Dmaven.ext.class.path) and the Maven log.';
+
+/** The analyzer result file, or null when Maven exited 0 without writing it. */
+export function readMavenOutputFile(outputFile: string): string | null {
+  return fs.existsSync(outputFile) ? fs.readFileSync(outputFile, 'utf8') : null;
+}
 
 export type RunMavenSpawnOptions = {
   inheritStderr?: boolean;
@@ -257,9 +281,17 @@ export async function runMavenAnalyzer(
       };
     }
 
-    const outputText = fs.existsSync(outputFile)
-      ? fs.readFileSync(outputFile, 'utf8')
-      : stdout;
+    const outputText = readMavenOutputFile(outputFile);
+    if (outputText === null) {
+      return {
+        ok: false,
+        message: MAVEN_OUTPUT_MISSING_MESSAGE,
+        stderr: (stderr || stdout) || undefined,
+        stdout,
+        command: argv,
+        exitCode,
+      };
+    }
 
     return { ok: true, outputText, stdout, stderr, command: argv };
   } finally {

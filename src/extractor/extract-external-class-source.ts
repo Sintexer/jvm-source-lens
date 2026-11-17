@@ -19,6 +19,7 @@ export async function extractExternalClassSource(
 ): Promise<ClassSourceLookupResult> {
   const walked = await walkSourceCandidates<Extract<ClassSourceLookupResult, { ok: true }>>(output, opts, {
     allowsFile: () => true,
+    allowAnonymous: true,
     accept: (hit, className, openedRel, exactRel) =>
       presentNestedSource(
         {

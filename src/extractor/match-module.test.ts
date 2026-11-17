@@ -202,3 +202,33 @@ describe('Maven reactor module matching', () => {
     expect(pick(`${mavenRoot}/core/src/main/kotlin/com/acme/Core.kt`)).toBe('acme-core');
   });
 });
+
+describe('matchModule with Maven groupId:artifactId names', () => {
+  const mvn = [
+    mod('app', '/p'),
+    mod('com.a:core', '/p/a/core'),
+    mod('com.b:core', '/p/b/core'),
+    mod('web', '/p/web'),
+  ];
+
+  test('shouldMatchExactlyWhenGivenTheQualifiedName', () => {
+    const r = matchModule('com.a:core', mvn, '/p');
+    expect(r.kind === 'match' && r.module.path).toBe('/p/a/core');
+  });
+
+  test('shouldMatchWhenGivenTheQualifiedNameWithLeadingColon', () => {
+    const r = matchModule(':com.b:core', mvn, '/p');
+    expect(r.kind === 'match' && r.module.path).toBe('/p/b/core');
+  });
+
+  test('shouldBeAmbiguousWithUniqueCandidatesWhenGivenTheSharedArtifactId', () => {
+    const r = matchModule('core', mvn, '/p');
+    expect(r).toEqual({ kind: 'ambiguous', candidates: ['com.a:core', 'com.b:core'] });
+  });
+
+  test('shouldMatchByDirectoryPathWhenGivenAFilePathInOneModule', () => {
+    const r = matchModule('/p/b/core/src/main/java/X.java', mvn, '/p');
+    expect(r.kind === 'match' && r.module.name).toBe('com.b:core');
+  });
+});
+

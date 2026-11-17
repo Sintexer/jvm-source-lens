@@ -18,6 +18,11 @@ export const COMMON_SKIP_DIR_NAMES: ReadonlySet<string> = new Set([
 export type WalkProjectTreeOptions = {
   /** Resolver-specific directories to skip in addition to `COMMON_SKIP_DIR_NAMES`. */
   extraSkipDirs?: ReadonlySet<string>;
+  /**
+   * Called for a directory named in `COMMON_SKIP_DIR_NAMES` (not for `extraSkipDirs`).
+   * Return `true` to walk into it anyway, for example a build module that lives under `build/`.
+   */
+  shouldDescend?: (dirName: string, absolutePath: string) => boolean;
   /** Returns `true` when the visited regular file should be collected. */
   includeFile: (fileName: string, relativePosixPath: string) => boolean;
 };
@@ -44,7 +49,10 @@ export function walkProjectTree(rootAbs: string, options: WalkProjectTreeOptions
       }
       const joined = path.join(dir, ent.name);
       if (ent.isDirectory()) {
-        if (COMMON_SKIP_DIR_NAMES.has(ent.name) || extraSkip?.has(ent.name)) {
+        if (extraSkip?.has(ent.name)) {
+          continue;
+        }
+        if (COMMON_SKIP_DIR_NAMES.has(ent.name) && !options.shouldDescend?.(ent.name, joined)) {
           continue;
         }
         walk(joined);

@@ -19,4 +19,28 @@ describe('packageNameFromSource', () => {
     expect(packageNameFromSource('class Lone {}\n')).toBeNull();
     expect(packageNameFromSource('')).toBeNull();
   });
+
+  test('shouldReadPackageWhenALicenseHeaderIsLongerThan8Kb', () => {
+    const header = `/*\n${' * license line\n'.repeat(1000)} */\n`;
+    expect(header.length).toBeGreaterThan(8192);
+    expect(packageNameFromSource(`${header}package com.example;\nclass A {}\n`)).toBe('com.example');
+  });
+
+  test('shouldReadPackageWhenManyLineCommentsPrecedeIt', () => {
+    const header = '// license line\n'.repeat(1000);
+    expect(packageNameFromSource(`${header}package com.example\n`)).toBe('com.example');
+  });
+
+  test('shouldJoinChainedScalaPackageClauses', () => {
+    expect(packageNameFromSource('package a.b\npackage c\n\nclass X\n')).toBe('a.b.c');
+    expect(packageNameFromSource('package a.b\n// note\npackage c.d\npackage e\nimport x.Y\n')).toBe('a.b.c.d.e');
+  });
+
+  test('shouldReturnFirstNameWhenScalaPackageUsesBlockForm', () => {
+    expect(packageNameFromSource('package a.b {\n  class X\n}\n')).toBe('a.b');
+  });
+
+  test('shouldStopAtTheFirstDeclarationAfterThePackage', () => {
+    expect(packageNameFromSource('package a;\nimport b.C;\npackage notAClause;\n')).toBe('a');
+  });
 });

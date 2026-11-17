@@ -29,11 +29,14 @@ function offlineHint(blob: string): string {
   return '';
 }
 
+/** 401/403 only next to HTTP wording: `status code: 401`, `Return code is: 403`, `HTTP 403`, `401 Unauthorized`. */
+const HTTP_AUTH_STATUS =
+  /(?:status(?:\s+code)?|return\s+code(?:\s+is)?|http(?:\s+(?:status|error|code|response))?|returned|response)\s*[:=]?\s*40[13]\b|\b40[13]\s+(?:unauthorized|forbidden)\b/i;
+
 function authHint(blob: string): string {
   const lower = blob.toLowerCase();
   if (
-    /\b401\b/.test(blob) ||
-    /\b403\b/.test(blob) ||
+    HTTP_AUTH_STATUS.test(blob) ||
     /\bunauthorized\b/.test(lower) ||
     /\bnot authorized\b/.test(lower) ||
     /\bauthentication failed\b/.test(lower)

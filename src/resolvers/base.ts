@@ -58,7 +58,12 @@ export type BuildCacheInputs = {
 };
 
 export type ResolveSourcesJarResult =
-  | { ok: true; sourcesJarPath: string | null }
+  | {
+      ok: true;
+      sourcesJarPath: string | null;
+      /** Why there is no sources JAR (Maven analyzer message, credentials removed). */
+      reason?: string;
+    }
   | {
       ok: false;
       message: string;
