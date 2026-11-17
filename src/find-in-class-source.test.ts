@@ -72,15 +72,15 @@ describe('searchExtractedSource', () => {
     }
   });
 
-  test('shouldSearchTheWholeKotlinFileWhenTheNameIsNested', async () => {
-    const kt = 'package com.example\n\nclass Outer {\n  class Inner\n  fun outerOnly() = 1\n}\n';
-    const r = await searchExtractedSource(
-      { ...extracted(kt, 'com.example.Outer$Inner'), sourceLanguage: 'kotlin' },
-      { query: 'outerOnly', contextLines: 0 },
-    );
-    expect(r.ok && r.found).toBe(true);
-    if (r.ok && r.found) {
-      expect(r.hits[0]!.line).toBe(5);
+  test('shouldSearchOnlyTheNestedKotlinDeclarationAndReportFileLines', async () => {
+    const kt = 'package com.example\n\nclass Outer {\n  class Inner {\n    fun inside() = 1\n  }\n  fun outerOnly() = 2\n}\n';
+    const nested = { ...extracted(kt, 'com.example.Outer$Inner'), sourceLanguage: 'kotlin' as const };
+    const outer = await searchExtractedSource(nested, { query: 'outerOnly', contextLines: 0 });
+    expect(outer).toMatchObject({ ok: true, found: false });
+    const inside = await searchExtractedSource(nested, { query: 'inside', contextLines: 0 });
+    expect(inside.ok && inside.found).toBe(true);
+    if (inside.ok && inside.found) {
+      expect(inside.hits[0]!.line).toBe(5);
     }
   });
 

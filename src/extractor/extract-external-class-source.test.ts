@@ -572,9 +572,9 @@ describe('extractExternalClassSource SourceFile attribute', () => {
     }
   });
 
-  test('shouldReturnWholeKotlinFileWhenNestedClassComesFromKotlin', async () => {
+  test('shouldSliceTheNestedDeclarationWhenNestedClassComesFromKotlin', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-sf-'));
-    const kt = 'package com.x\n\nclass Outer {\n  class Inner\n}\n';
+    const kt = 'package com.x\n\nclass Outer {\n  class Inner {\n    fun go() {}\n  }\n  fun other() {}\n}\n';
     const out = libWith(
       dir,
       { 'com/x/Outer$Inner.class': buildClassFile({ internalName: 'com/x/Outer$Inner', sourceFile: 'Outer.kt' }) },
@@ -588,12 +588,48 @@ describe('extractExternalClassSource SourceFile attribute', () => {
     if (!r.ok) {
       return;
     }
-    expect(r.source).toBe(kt);
-    expect(r.compilationUnit).toBeUndefined();
+    expect(r.source.startsWith('// jvmsrc: com/x/Outer.kt:4-6\n')).toBe(true);
+    expect(r.source).toContain('fun go()');
+    expect(r.source).not.toContain('fun other()');
+    expect(r.compilationUnit).toBe(kt);
+    expect(r.sourceLanguage).toBe('kotlin');
     if (r.provenance.kind === 'sourcesJar') {
       expect(r.provenance.nestedIn).toBe('com.x.Outer');
       expect(r.provenance.sourceRelativePath).toBe('com/x/Outer.kt');
     }
+  });
+
+  test('shouldSliceOneClassFromAMultiClassKotlinFile', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-sf-'));
+    const kt =
+      'package com.x\n\n/** A pair. */\ndata class Pair<A, B>(val first: A, val second: B)\n\n/** A triple. */\ndata class Triple<A, B, C>(val first: A)\n';
+    const out = libWith(
+      dir,
+      { 'com/x/Triple.class': buildClassFile({ internalName: 'com/x/Triple', sourceFile: 'Tuples.kt' }) },
+      { 'commonMain/Tuples.kt': kt },
+    );
+    const r = await extractExternalClassSource(out, { className: 'com.x.Triple', decompileExternalClass: failDecompile });
+    expect(r.ok).toBe(true);
+    if (!r.ok) {
+      return;
+    }
+    expect(r.source).toContain('/** A triple. */');
+    expect(r.source).not.toContain('A pair.');
+    expect(r.source.startsWith('// jvmsrc: commonMain/Tuples.kt:6-7\n')).toBe(true);
+    expect(r.compilationUnit).toBe(kt);
+  });
+
+  test('shouldReturnTheWholeKotlinFileWhenItsNameIsTheClassName', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-sf-'));
+    const kt = 'package com.x\n\nclass Greeter {\n  fun hi() {}\n}\n';
+    const out = libWith(
+      dir,
+      { 'com/x/Greeter.class': buildClassFile({ internalName: 'com/x/Greeter', sourceFile: 'Greeter.kt' }) },
+      { 'com/x/Greeter.kt': kt },
+    );
+    const r = await extractExternalClassSource(out, { className: 'com.x.Greeter', decompileExternalClass: failDecompile });
+    expect(r.ok && r.source).toBe(kt);
+    expect(r.ok && r.compilationUnit).toBeUndefined();
   });
 
   test('shouldFindKotlinFileInSourceSetFolderWhenPackageLineMatches', async () => {

@@ -1,4 +1,5 @@
 import type { ClassSourceError, ClassSourceLookupResult } from './class-source-types.js';
+import { locateKotlinTypeDeclaration } from '../class-structure/kotlin/locate-kotlin-declaration.js';
 import { locateTypeDeclaration } from '../class-structure/locate-type-declaration.js';
 
 type ClassSourceSuccess = Extract<ClassSourceLookupResult, { ok: true }>;
@@ -70,11 +71,20 @@ function withSourceProvenance(
   return result;
 }
 
+function fileStem(relPath: string): string {
+  const name = relPath.slice(relPath.lastIndexOf('/') + 1);
+  const dot = name.lastIndexOf('.');
+  return dot < 0 ? name : name.slice(0, dot);
+}
+
 /**
  * When `sourceRelPath` is not the file named after `className` (an enclosing file, or the
  * `SourceFile` of a secondary top-level class), replace `source` with the declaration slice
- * and keep the file on `compilationUnit`. Non-Java files are returned whole.
- * Returns null when a Java file does not declare that type (try the next candidate).
+ * and keep the file on `compilationUnit`.
+ * A Java file that does not declare the type gives null (try the next candidate).
+ * A Kotlin file is sliced the same way, except that a file named after the top-level class is
+ * returned whole, and so is a file with no such type (a `FooKt` facade).
+ * Scala and Groovy files are returned whole.
  * An exact `Outer$Inner.java` hit is returned unsliced, with `nestedIn` set.
  */
 export function presentNestedSource(
@@ -89,10 +99,25 @@ export function presentNestedSource(
     return nestedIn === null ? result : withSourceProvenance(result, nestedIn, sourceRelPath);
   }
   const marked = withSourceProvenance(result, nestedIn, sourceRelPath);
+  const names = nestedTypeNames(className);
+  if (sourceRelPath.endsWith('.kt')) {
+    if (nestedIn === null && fileStem(sourceRelPath) === names[0]) {
+      return marked;
+    }
+    const kotlinSpan = locateKotlinTypeDeclaration(result.source, names);
+    if (!kotlinSpan) {
+      return marked;
+    }
+    return {
+      ...marked,
+      source: formatNestedSlice(result.source, sourceRelPath, kotlinSpan),
+      compilationUnit: result.source,
+    };
+  }
   if (!sourceRelPath.endsWith('.java')) {
     return marked;
   }
-  const span = locateTypeDeclaration(result.source, nestedTypeNames(className));
+  const span = locateTypeDeclaration(result.source, names);
   if (!span) {
     return null;
   }

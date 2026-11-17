@@ -29,27 +29,75 @@ describe('mergeSourceExcerptInputs', () => {
 });
 
 describe('applySourceExcerpt on non-Java source', () => {
-  const kt = 'package q\n\nclass Box {\n  fun getName() = "n"\n}\n';
+  const kt = `package q
 
-  test('shouldExplainJavaOnlyWhenMethodNamesAreRequestedForKotlin', () => {
-    const r = applySourceExcerpt(kt, 'q.Box', true, { methodNames: ['getName'] }, 'kotlin');
+class Box(val label: String) {
+    /** Name. */
+    val name: String = "n"
+
+    fun getTitle() = "t"
+
+    companion object {
+        fun empty() = Box("")
+    }
+}
+`;
+
+  test('shouldExplainJavaOnlyWhenMethodNamesAreRequestedForScala', () => {
+    const r = applySourceExcerpt('class Box { def f = 1 }', 'q.Box', true, { methodNames: ['f'] }, 'scala');
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.code).toBe('EXCERPT_REQUEST_INVALID');
-      expect(r.error.message).toBe('method excerpts are Java-only for kotlin source; use startLine/endLine.');
+      expect(r.error.message).toBe('method excerpts are Java-only for scala source; use startLine/endLine.');
     }
   });
 
-  test('shouldExplainJavaOnlyWhenMethodNamesAndLinesAreMixedForKotlin', () => {
-    const r = applySourceExcerpt(kt, 'q.Box', true, { methodNames: ['getName'], startLine: 3, endLine: 4 }, 'kotlin');
-    expect(r.ok).toBe(false);
-  });
-
-  test('shouldSliceLinesWhenOnlyARangeIsRequestedForKotlin', () => {
-    const r = applySourceExcerpt(kt, 'q.Box', true, { startLine: 3, endLine: 4 }, 'kotlin');
+  test('shouldSliceKotlinFunctionsByKotlinNameAndJvmName', () => {
+    const r = applySourceExcerpt(kt, 'q.Box', true, { methodNames: ['getTitle', 'empty'] }, 'kotlin');
     expect(r.ok).toBe(true);
     if (r.ok && r.excerpt) {
-      expect(r.source.trimEnd()).toBe('class Box {\n  fun getName() = "n"');
+      expect(r.excerpt.matchedMethodNames).toEqual(['getTitle', 'empty']);
+      expect(r.source).toContain('fun getTitle() = "t"');
+      expect(r.source).toContain('fun empty() = Box("")');
+      expect(r.source).not.toContain('class Box');
+    }
+  });
+
+  test('shouldMatchAPropertyByItsGetterOrItsName', () => {
+    for (const name of ['getName', 'name']) {
+      const r = applySourceExcerpt(kt, 'q.Box', true, { methodNames: [name] }, 'kotlin');
+      expect(r.ok).toBe(true);
+      if (r.ok && r.excerpt) {
+        expect(r.source).toContain('/** Name. */');
+        expect(r.source).toContain('val name: String = "n"');
+      }
+    }
+  });
+
+  test('shouldMatchTheConstructorByTheClassNameOrInit', () => {
+    for (const name of ['Box', '<init>']) {
+      const r = applySourceExcerpt(kt, 'q.Box', true, { methodNames: [name] }, 'kotlin');
+      expect(r.ok).toBe(true);
+      if (r.ok && r.excerpt) {
+        expect(r.source).toContain('class Box(val label: String)');
+      }
+    }
+  });
+
+  test('shouldListDeclaredKotlinNamesWhenNothingMatches', () => {
+    const r = applySourceExcerpt(kt, 'q.Box', true, { methodNames: ['missing'] }, 'kotlin');
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe('EXCERPT_NOT_FOUND');
+      expect(r.error.message).toContain('getTitle');
+    }
+  });
+
+  test('shouldSliceLinesForKotlin', () => {
+    const r = applySourceExcerpt(kt, 'q.Box', true, { startLine: 3, endLine: 3 }, 'kotlin');
+    expect(r.ok).toBe(true);
+    if (r.ok && r.excerpt) {
+      expect(r.source.trimEnd()).toBe('class Box(val label: String) {');
     }
   });
 

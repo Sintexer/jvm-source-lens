@@ -70,6 +70,7 @@ export type ProjectedClassStructure = {
   interfaces: string[];
   typeParameters: string[];
   sourceAvailable: boolean;
+  sourceLanguage?: GetClassStructureSuccess['sourceLanguage'];
   provenance: SlimProvenance | GetClassStructureSuccess['provenance'];
   /** Always present: declared method names (overview-level). */
   declaredMethodNames: string[];
@@ -136,6 +137,7 @@ export function projectClassStructure(
     interfaces: result.interfaces,
     typeParameters: result.typeParameters,
     sourceAvailable: result.sourceAvailable,
+    ...(result.sourceLanguage ? { sourceLanguage: result.sourceLanguage } : {}),
     provenance: wantsFullProvenance
       ? result.provenance
       : projectProvenance(result.provenance, include as string[] | undefined),

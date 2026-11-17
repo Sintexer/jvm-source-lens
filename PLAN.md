@@ -23,7 +23,7 @@ Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGEL
 
 Released together in 1.19.0: checkpoints 1 and 2.
 
-Checkpoints 3, 4, 5 and 6 are done and not released. Release them in order: 3, 4, 5, then 6.
+Checkpoints 3, 4, 5, 6 and 7 are done and not released. Release them in order: 3, 4, 5, 6, then 7.
 
 
 | # | Checkpoint | Why at this position | Size |
@@ -128,14 +128,18 @@ Checkpoints 3, 4, 5 and 6 are done and not released. Release them in order: 3, 4
 
 **Done when:** a class from a Kotlin library (including a `FooKt` facade) returns its `.kt` source with `sourceAvailable: true`.
 
-## Checkpoint 7 — Kotlin declarations
+## Checkpoint 7 — Kotlin declarations (done)
 
 **Goal:** Kotlin gets the same structure and excerpt quality as Java. Scala and Groovy stay at the checkpoint 6 level.
 
-- [ ] `parseKotlinTypeMetadata`: `class` / `object` / `interface` / `fun` / `val` / `var`, KDoc, companion objects, top-level functions in facades, and extension functions.
-- [ ] Map source members to JVM names: getters (`getX` / `isX`), `@JvmName`, `@JvmOverloads`, and default parameters. Then `get_method_signature` with a JVM name finds the Kotlin declaration.
-- [ ] `methodNames` excerpts and `get_class_structure` (KDoc, parameter names) for `.kt`. Use the checkpoint 4 locator for nested Kotlin types.
-- [ ] Unit tests on real kotlinx-coroutines and ktor source samples. Run the Kotlin eval prompts again.
+- [x] `parseKotlinTypeMetadata`: `class` / `object` / `interface` / `fun` / `val` / `var`, KDoc, companion objects, top-level functions in facades, and extension functions.
+  Result: `src/class-structure/kotlin/` (`kotlin-lexer`, `kotlin-declarations`, `parse-kotlin-type-metadata`). It is a structural scanner, not a Kotlin grammar: it finds each declaration, its KDoc and its header, and skips bodies as text. It parsed 568 real files (kotlin-stdlib, kotlinx-coroutines, kotlinx-serialization, ktor) with no failure. Fixtures are real sources in `test/fixtures/kotlin/`.
+- [x] Map source members to JVM names: getters (`getX` / `isX`), `@JvmName`, `@JvmOverloads`, and default parameters. Then `get_method_signature` with a JVM name finds the Kotlin declaration.
+  Result: `kotlin-jvm-names.ts` (the mapping table is in SPEC §7.2) and `kotlin-overlay.ts`. A source member is paired with a javap method by name and parameter count, then by type; an ambiguous pair stays unmatched. javap shows `get_method_signature` only for the exact JVM name, so a mangled overload (`delay-VtjQ1oo`) appears in `get_class_structure` but not for `get_method_signature delay`.
+- [x] `methodNames` excerpts and `get_class_structure` (KDoc, parameter names) for `.kt`. Use the checkpoint 4 locator for nested Kotlin types.
+  Result: `get_class_structure` and `get_method_signature` keep javap for signatures and add KDoc and parameter names (new `sourceLanguage` field). `methodNames` match a JVM name or a Kotlin name, and companion members. `get_class_source` slices a nested Kotlin type or one class of a multi-class file; `find_in_class_source` narrows a nested name. Fixed on the way: javap parameter parsing read the last token of `Continuation<? super X>` as a parameter name.
+- [x] Unit tests on real kotlinx-coroutines and ktor source samples. Run the Kotlin eval prompts again.
+  Result: 5 real files as fixtures, plus the `kotlin-library` scenario (8 tests). Kotlin evals: 4/4, first-call 100% (checkpoint 6: 75%). Not done (out of scope, as agreed): multi-file facades (`BuildersKt`), Scala and Groovy declarations, Kotlin-style type display.
 
 **Done when:** `get_class_structure` and `methodNames` excerpts on a Kotlin library class show KDoc and real parameter names.
 

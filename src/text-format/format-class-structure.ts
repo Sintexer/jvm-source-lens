@@ -119,6 +119,9 @@ export function formatClassStructureText(
     lines.push('');
     lines.push(formatProvenanceLine(result.provenance));
     lines.push(`sourceAvailable: ${result.sourceAvailable}`);
+    if (result.sourceLanguage) {
+      lines.push(`sourceLanguage: ${result.sourceLanguage}`);
+    }
     return lines.join('\n');
   }
 
@@ -155,6 +158,9 @@ export function formatClassStructureText(
     lines.push('');
     lines.push(formatProvenanceLine(result.provenance));
     lines.push(`sourceAvailable: ${result.sourceAvailable}`);
+    if (result.sourceLanguage) {
+      lines.push(`sourceLanguage: ${result.sourceLanguage}`);
+    }
     return lines.join('\n');
   }
 

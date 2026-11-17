@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { getClassSource } from '../../../../src/get-class-source.js';
 import { getClassStructure } from '../../../../src/get-class-structure.js';
+import { getMethodSignatures } from '../../../../src/get-method-signatures.js';
 
 setDefaultTimeout(180_000);
 
@@ -92,37 +93,79 @@ describe.skipIf(!scenarioReady)('gradle/kotlin-library scenario (real Gradle)', 
     }
   });
 
-  test('shouldExplainJavaOnlyWhenMethodNamesAreRequestedForKotlin', async () => {
+  test('shouldReturnOnlyTheRequestedKotlinMembersWhenMethodNamesAreGiven', async () => {
     const got = await getClassSource('com.example.kt.Greeter', {
       projectRoot: consumerRoot,
-      excerpt: { methodNames: ['greet'] },
+      excerpt: { methodNames: ['greet', 'getTone'] },
     });
-    expect(got.ok).toBe(false);
-    if (got.ok) return;
+    expect(got.ok).toBe(true);
+    if (!got.ok) return;
 
-    expect(got.error.code).toBe('EXCERPT_REQUEST_INVALID');
-    expect(got.error.message).toContain('Java-only');
-    expect(got.error.message).toContain('startLine/endLine');
+    expect(got.source).toContain('/** Says hello to [name]. */');
+    expect(got.source).toContain('fun greet(name: String)');
+    expect(got.source).toContain('var tone: String');
+    expect(got.source).not.toContain('farewell');
+    expect(got.excerpt?.matchedMethodNames).toEqual(['greet', 'getTone']);
   });
 
   test('shouldReturnLinesWhenKotlinExcerptUsesLineRange', async () => {
     const got = await getClassSource('com.example.kt.Greeter', {
       projectRoot: consumerRoot,
-      excerpt: { startLine: 5, endLine: 5 },
+      excerpt: { startLine: 6, endLine: 6 },
     });
     expect(got.ok).toBe(true);
     if (!got.ok) return;
 
     expect(got.source.trim()).toBe('fun greet(name: String): String = "Hello, $name"');
-    expect(got.excerpt?.startLine).toBe(5);
+    expect(got.excerpt?.startLine).toBe(6);
   });
 
-  test('shouldUseJavapWhenStructureIsRequestedForKotlinClass', async () => {
-    const got = await getClassStructure('com.example.kt.Greeter', { projectRoot: consumerRoot });
+  test('shouldReturnOnlyOneClassWhenAKotlinFileDeclaresSeveral', async () => {
+    const got = await getClassSource('com.example.kt.Square', { projectRoot: consumerRoot });
     expect(got.ok).toBe(true);
     if (!got.ok) return;
 
-    expect(got.sourceAvailable).toBe(false);
-    expect(got.methods.map((m) => m.name)).toContain('greet');
+    expect(got.source.startsWith('// jvmsrc: com/example/kt/Shapes.kt:6-7\n')).toBe(true);
+    expect(got.source).toContain('class Square(val side: Double)');
+    expect(got.source).not.toContain('Circle');
+    expect(got.sourceLanguage).toBe('kotlin');
+  });
+
+  test('shouldShowKdocAndParameterNamesWhenStructureIsRequestedForKotlinClass', async () => {
+    const got = await getClassStructure('com.example.kt.Greeter', { projectRoot: consumerRoot, scope: 'declared' });
+    expect(got.ok).toBe(true);
+    if (!got.ok) return;
+
+    expect(got.sourceAvailable).toBe(true);
+    expect(got.sourceLanguage).toBe('kotlin');
+    expect(got.classPurpose).toBe('Builds greetings.');
+    const greet = got.methods.find((m) => m.name === 'greet')!;
+    expect(greet.javadoc).toBe('Says hello to [name].');
+    expect(greet.parameters.map((p) => p.name)).toEqual(['name']);
+    const getter = got.methods.find((m) => m.name === 'getTone')!;
+    expect(getter.javadoc).toBe('The tone of the greeting.');
+    expect(got.methods.find((m) => m.name === 'setTone')!.parameters.map((p) => p.name)).toEqual(['value']);
+    expect(got.methods.find((m) => m.name === 'farewell')!.javadoc).toBeNull();
+  });
+
+  test('shouldFindTheKotlinDeclarationWhenAJvmNameIsGivenToGetMethodSignature', async () => {
+    const got = await getMethodSignatures('com.example.kt.Greeter', 'setTone', { projectRoot: consumerRoot });
+    expect(got.ok).toBe(true);
+    if (!got.ok) return;
+
+    expect(got.sourceAvailable).toBe(true);
+    expect(got.sourceLanguage).toBe('kotlin');
+    expect(got.methodFound).toBe(true);
+    expect(got.overloads[0]!.parameters.map((p) => p.name)).toEqual(['value']);
+    expect(got.provenance.kind).toBe('sourcesJar');
+  });
+
+  test('shouldNameTheSyntheticReceiverWhenAKotlinFacadeFunctionIsRequested', async () => {
+    const got = await getMethodSignatures('com.example.kt.GreetKt', 'shout', { projectRoot: consumerRoot });
+    expect(got.ok).toBe(true);
+    if (!got.ok) return;
+
+    expect(got.sourceAvailable).toBe(true);
+    expect(got.overloads[0]!.parameters.map((p) => p.name)).toEqual(['text']);
   });
 });

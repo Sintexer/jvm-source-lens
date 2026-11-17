@@ -109,7 +109,7 @@ export function readCompiledSourceFileName(
 
 /**
  * Name-based source paths, with the compiled class's `SourceFile` first.
- * `javaOnly` drops a non-`.java` attribute so the Java parser never sees Kotlin text.
+ * `allowSourceFile` drops an attribute the caller cannot parse (for example a `.kt` file for the Java parser).
  */
 export function moduleTreeSourceRelPaths(
   moduleRoot: string,
@@ -117,10 +117,10 @@ export function moduleTreeSourceRelPaths(
   classRelPath: string,
   nameRelPaths: readonly string[],
   includeTest: boolean,
-  javaOnly = false,
+  allowSourceFile: (name: string) => boolean = () => true,
 ): string[] {
   let sourceFile = readCompiledSourceFileName(moduleRoot, classRelPath, includeTest);
-  if (javaOnly && sourceFile !== null && !sourceFile.endsWith('.java')) {
+  if (sourceFile !== null && !allowSourceFile(sourceFile)) {
     sourceFile = null;
   }
   return withSourceFileCandidate(className, nameRelPaths, sourceFile);

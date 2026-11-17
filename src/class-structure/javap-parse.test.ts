@@ -215,3 +215,32 @@ SourceFile: "C.java"
     expect(fields[0]!.jvmDescriptor).toBe('I');
   });
 });
+
+describe('parseJavapVerboseAllMethods wildcard generics', () => {
+  const block = `Classfile /tmp/example.jar
+Compiled from "Delay.kt"
+public final class q.DelayKt
+  minor version: 0
+Constant pool:
+    #1 = Utf8 foo
+{
+  public static final java.lang.Object delay(long, kotlin.coroutines.Continuation<? super kotlin.Unit>);
+    descriptor: (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+    flags: (0x0019) ACC_PUBLIC, ACC_STATIC, ACC_FINAL
+    Code:
+      stack=1, locals=3, args_size=2
+      LocalVariableTable:
+        Start  Length  Slot  Name   Signature
+            0      10     0 timeMillis   J
+}
+SourceFile: "Delay.kt"
+`;
+
+  test('shouldKeepWildcardTypeWholeAndNotReadItsLastTokenAsAParameterName', () => {
+    const [m] = parseJavapVerboseAllMethods(block, 'q.DelayKt', { includeStatic: true });
+    expect(m!.parameters).toEqual([
+      { name: 'timeMillis', typeDisplay: 'long' },
+      { name: null, typeDisplay: 'kotlin.coroutines.Continuation<? super kotlin.Unit>' },
+    ]);
+  });
+});

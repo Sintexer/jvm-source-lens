@@ -5,6 +5,7 @@ import type {
   InterprojectProvenance,
   SourcesJarProvenance,
 } from './extractor/class-source-types.js';
+import { locateKotlinTypeDeclaration } from './class-structure/kotlin/locate-kotlin-declaration.js';
 import { locateTypeDeclaration } from './class-structure/locate-type-declaration.js';
 import { nestedTypeNames } from './extractor/nested-class-source.js';
 import {
@@ -146,10 +147,11 @@ function searchWindow(
   className: string,
   sourceLanguage: string,
 ): { text: string; lineOffset: number } {
-  if (!className.includes('$') || sourceLanguage !== 'java') {
+  if (!className.includes('$') || (sourceLanguage !== 'java' && sourceLanguage !== 'kotlin')) {
     return { text: source, lineOffset: 0 };
   }
-  const span = locateTypeDeclaration(source, nestedTypeNames(className));
+  const names = nestedTypeNames(className);
+  const span = sourceLanguage === 'kotlin' ? locateKotlinTypeDeclaration(source, names) : locateTypeDeclaration(source, names);
   if (!span) {
     return { text: source, lineOffset: 0 };
   }

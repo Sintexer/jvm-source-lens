@@ -5,7 +5,7 @@ import path from 'node:path';
 import { strToU8, zipSync } from 'fflate';
 import { parseJavaTypeMetadata } from '../class-structure/parse-java-type-metadata.js';
 import type { ResolutionOutput, ResolvedArtifact } from '../resolvers/resolution-output.js';
-import { tryReadJavaSourceFromClasspath } from './read-java-source-from-classpath.js';
+import { tryReadJavaSourceFromClasspath, tryReadSourceFromClasspath } from './read-java-source-from-classpath.js';
 import { buildClassFile } from './test-class-file.js';
 
 function artifact(partial: Partial<ResolvedArtifact> & Pick<ResolvedArtifact, 'group' | 'name'>): ResolvedArtifact {
@@ -131,5 +131,62 @@ describe('tryReadJavaSourceFromClasspath SourceFile attribute', () => {
     fs.writeFileSync(ktPath, 'package com.x\nfun hello() = 1\n');
     const r = await tryReadJavaSourceFromClasspath(baseOutput(dir, []), { className: 'com.x.Foo' });
     expect(r.ok ? r.hit : false).toBe(false);
+  });
+});
+
+describe('tryReadSourceFromClasspath with Kotlin', () => {
+  function libWith(dir: string, classRel: string, internalName: string, sourceFile: string, sources: Record<string, string>) {
+    const binJar = path.join(dir, 'lib.jar');
+    const sourcesJar = path.join(dir, 'lib-sources.jar');
+    fs.writeFileSync(binJar, zipSync({ [classRel]: buildClassFile({ internalName, sourceFile }) }));
+    fs.writeFileSync(
+      sourcesJar,
+      zipSync(Object.fromEntries(Object.entries(sources).map(([k, v]) => [k, strToU8(v)]))),
+    );
+    return baseOutput(dir, [artifact({ group: 'com.x', name: 'lib', jarPath: binJar, sourcesJarPath: sourcesJar })]);
+  }
+
+  test('shouldReturnKotlinSourceFromAMultiplatformSourceSetFolder', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-read-kt-'));
+    const kt = 'package com.x\n\n/** Doc. */\ninterface Job {\n  fun cancel()\n}\n';
+    const out = libWith(dir, 'com/x/Job.class', 'com/x/Job', 'Job.kt', { 'commonMain/Job.kt': kt });
+    const r = await tryReadSourceFromClasspath(out, { className: 'com.x.Job' }, ['java', 'kotlin']);
+    expect(r.ok && r.hit).toBe(true);
+    if (!r.ok || !r.hit) {
+      return;
+    }
+    expect(r.sourceLanguage).toBe('kotlin');
+    expect(r.sourceText).toBe(kt);
+    if (r.provenance.kind === 'sourcesJar') {
+      expect(r.provenance.sourceRelativePath).toBe('commonMain/Job.kt');
+    }
+  });
+
+  test('shouldKeepJavaOnlyCallersAwayFromKotlin', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-read-kt-'));
+    const out = libWith(dir, 'com/x/Job.class', 'com/x/Job', 'Job.kt', { 'commonMain/Job.kt': 'package com.x\ninterface Job\n' });
+    expect(await tryReadJavaSourceFromClasspath(out, { className: 'com.x.Job' })).toEqual({ ok: true, hit: false });
+  });
+
+  test('shouldReadAKotlinFileFromTheQueriedModuleSourceRoot', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-read-kt-'));
+    const ktPath = path.join(dir, 'src/main/kotlin/com/x/Outer.kt');
+    fs.mkdirSync(path.dirname(ktPath), { recursive: true });
+    fs.writeFileSync(ktPath, 'package com.x\n\nclass Outer {\n  class Inner {\n    fun go() {}\n  }\n}\n');
+    const out = baseOutput(dir, []);
+    const r = await tryReadSourceFromClasspath(out, { className: 'com.x.Outer$Inner' }, ['java', 'kotlin']);
+    expect(r.ok && r.hit).toBe(true);
+    if (r.ok && r.hit) {
+      expect(r.sourceLanguage).toBe('kotlin');
+      if (r.provenance.kind === 'interproject') {
+        expect(r.provenance.nestedIn).toBe('com.x.Outer');
+        expect(r.provenance.sourceRelativePath).toBe('com/x/Outer.kt');
+      }
+    }
+    const missing = await tryReadSourceFromClasspath(out, { className: 'com.x.Outer$Missing' }, ['java', 'kotlin']);
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) {
+      expect(missing.error.code).toBe('CLASS_NOT_FOUND');
+    }
   });
 });

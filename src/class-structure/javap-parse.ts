@@ -240,13 +240,28 @@ function stripAnnotationsPrefix(segment: string): string {
   return s.replace(/^final\s+/, '').trim();
 }
 
+/** Index of the last whitespace that is not inside `<...>`, or -1. */
+function lastTopLevelWhitespace(s: string): number {
+  let depth = 0;
+  let idx = -1;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]!;
+    if (c === '<') {
+      depth++;
+    } else if (c === '>') {
+      depth = Math.max(0, depth - 1);
+    } else if (depth === 0 && /\s/.test(c)) {
+      idx = i;
+    }
+  }
+  return idx;
+}
+
 function parseOneParamSegment(segment: string): { typeDisplay: string; name: string | null } {
   const s = stripAnnotationsPrefix(segment);
-  const tokens = s.split(/\s+/).filter(Boolean);
-  if (tokens.length >= 2) {
-    const name = tokens[tokens.length - 1]!;
-    const typeDisplay = tokens.slice(0, -1).join(' ');
-    return { typeDisplay, name };
+  const split = lastTopLevelWhitespace(s);
+  if (split > 0) {
+    return { typeDisplay: s.slice(0, split).trim().replace(/\s+/g, ' '), name: s.slice(split + 1).trim() };
   }
   return { typeDisplay: s, name: null };
 }

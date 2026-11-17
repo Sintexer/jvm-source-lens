@@ -225,7 +225,7 @@ Early software; the supported path is narrow:
 | Build tool | **Gradle only** |
 | Integration | **Groovy init script** (`--init-script`) — not a Gradle Portal plugin |
 | Classpaths | Standard JVM + Kotlin MPP `jvm*` configurations when Gradle exposes them |
-| Output | Original source when available (`.java`, `.kt`, `.scala`, `.groovy` from a sources JAR or inter-project `src`; `sourceLanguage` names it), else CFR-decompiled Java. `methodNames` excerpts work on Java only; use `startLine` / `endLine` for other languages |
+| Output | Original source when available (`.java`, `.kt`, `.scala`, `.groovy` from a sources JAR or inter-project `src`; `sourceLanguage` names it), else CFR-decompiled Java. For Kotlin classes, structure and signatures add KDoc and real parameter names to the javap result, and `methodNames` excerpts work. For Scala and Groovy, use `startLine` / `endLine` |
 
 Composite builds, Android-only layouts, and exotic configurations are not fully validated. See [PLAN.md](PLAN.md).
 

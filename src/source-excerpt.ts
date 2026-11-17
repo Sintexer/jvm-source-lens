@@ -1,3 +1,4 @@
+import { collectKotlinMethodSpans } from './class-structure/kotlin/kotlin-method-spans.js';
 import { collectMethodSourceSpans } from './class-structure/parse-java-type-metadata.js';
 import type { SourceLanguage } from './extractor/class-source-types.js';
 
@@ -220,7 +221,7 @@ export function applySourceExcerpt(
   if (!normalized) {
     return { ok: true, source };
   }
-  if (sourceLanguage !== 'java' && (normalized.methodNames?.length ?? 0) > 0) {
+  if (sourceLanguage !== 'java' && sourceLanguage !== 'kotlin' && (normalized.methodNames?.length ?? 0) > 0) {
     return {
       ok: false,
       error: {
@@ -241,7 +242,10 @@ export function applySourceExcerpt(
   const unmatched: string[] = [];
 
   if (requestedMethodNames.length > 0) {
-    const collected = collectMethodSourceSpans(source, className);
+    const collected =
+      sourceLanguage === 'kotlin'
+        ? collectKotlinMethodSpans(source, className)
+        : collectMethodSourceSpans(source, className);
     if (!collected) {
       return {
         ok: false,

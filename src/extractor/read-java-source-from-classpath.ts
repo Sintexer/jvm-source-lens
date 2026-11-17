@@ -1,11 +1,15 @@
-import type {
-  ArtifactCoordinates,
-  ClassSourceError,
-  ClassSourceLookupOptions,
-  InterprojectProvenance,
-  SourcesJarProvenance,
+import {
+  isClasspathBinaryJarArtifact,
+  isExternalJarArtifact,
+  sourceLanguageFromPath,
+  type ArtifactCoordinates,
+  type ClassSourceError,
+  type ClassSourceLookupOptions,
+  type InterprojectProvenance,
+  type SourceLanguage,
+  type SourcesJarProvenance,
 } from './class-source-types.js';
-import { isClasspathBinaryJarArtifact, isExternalJarArtifact } from './class-source-types.js';
+import { findKotlinTypeDeclaration } from '../class-structure/kotlin/locate-kotlin-declaration.js';
 import { locateTypeDeclaration } from '../class-structure/locate-type-declaration.js';
 import { findExternalJarAmongArtifacts } from './find-external-class-jar.js';
 import { packageOfClassName, readJarClassSourceFile } from './class-file-source-file.js';
@@ -42,10 +46,18 @@ function tryReadSourceFromJar(
   return null;
 }
 
-export type TryReadJavaSourceFromClasspathResult =
-  | { ok: true; hit: true; sourceText: string; provenance: SourcesJarProvenance | InterprojectProvenance }
+export type TryReadSourceFromClasspathResult =
+  | {
+      ok: true;
+      hit: true;
+      sourceText: string;
+      sourceLanguage: SourceLanguage;
+      provenance: SourcesJarProvenance | InterprojectProvenance;
+    }
   | { ok: true; hit: false }
   | { ok: false; error: ClassSourceError };
+
+export type TryReadJavaSourceFromClasspathResult = TryReadSourceFromClasspathResult;
 
 type SourceHit = { ok: true; source: string; provenance: SourcesJarProvenance | InterprojectProvenance };
 
@@ -65,6 +77,18 @@ function withNestedReadProvenance(
   return provenance;
 }
 
+function declaresType(source: string, className: string, language: SourceLanguage): boolean {
+  const names = nestedTypeNames(className);
+  if (language === 'java') {
+    return locateTypeDeclaration(source, names) !== null;
+  }
+  if (language === 'kotlin') {
+    // `FooKt` is the facade of the file's top-level declarations, not a declared type.
+    return findKotlinTypeDeclaration(source, names) !== null || (names.length === 1 && names[0]!.endsWith('Kt'));
+  }
+  return true;
+}
+
 /**
  * Full compilation unit for structure and signatures. A file with another name (enclosing file,
  * or the `SourceFile` of a secondary top-level class) is kept only when it declares the type.
@@ -75,14 +99,16 @@ function acceptFullCompilationUnit(
   className: string,
   sourceRelPath: string,
   exactSourceRelPath: string,
-): TryReadJavaSourceFromClasspathResult | null {
-  if (sourceRelPath !== exactSourceRelPath && !locateTypeDeclaration(hit.source, nestedTypeNames(className))) {
+): TryReadSourceFromClasspathResult | null {
+  const sourceLanguage = sourceLanguageFromPath(sourceRelPath);
+  if (sourceRelPath !== exactSourceRelPath && !declaresType(hit.source, className, sourceLanguage)) {
     return null;
   }
   return {
     ok: true,
     hit: true,
     sourceText: hit.source,
+    sourceLanguage,
     provenance: withNestedReadProvenance(hit.provenance, className, sourceRelPath, exactSourceRelPath),
   };
 }
@@ -92,7 +118,7 @@ async function readFirstCandidate(
   className: string,
   read: (sourceRelPath: string) => Promise<SourceHit | { ok: false; error: ClassSourceError } | null>,
   exact: string = sourceRelPaths[0]!,
-): Promise<TryReadJavaSourceFromClasspathResult | null> {
+): Promise<TryReadSourceFromClasspathResult | null> {
   for (const rel of sourceRelPaths) {
     const hit = await read(rel);
     if (hit === null) {
@@ -101,7 +127,9 @@ async function readFirstCandidate(
     if (!hit.ok) {
       return { ok: false, error: hit.error };
     }
-    const accepted = acceptFullCompilationUnit(hit, className, rel, exact);
+    // A module tree may open `.kt` for a requested `.java` path; the opened path decides the language.
+    const opened = hit.provenance.kind === 'interproject' ? hit.provenance.sourceRelativePath : rel;
+    const accepted = acceptFullCompilationUnit(hit, className, opened, exact);
     if (accepted !== null) {
       return accepted;
     }
@@ -117,7 +145,20 @@ async function readFirstCandidate(
 export async function tryReadJavaSourceFromClasspath(
   output: ResolutionOutput,
   opts: ClassSourceLookupOptions,
-): Promise<TryReadJavaSourceFromClasspathResult> {
+): Promise<TryReadSourceFromClasspathResult> {
+  return tryReadSourceFromClasspath(output, opts, ['java']);
+}
+
+/**
+ * Same classpath-order read as {@link tryReadJavaSourceFromClasspath}, for the listed source
+ * languages. A `.kt` file is read through the class's `SourceFile` or the module source roots.
+ */
+export async function tryReadSourceFromClasspath(
+  output: ResolutionOutput,
+  opts: ClassSourceLookupOptions,
+  languages: readonly SourceLanguage[],
+): Promise<TryReadSourceFromClasspathResult> {
+  const allowsFile = (name: string): boolean => languages.includes(sourceLanguageFromPath(name));
   const picked = pickResolvedConfiguration(output, {
     modulePath: opts.modulePath,
     configuration: opts.configuration,
@@ -140,7 +181,7 @@ export async function tryReadJavaSourceFromClasspath(
   const exact = paths.sourceRelPaths[0]!;
 
   const local = await readFirstCandidate(
-    moduleTreeSourceRelPaths(picked.module.path, opts.className, paths.classRelPath, paths.sourceRelPaths, includeTest, true),
+    moduleTreeSourceRelPaths(picked.module.path, opts.className, paths.classRelPath, paths.sourceRelPaths, includeTest, allowsFile),
     opts.className,
     async (rel) => {
       const read = await tryReadLocalModuleJavaSource(picked.module, rel, opts.className, includeTest);
@@ -150,7 +191,7 @@ export async function tryReadJavaSourceFromClasspath(
       if (!read.ok) {
         return { ok: false, error: read.error };
       }
-      if (read.provenance.kind !== 'interproject' || !read.provenance.sourceRelativePath.endsWith('.java')) {
+      if (read.provenance.kind !== 'interproject' || !allowsFile(read.provenance.sourceRelativePath)) {
         return null;
       }
       return { ok: true, source: read.source, provenance: read.provenance };
@@ -170,7 +211,7 @@ export async function tryReadJavaSourceFromClasspath(
             paths.classRelPath,
             paths.sourceRelPaths,
             includeTest,
-            true,
+            allowsFile,
           )
         : paths.sourceRelPaths;
     const ip = await readFirstCandidate(rels, opts.className, async (rel) => {
@@ -181,7 +222,7 @@ export async function tryReadJavaSourceFromClasspath(
       if (!read.ok) {
         return { ok: false, error: read.error };
       }
-      if (read.provenance.kind !== 'interproject' || !read.provenance.sourceRelativePath.endsWith('.java')) {
+      if (read.provenance.kind !== 'interproject' || !allowsFile(read.provenance.sourceRelativePath)) {
         return null;
       }
       return { ok: true, source: read.source, provenance: read.provenance };
@@ -234,16 +275,16 @@ export async function tryReadJavaSourceFromClasspath(
 
   if (sourcesJarPath !== null && sourcesJarPath.length > 0) {
     const sourceFile = readJarClassSourceFile(hit.classpath, paths.classRelPath);
-    const javaSourceFile = sourceFile !== null && sourceFile.endsWith('.java') ? sourceFile : null;
+    const wantedSourceFile = sourceFile !== null && allowsFile(sourceFile) ? sourceFile : null;
     const readFromJar = async (rel: string) => tryReadSourceFromJar(sourcesJarPath!, rel, opts.className, coordinates);
     let fromResolved = await readFirstCandidate(
-      withSourceFileCandidate(opts.className, paths.sourceRelPaths, javaSourceFile),
+      withSourceFileCandidate(opts.className, paths.sourceRelPaths, wantedSourceFile),
       opts.className,
       readFromJar,
       paths.sourceRelPaths[0]!,
     );
-    if (fromResolved === null && javaSourceFile !== null) {
-      const byName = findSourceEntriesByFileName(sourcesJarPath, javaSourceFile, packageOfClassName(opts.className));
+    if (fromResolved === null && wantedSourceFile !== null) {
+      const byName = findSourceEntriesByFileName(sourcesJarPath, wantedSourceFile, packageOfClassName(opts.className));
       if (!byName.ok) {
         return { ok: false, error: byName.error };
       }

@@ -1,4 +1,4 @@
-import type { ArtifactCoordinates, ClassSourceError } from '../extractor/class-source-types.js';
+import type { ArtifactCoordinates, ClassSourceError, SourceLanguage } from '../extractor/class-source-types.js';
 
 /** javap-derived overload (structured view over bytecode metadata). */
 export type JavapMethodOverload = {
@@ -141,6 +141,8 @@ export type GetClassStructureSuccess = {
   fields: ClassStructureField[];
   methods: ClassStructureMethod[];
   sourceAvailable: boolean;
+  /** Language of the source behind `sourceAvailable`. Omitted when there is no source. */
+  sourceLanguage?: SourceLanguage;
   provenance: ClassStructureProvenance;
   /** Raw class-level Javadoc when parsed from `.java` (for compact text `Purpose:`). */
   classPurpose?: string | null;

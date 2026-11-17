@@ -187,6 +187,8 @@ const guidedFailureEnvelopeSchema = {
   querySucceeded: z.literal(false),
 };
 
+const sourceLanguageSchema = z.enum(['java', 'kotlin', 'scala', 'groovy']);
+
 const classSourceErrorCodeSchema = z.enum([
   'INVALID_FQN',
   'MODULE_NOT_FOUND',
@@ -218,7 +220,7 @@ export const mcpClassSourceToolPayloadSchema = z.union([
     ...outcomeOnlySuccessSchema,
     source: z.string(),
     sourceAvailable: z.boolean(),
-    sourceLanguage: z.enum(['java', 'kotlin', 'scala', 'groovy']),
+    sourceLanguage: sourceLanguageSchema,
     className: z.string(),
     provenance: provenanceSchema,
     excerpt: z
@@ -617,6 +619,7 @@ export const mcpGetMethodSignaturePayloadSchema = z.union([
     methodName: z.string(),
     methodFound: z.boolean(),
     sourceAvailable: z.boolean(),
+    sourceLanguage: sourceLanguageSchema.optional(),
     overloads: z.array(javapOverloadSchema),
     provenance: classStructureProvenanceSchema,
   }),
@@ -723,6 +726,7 @@ export const mcpGetClassStructurePayloadSchema = z.union([
     fields: z.array(classStructureFieldSchema),
     methods: z.array(classStructureMethodSchema),
     sourceAvailable: z.boolean(),
+    sourceLanguage: sourceLanguageSchema.optional(),
     provenance: classStructureProvenanceSchema,
     typeHierarchy: classStructureTypeHierarchySchema.optional(),
     classAnnotations: z.array(classStructureDeclaredAnnotationSchema).optional(),

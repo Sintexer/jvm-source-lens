@@ -9,11 +9,14 @@ import type {
   ClassSourceError,
   ClassSourceLookupOptions,
   InterprojectProvenance,
+  SourceLanguage,
   SourcesJarProvenance,
 } from './extractor/class-source-types.js';
 import { findClasspathOwningClass } from './extractor/find-external-class-jar.js';
 import { resolveClassScopeOrError } from './extractor/canonicalize-class-name.js';
-import { tryReadJavaSourceFromClasspath } from './extractor/read-java-source-from-classpath.js';
+import { tryReadSourceFromClasspath } from './extractor/read-java-source-from-classpath.js';
+import { overlayMethodParameters } from './class-structure/kotlin/apply-kotlin-overlay.js';
+import { buildKotlinOverlay } from './class-structure/kotlin/kotlin-overlay.js';
 import { enrichIfClassNotFound } from './enrich-class-not-found.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import { createSourcesJarResolver } from './sources-jar-resolver.js';
@@ -34,6 +37,8 @@ export type GetMethodSignatureSuccess = {
   methodName: string;
   /** True when overloads were parsed from `.java` on the classpath (sources JAR or inter-project disk). */
   sourceAvailable: boolean;
+  /** Language of the source behind `sourceAvailable`. Omitted when there is no source. */
+  sourceLanguage?: SourceLanguage;
   methodFound: boolean;
   overloads: JavapMethodOverload[];
   provenance: MethodSignatureProvenance;
@@ -178,16 +183,17 @@ export async function getMethodSignatures(
     input: { className, modulePath: opts.modulePath, includeTest: opts.includeTest },
   });
 
-  const sourceRead = await tryReadJavaSourceFromClasspath(resolved.output, {
-    ...lookupOpts,
-    resolveSourcesJar: resolveSourcesJarFn,
-  });
+  const sourceRead = await tryReadSourceFromClasspath(
+    resolved.output,
+    { ...lookupOpts, resolveSourcesJar: resolveSourcesJarFn },
+    ['java', 'kotlin'],
+  );
 
   if (!sourceRead.ok) {
     return methodSignatureFail(opts, className, mn, enrichScopeError(opts, resolved.output, sourceRead.error));
   }
 
-  if (sourceRead.hit) {
+  if (sourceRead.hit && sourceRead.sourceLanguage === 'java') {
     const meta = parseJavaTypeMetadata(sourceRead.sourceText, className);
     if (meta) {
       const overloads = meta.methods
@@ -198,6 +204,7 @@ export async function getMethodSignatures(
         className,
         methodName: mn,
         sourceAvailable: true,
+        sourceLanguage: 'java',
         methodFound: overloads.length > 0,
         overloads,
         provenance: provenanceFromJavaSource(sourceRead.provenance),
@@ -242,15 +249,26 @@ export async function getMethodSignatures(
     return methodSignatureFail(opts, className, mn, javap.error);
   }
 
-  const { overloads } = javap;
+  // Kotlin source names the parameters; javap still supplies the overloads and their types.
+  const kotlinOverlay =
+    sourceRead.hit && sourceRead.sourceLanguage === 'kotlin'
+      ? buildKotlinOverlay(sourceRead.sourceText, className)
+      : null;
+  const overloads = kotlinOverlay
+    ? javap.overloads.map((o) => {
+        const named = overlayMethodParameters(kotlinOverlay, mn, o.parameters, (p) => p.typeDisplay);
+        return named ? { ...o, parameters: named.params } : o;
+      })
+    : javap.overloads;
 
   return {
     ok: true,
     className,
     methodName: mn,
-    sourceAvailable: false,
+    sourceAvailable: kotlinOverlay !== null,
+    ...(kotlinOverlay !== null ? { sourceLanguage: 'kotlin' as const } : {}),
     methodFound: overloads.length > 0,
     overloads,
-    provenance,
+    provenance: kotlinOverlay !== null && sourceRead.hit ? provenanceFromJavaSource(sourceRead.provenance) : provenance,
   };
 }

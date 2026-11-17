@@ -26,13 +26,16 @@ import type {
   JavapFieldInfo,
   JavapMethodWithName,
 } from './class-structure/types.js';
-import type { ClassSourceError, ClassSourceLookupOptions } from './extractor/class-source-types.js';
+import type { ClassSourceError, ClassSourceLookupOptions, SourceLanguage } from './extractor/class-source-types.js';
 import { findClasspathOwningClass } from './extractor/find-external-class-jar.js';
 import { resolveClassScopeOrError } from './extractor/canonicalize-class-name.js';
 import {
   tryReadJavaSourceFromClasspath,
-  type TryReadJavaSourceFromClasspathResult,
+  tryReadSourceFromClasspath,
+  type TryReadSourceFromClasspathResult,
 } from './extractor/read-java-source-from-classpath.js';
+import { overlayMethodParameters } from './class-structure/kotlin/apply-kotlin-overlay.js';
+import { buildKotlinOverlay, type KotlinOverlay } from './class-structure/kotlin/kotlin-overlay.js';
 import { enrichIfClassNotFound } from './enrich-class-not-found.js';
 import { recordFailureDiagnostic } from './diagnostics/record-failure.js';
 import { createSourcesJarResolver } from './sources-jar-resolver.js';
@@ -113,7 +116,7 @@ function parsedHeaderToJavapHeader(h: ParsedJavaTypeHeader, simple: string): Jav
 }
 
 function buildClassStructureProvenance(args: {
-  sourceRead: TryReadJavaSourceFromClasspathResult;
+  sourceRead: TryReadSourceFromClasspathResult;
   ownerHit: ReturnType<typeof findClasspathOwningClass>;
 }): ClassStructureProvenance {
   const { sourceRead, ownerHit } = args;
@@ -219,6 +222,17 @@ function javapMethodToStructure(
   };
 }
 
+function withKotlinOverlay(row: ClassStructureMethod, overlay: KotlinOverlay | null): ClassStructureMethod {
+  if (!overlay) {
+    return row;
+  }
+  const named = overlayMethodParameters(overlay, row.jvmMethodName, row.parameters, (p) => p.type);
+  if (!named) {
+    return row;
+  }
+  return { ...row, parameters: named.params, javadoc: named.kdoc ?? row.javadoc };
+}
+
 function javapFieldToStructure(
   f: JavapFieldInfo,
   declaringClass: string,
@@ -299,14 +313,24 @@ export async function getClassStructure(
     input: { className, modulePath: opts.modulePath, includeTest: opts.includeTest },
   });
 
-  const sourceRead = await tryReadJavaSourceFromClasspath(resolved.output, {
-    ...lookupOpts,
-    resolveSourcesJar: resolveSourcesJarFn,
-  });
+  const sourceRead = await tryReadSourceFromClasspath(
+    resolved.output,
+    { ...lookupOpts, resolveSourcesJar: resolveSourcesJarFn },
+    ['java', 'kotlin'],
+  );
 
   if (!sourceRead.ok) {
     return classStructureFail(opts, className, enrichClassStructureError(opts, resolved.output, sourceRead.error));
   }
+
+  // Kotlin source adds KDoc and parameter names to what javap reports; it never replaces javap.
+  const kotlinOverlay =
+    sourceRead.hit && sourceRead.sourceLanguage === 'kotlin'
+      ? buildKotlinOverlay(sourceRead.sourceText, className)
+      : null;
+  const javaSourceHit = sourceRead.hit && sourceRead.sourceLanguage === 'java';
+  const effectiveRead: TryReadSourceFromClasspathResult =
+    sourceRead.hit && !javaSourceHit && kotlinOverlay === null ? { ok: true, hit: false } : sourceRead;
 
   const ownerHit = findClasspathOwningClass(resolved.output, {
     className,
@@ -315,12 +339,12 @@ export async function getClassStructure(
     includeTest: opts.includeTest,
   });
 
-  if (!ownerHit.ok && !sourceRead.hit) {
+  if (!ownerHit.ok && !effectiveRead.hit) {
     return classStructureFail(opts, className, enrichClassStructureError(opts, resolved.output, ownerHit.error));
   }
 
   let parsedPrimary: ParsedJavaTypeMetadata | null = null;
-  if (sourceRead.hit) {
+  if (javaSourceHit && sourceRead.hit) {
     parsedPrimary = parseJavaTypeMetadata(sourceRead.sourceText, className);
   }
 
@@ -352,9 +376,9 @@ export async function getClassStructure(
     });
   }
 
-  const sourceAvailable = sourceRead.hit === true;
+  const sourceAvailable = effectiveRead.hit === true;
   const skeleton =
-    sourceRead.hit === true ? parseJavaClassSkeleton(sourceRead.sourceText, className) : null;
+    javaSourceHit && sourceRead.hit ? parseJavaClassSkeleton(sourceRead.sourceText, className) : null;
 
   const javapCache = new Map<string, string>();
   if (primaryJavapStdout) {
@@ -465,7 +489,7 @@ export async function getClassStructure(
       })
     : primaryJavapStdout
       ? parseJavapVerboseAllMethods(primaryJavapStdout, className, { includeStatic: true }).map((m) => {
-          const row = javapMethodToStructure(m, className, false, sourceAvailable, skeleton);
+          const row = withKotlinOverlay(javapMethodToStructure(m, className, false, sourceAvailable, skeleton), kotlinOverlay);
           if (!javapAnnIndex) {
             return row;
           }
@@ -542,6 +566,9 @@ export async function getClassStructure(
       ? parseJavapFields(primaryJavapStdout)
       : [];
   let fields: ClassStructureField[] = rawFields.map((f) => javapFieldToStructure(f, className, skeleton, sourceAvailable));
+  if (kotlinOverlay) {
+    fields = fields.map((f) => (f.javadoc === null ? { ...f, javadoc: kotlinOverlay.fieldKdoc(f.name) } : f));
+  }
   if (javapAnnIndex) {
     fields = fields.map((ff) => {
       const extra = javapAnnIndex.fields[ff.name];
@@ -549,7 +576,8 @@ export async function getClassStructure(
     });
   }
 
-  const provenance = buildClassStructureProvenance({ sourceRead, ownerHit });
+  const provenance = buildClassStructureProvenance({ sourceRead: effectiveRead, ownerHit });
+  const sourceLanguage: SourceLanguage | undefined = javaSourceHit ? 'java' : kotlinOverlay ? 'kotlin' : undefined;
 
   let typeHierarchy: ClassStructureTypeHierarchy | undefined;
   if (wantHierarchy) {
@@ -581,7 +609,8 @@ export async function getClassStructure(
     methods,
     sourceAvailable,
     provenance,
-    classPurpose: skeleton?.typeJavadoc ?? null,
+    classPurpose: skeleton?.typeJavadoc ?? kotlinOverlay?.typeKdoc ?? null,
+    ...(sourceLanguage ? { sourceLanguage } : {}),
     ...(typeHierarchy ? { typeHierarchy } : {}),
     ...(classAnnotations ? { classAnnotations } : {}),
   };
