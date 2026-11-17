@@ -89,6 +89,7 @@ async function applyExcerptToSuccess(
     extracted.sourceAvailable,
     normalized,
     supertypeResolver,
+    extracted.sourceLanguage,
   );
   if (!applied.ok) {
     return { ok: false, error: applied.error };

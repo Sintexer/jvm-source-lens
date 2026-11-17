@@ -6,7 +6,7 @@
 
 export type EvalPrompt = {
   id: string;
-  category: 'direct' | 'indirect' | 'multimodule' | 'sloppy' | 'filecontext' | 'negative';
+  category: 'direct' | 'indirect' | 'multimodule' | 'sloppy' | 'filecontext' | 'kotlin' | 'negative';
   prompt: string;
   /** Should the agent use jvmsrc at all? `false` for negative prompts. */
   expectJvmsrc: boolean;

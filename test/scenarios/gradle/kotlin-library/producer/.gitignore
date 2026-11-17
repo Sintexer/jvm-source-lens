@@ -1,0 +1,4 @@
+.gradle/
+build/
+# Generated locally via scripts/ensure-scenario-wrappers.sh — not committed
+gradle/wrapper/gradle-wrapper.jar

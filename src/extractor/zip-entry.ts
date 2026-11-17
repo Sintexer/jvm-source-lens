@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { unzipSync } from 'fflate';
 import type { ClassSourceError } from './class-source-types.js';
+import { packageNameFromSource } from '../class-search/source-package.js';
 import { checkJarSize } from './jar-size-guard.js';
 
 function normalizeZipEntryName(name: string): string {
@@ -76,6 +77,47 @@ export function readZipEntryBytes(jarAbsPath: string, entryRelPath: string): Rea
       reason: 'error',
       error: zipReadError(jarAbsPath, want, `Invalid or unsupported ZIP: ${msg}`),
     };
+  }
+}
+
+export type FindSourceEntriesResult =
+  | { ok: true; entryRelPaths: string[] }
+  | { ok: false; error: ClassSourceError };
+
+/**
+ * Entries named `fileName` (any folder) whose `package` line is `packageName`. Kotlin
+ * Multiplatform sources JARs store `commonMain/Job.kt`, not `kotlinx/coroutines/Job.kt`, so the
+ * package line decides which same-named file belongs to the class. `packageName` is empty for
+ * the default package. Results are sorted for a stable pick.
+ */
+export function findSourceEntriesByFileName(
+  jarAbsPath: string,
+  fileName: string,
+  packageName: string,
+): FindSourceEntriesResult {
+  const size = checkJarSize(jarAbsPath);
+  if (!size.ok) {
+    return { ok: false, error: zipReadError(jarAbsPath, fileName, size.message) };
+  }
+  let raw: Uint8Array;
+  try {
+    raw = readFileSync(jarAbsPath);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: zipReadError(jarAbsPath, fileName, `Failed to read archive: ${msg}`) };
+  }
+  const baseOf = (name: string): string => normalizeZipEntryName(name).split('/').pop() ?? '';
+  try {
+    const files = unzipSync(raw, { filter: (info) => baseOf(info.name) === fileName });
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    const entryRelPaths = Object.entries(files)
+      .filter(([, bytes]) => (packageNameFromSource(decoder.decode(bytes)) ?? '') === packageName)
+      .map(([name]) => normalizeZipEntryName(name))
+      .sort();
+    return { ok: true, entryRelPaths };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: zipReadError(jarAbsPath, fileName, `Invalid or unsupported ZIP: ${msg}`) };
   }
 }
 

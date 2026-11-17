@@ -28,6 +28,37 @@ describe('mergeSourceExcerptInputs', () => {
   });
 });
 
+describe('applySourceExcerpt on non-Java source', () => {
+  const kt = 'package q\n\nclass Box {\n  fun getName() = "n"\n}\n';
+
+  test('shouldExplainJavaOnlyWhenMethodNamesAreRequestedForKotlin', () => {
+    const r = applySourceExcerpt(kt, 'q.Box', true, { methodNames: ['getName'] }, 'kotlin');
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe('EXCERPT_REQUEST_INVALID');
+      expect(r.error.message).toBe('method excerpts are Java-only for kotlin source; use startLine/endLine.');
+    }
+  });
+
+  test('shouldExplainJavaOnlyWhenMethodNamesAndLinesAreMixedForKotlin', () => {
+    const r = applySourceExcerpt(kt, 'q.Box', true, { methodNames: ['getName'], startLine: 3, endLine: 4 }, 'kotlin');
+    expect(r.ok).toBe(false);
+  });
+
+  test('shouldSliceLinesWhenOnlyARangeIsRequestedForKotlin', () => {
+    const r = applySourceExcerpt(kt, 'q.Box', true, { startLine: 3, endLine: 4 }, 'kotlin');
+    expect(r.ok).toBe(true);
+    if (r.ok && r.excerpt) {
+      expect(r.source.trimEnd()).toBe('class Box {\n  fun getName() = "n"');
+    }
+  });
+
+  test('shouldKeepJavaBehaviourWhenLanguageIsOmitted', () => {
+    const r = applySourceExcerpt(boxSource, 'q.Box', true, { methodNames: ['getName'] });
+    expect(r.ok).toBe(true);
+  });
+});
+
 describe('collectMethodSourceSpans', () => {
   test('records constructor and methods', () => {
     const spans = collectMethodSourceSpans(boxSource, 'q.Box');

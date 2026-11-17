@@ -84,6 +84,7 @@ Current scenarios:
 | `gradle/local-maven-publish/` | Snapshot publish → resolve → republish with new method → automatic cache invalidation via local-artifact digest (no `forceRefresh` required) |
 | `gradle/dependency-change/` | Edit `build.gradle` to bump a stable dependency version → build-input digest changes → automatic re-resolution; cache hit when nothing changes |
 | `gradle/version-conflict/` | Direct dep (v2) and transitive dep (v1) of the same library — tool reports exactly the version Gradle selected (highest-wins), not a stale or wrong-version JAR |
+| `gradle/kotlin-library/` | A Kotlin library published with a sources JAR, used from a Java project — `get` returns the `.kt` source (class and `*Kt` facade) with `sourceLanguage: kotlin`; `methodNames` gives the Java-only message; line ranges work; structure uses `javap` |
 
 Stub directories `scenarios/maven/` and `scenarios/bazel/` reserve space for future build systems.
 

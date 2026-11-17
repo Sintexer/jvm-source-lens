@@ -1,0 +1,15 @@
+plugins {
+    id 'java'
+}
+
+repositories {
+    maven {
+        // JVMSRC_LOCAL_MAVEN_REPO is set by the test to a temp directory.
+        url = uri(System.getenv('JVMSRC_LOCAL_MAVEN_REPO') ?: "$rootDir/../producer/build/local-repo")
+    }
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.example:kt-lib:1.0.0'
+}

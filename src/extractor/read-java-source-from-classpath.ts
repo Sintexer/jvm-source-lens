@@ -8,7 +8,7 @@ import type {
 import { isClasspathBinaryJarArtifact, isExternalJarArtifact } from './class-source-types.js';
 import { locateTypeDeclaration } from '../class-structure/locate-type-declaration.js';
 import { findExternalJarAmongArtifacts } from './find-external-class-jar.js';
-import { readJarClassSourceFile } from './class-file-source-file.js';
+import { packageOfClassName, readJarClassSourceFile } from './class-file-source-file.js';
 import { fqnToSourceCandidates, withSourceFileCandidate } from './fqn-paths.js';
 import { nestedTypeNames, anonymousOrLocalClassError } from './nested-class-source.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
@@ -16,7 +16,7 @@ import { tryReadLocalModuleJavaSource } from './local-module-sources.js';
 import { moduleTreeSourceRelPaths } from './interproject-paths.js';
 import { readInterprojectJavaIfPresent } from './read-interproject-java-source.js';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
-import { readZipEntryUtf8 } from './zip-entry.js';
+import { findSourceEntriesByFileName, readZipEntryUtf8 } from './zip-entry.js';
 
 function tryReadSourceFromJar(
   sourcesJarPath: string,
@@ -235,12 +235,20 @@ export async function tryReadJavaSourceFromClasspath(
   if (sourcesJarPath !== null && sourcesJarPath.length > 0) {
     const sourceFile = readJarClassSourceFile(hit.classpath, paths.classRelPath);
     const javaSourceFile = sourceFile !== null && sourceFile.endsWith('.java') ? sourceFile : null;
-    const fromResolved = await readFirstCandidate(
+    const readFromJar = async (rel: string) => tryReadSourceFromJar(sourcesJarPath!, rel, opts.className, coordinates);
+    let fromResolved = await readFirstCandidate(
       withSourceFileCandidate(opts.className, paths.sourceRelPaths, javaSourceFile),
       opts.className,
-      async (rel) => tryReadSourceFromJar(sourcesJarPath!, rel, opts.className, coordinates),
+      readFromJar,
       paths.sourceRelPaths[0]!,
     );
+    if (fromResolved === null && javaSourceFile !== null) {
+      const byName = findSourceEntriesByFileName(sourcesJarPath, javaSourceFile, packageOfClassName(opts.className));
+      if (!byName.ok) {
+        return { ok: false, error: byName.error };
+      }
+      fromResolved = await readFirstCandidate(byName.entryRelPaths, opts.className, readFromJar, paths.sourceRelPaths[0]!);
+    }
     if (fromResolved !== null) {
       return fromResolved;
     }

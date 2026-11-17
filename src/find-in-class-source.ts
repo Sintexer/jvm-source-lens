@@ -141,8 +141,12 @@ export async function findInClassSource(
 }
 
 /** Searches the nested declaration when `className` is nested. Line numbers stay file-relative. */
-function searchWindow(source: string, className: string): { text: string; lineOffset: number } {
-  if (!className.includes('$')) {
+function searchWindow(
+  source: string,
+  className: string,
+  sourceLanguage: string,
+): { text: string; lineOffset: number } {
+  if (!className.includes('$') || sourceLanguage !== 'java') {
     return { text: source, lineOffset: 0 };
   }
   const span = locateTypeDeclaration(source, nestedTypeNames(className));
@@ -179,7 +183,7 @@ export async function searchExtractedSource(
   extracted: Extract<ClassSourceLookupResult, { ok: true }>,
   opts: Pick<FindInClassSourceOptions, 'query' | 'contextLines' | 'maxHits' | 'regex'>,
 ): Promise<FindInClassSourceResult> {
-  const window = searchWindow(extracted.source, extracted.className);
+  const window = searchWindow(extracted.source, extracted.className, extracted.sourceLanguage);
   const search = await searchClassSourceTextAsync(window.text, {
     query: opts.query,
     contextLines: opts.contextLines,

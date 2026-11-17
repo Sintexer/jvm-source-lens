@@ -89,6 +89,14 @@ describe('tryReadJavaSourceFromClasspath SourceFile attribute', () => {
     return baseOutput(dir, [artifact({ group: 'com.x', name: 'lib', jarPath: binJar, sourcesJarPath: sourcesJar })]);
   }
 
+  test('shouldFindJavaFileInOddFolderWhenPackageLineMatches', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-read-src-'));
+    const java = 'package com.x;\npublic class Foo {\n  void run(int times) {}\n}\n';
+    const out = libWith(dir, 'com/x/Foo.class', 'com/x/Foo', 'Foo.java', { 'src/gen/Foo.java': java });
+    const r = await tryReadJavaSourceFromClasspath(out, { className: 'com.x.Foo' });
+    expect(r.ok && r.hit).toBe(true);
+  });
+
   test('shouldNotHitWhenSourceFileIsKotlin', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-read-src-'));
     const out = libWith(dir, 'com/x/FooKt.class', 'com/x/FooKt', 'Foo.kt', {

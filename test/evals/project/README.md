@@ -7,4 +7,4 @@ Tiny three-module Gradle project used by the MCP eval harness (`bun run eval`, s
 | root | applies `java` with no dependencies: a `compileClasspath` that exists but is **empty**, like many real builds (it once shadowed the submodules when `modulePath` was omitted) |
 | `:core` | commons-lang3 3.14.0 (`api`), a local `UserService` class |
 | `:app` | jackson-databind **2.15.2**, slf4j-api, spring-retry (`RetryTemplate`), `:core` |
-| `:worker` | jackson-databind **2.14.2** (different version on purpose), guava (`Lists`, `ImmutableList`), slf4j-api |
+| `:worker` | jackson-databind **2.14.2** (different version on purpose), guava (`Lists`, `ImmutableList`), slf4j-api, kotlinx-coroutines-core-jvm **1.10.2** (Kotlin: `.kt` sources in a Multiplatform sources JAR, `*Kt` facade classes) |

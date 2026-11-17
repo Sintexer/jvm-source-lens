@@ -1,0 +1,30 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '2.3.21'
+    id 'maven-publish'
+}
+
+group = 'com.example'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    // The sources JAR carries the .kt files, so jvmsrc reads Kotlin text instead of decompiling.
+    withSourcesJar()
+}
+
+publishing {
+    publications {
+        mavenKotlin(MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            // JVMSRC_LOCAL_MAVEN_REPO is set by the test to a temp directory.
+            url = uri(System.getenv('JVMSRC_LOCAL_MAVEN_REPO') ?: layout.buildDirectory.dir('local-repo').get().asFile)
+        }
+    }
+}

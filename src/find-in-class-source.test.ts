@@ -71,4 +71,28 @@ describe('searchExtractedSource', () => {
       expect(build.hits[0]!.line).toBe(fileLine);
     }
   });
+
+  test('shouldSearchTheWholeKotlinFileWhenTheNameIsNested', async () => {
+    const kt = 'package com.example\n\nclass Outer {\n  class Inner\n  fun outerOnly() = 1\n}\n';
+    const r = await searchExtractedSource(
+      { ...extracted(kt, 'com.example.Outer$Inner'), sourceLanguage: 'kotlin' },
+      { query: 'outerOnly', contextLines: 0 },
+    );
+    expect(r.ok && r.found).toBe(true);
+    if (r.ok && r.found) {
+      expect(r.hits[0]!.line).toBe(5);
+    }
+  });
+
+  test('shouldReportKotlinLinesWhenTheNameIsTopLevel', async () => {
+    const kt = 'package com.example\n\nfun hello() = "hi"\n';
+    const r = await searchExtractedSource(
+      { ...extracted(kt, 'com.example.GreetKt'), sourceLanguage: 'kotlin' },
+      { query: 'hello', contextLines: 0 },
+    );
+    expect(r).toMatchObject({ ok: true, found: true, hitCount: 1 });
+    if (r.ok && r.found) {
+      expect(r.hits[0]!.line).toBe(3);
+    }
+  });
 });

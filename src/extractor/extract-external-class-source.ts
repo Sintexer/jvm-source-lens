@@ -7,7 +7,7 @@ import {
 } from './class-source-types.js';
 import { isClasspathBinaryJarArtifact, isExternalJarArtifact } from './class-source-types.js';
 import { findExternalJarAmongArtifacts } from './find-external-class-jar.js';
-import { readJarClassSourceFile } from './class-file-source-file.js';
+import { packageOfClassName, readJarClassSourceFile } from './class-file-source-file.js';
 import { fqnToSourceCandidates, withSourceFileCandidate } from './fqn-paths.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
 import { tryReadLocalModuleJavaSource } from './local-module-sources.js';
@@ -15,7 +15,7 @@ import { presentNestedSource, anonymousOrLocalClassError } from './nested-class-
 import { moduleTreeSourceRelPaths } from './interproject-paths.js';
 import { readInterprojectJavaIfPresent } from './read-interproject-java-source.js';
 import type { ResolutionOutput, ResolvedArtifact } from '../resolvers/resolution-output.js';
-import { readZipEntryUtf8 } from './zip-entry.js';
+import { findSourceEntriesByFileName, readZipEntryUtf8 } from './zip-entry.js';
 
 function tryReadSourceFromJar(
   sourcesJarPath: string,
@@ -212,13 +212,22 @@ export async function extractExternalClassSource(
   }
 
   if (sourcesJarPath !== null && sourcesJarPath.length > 0) {
-    const fromResolved = readSourcesJarCandidates(
+    const sourceFile = readJarClassSourceFile(hit.classpath, paths.classRelPath);
+    const exact = paths.sourceRelPaths[0]!;
+    let fromResolved = readSourcesJarCandidates(
       sourcesJarPath,
-      withSourceFileCandidate(opts.className, paths.sourceRelPaths, readJarClassSourceFile(hit.classpath, paths.classRelPath)),
-      paths.sourceRelPaths[0]!,
+      withSourceFileCandidate(opts.className, paths.sourceRelPaths, sourceFile),
+      exact,
       opts.className,
       coordinates,
     );
+    if (fromResolved === null && sourceFile !== null) {
+      const byName = findSourceEntriesByFileName(sourcesJarPath, sourceFile, packageOfClassName(opts.className));
+      if (!byName.ok) {
+        return { ok: false, error: byName.error };
+      }
+      fromResolved = readSourcesJarCandidates(sourcesJarPath, byName.entryRelPaths, exact, opts.className, coordinates);
+    }
     if (fromResolved !== null) {
       return fromResolved;
     }

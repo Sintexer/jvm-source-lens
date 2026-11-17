@@ -1,4 +1,5 @@
 import { collectMethodSourceSpans } from './class-structure/parse-java-type-metadata.js';
+import type { SourceLanguage } from './extractor/class-source-types.js';
 
 export type SourceExcerptRequest = {
   /** Simple or JVM names; use `<init>` for constructors. Order preserved for output. */
@@ -213,10 +214,20 @@ export function applySourceExcerpt(
   className: string,
   sourceAvailable: boolean,
   request: SourceExcerptRequest | null,
+  sourceLanguage: SourceLanguage = 'java',
 ): ApplySourceExcerptResult | { ok: true; source: string; excerpt?: undefined } {
   const normalized = request === null ? null : normalizeSourceExcerptRequest(request);
   if (!normalized) {
     return { ok: true, source };
+  }
+  if (sourceLanguage !== 'java' && (normalized.methodNames?.length ?? 0) > 0) {
+    return {
+      ok: false,
+      error: {
+        code: 'EXCERPT_REQUEST_INVALID',
+        message: `method excerpts are Java-only for ${sourceLanguage} source; use startLine/endLine.`,
+      },
+    };
   }
 
   const lineErr = validateLineRange(normalized.startLine, normalized.endLine);

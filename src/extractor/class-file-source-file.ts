@@ -137,6 +137,12 @@ export function readSourceFileAttribute(bytes: Uint8Array): string | null {
   return value;
 }
 
+/** Package of a binary name: `com.x.Foo$Bar` is `com.x`; a default-package name is empty. */
+export function packageOfClassName(className: string): string {
+  const dot = className.lastIndexOf('.');
+  return dot < 0 ? '' : className.slice(0, dot);
+}
+
 /** `SourceFile` of `classRelPath` in `jarPath`. A read failure gives null; name-based lookup still runs. */
 export function readJarClassSourceFile(jarPath: string, classRelPath: string): string | null {
   const r = readZipEntryBytes(jarPath, classRelPath);

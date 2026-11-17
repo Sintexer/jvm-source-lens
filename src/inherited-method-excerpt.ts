@@ -1,7 +1,7 @@
 import { collectMethodSourceSpans, parseJavaTypeMetadata } from './class-structure/parse-java-type-metadata.js';
 import { parseJavapClassHeader } from './class-structure/javap-parse.js';
 import { spawnJavapVerbose } from './class-structure/spawn-javap.js';
-import type { ResolveSourcesJarFn } from './extractor/class-source-types.js';
+import type { ResolveSourcesJarFn, SourceLanguage } from './extractor/class-source-types.js';
 import { findClasspathOwningClass } from './extractor/find-external-class-jar.js';
 import { tryReadJavaSourceFromClasspath } from './extractor/read-java-source-from-classpath.js';
 import type { ResolutionOutput } from './resolvers/resolution-output.js';
@@ -198,12 +198,13 @@ export async function applySourceExcerptWithInheritance(
   sourceAvailable: boolean,
   request: SourceExcerptRequest | null,
   resolveSupertype: ResolveSupertypeFn | undefined,
+  sourceLanguage: SourceLanguage = 'java',
 ): Promise<ApplySourceExcerptWithInheritanceResult | { ok: true; source: string; excerpt?: undefined }> {
-  const primary = applySourceExcerpt(source, className, sourceAvailable, request);
+  const primary = applySourceExcerpt(source, className, sourceAvailable, request, sourceLanguage);
 
   const normalized = request === null ? null : normalizeSourceExcerptRequest(request);
   const requestedMethodNames = normalized?.methodNames ?? [];
-  if (requestedMethodNames.length === 0 || !resolveSupertype) {
+  if (requestedMethodNames.length === 0 || !resolveSupertype || sourceLanguage !== 'java') {
     return primary;
   }
 

@@ -596,6 +596,46 @@ describe('extractExternalClassSource SourceFile attribute', () => {
     }
   });
 
+  test('shouldFindKotlinFileInSourceSetFolderWhenPackageLineMatches', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-sf-'));
+    const kt = 'package com.x\n\ninterface Job\n';
+    const other = 'package com.x.flow\n\ninterface Job\n';
+    const out = libWith(
+      dir,
+      { 'com/x/Job.class': buildClassFile({ internalName: 'com/x/Job', sourceFile: 'Job.kt' }) },
+      { 'commonMain/flow/Job.kt': other, 'commonMain/Job.kt': kt },
+    );
+    const r = await extractExternalClassSource(out, { className: 'com.x.Job', decompileExternalClass: failDecompile });
+    expect(r.ok).toBe(true);
+    if (!r.ok) {
+      return;
+    }
+    expect(r.source).toBe(kt);
+    expect(r.sourceLanguage).toBe('kotlin');
+    if (r.provenance.kind === 'sourcesJar') {
+      expect(r.provenance.sourceRelativePath).toBe('commonMain/Job.kt');
+    }
+  });
+
+  test('shouldDecompileWhenNoSameNamedFileHasTheClassPackage', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-sf-'));
+    const out = libWith(
+      dir,
+      { 'com/x/Job.class': buildClassFile({ internalName: 'com/x/Job', sourceFile: 'Job.kt' }) },
+      { 'commonMain/other/Job.kt': 'package com.y\n\ninterface Job\n' },
+    );
+    let decompiled = false;
+    const r = await extractExternalClassSource(out, {
+      className: 'com.x.Job',
+      decompileExternalClass: async (opts) => {
+        decompiled = true;
+        return failDecompile(opts);
+      },
+    });
+    expect(decompiled).toBe(true);
+    expect(r.ok).toBe(false);
+  });
+
   test('shouldUseNameCandidatesWhenClassHasNoSourceFile', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-sf-'));
     const binJar = path.join(dir, 'lib.jar');

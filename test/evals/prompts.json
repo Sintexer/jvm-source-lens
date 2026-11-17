@@ -453,5 +453,45 @@
       "get_class_structure"
     ],
     "expectModule": ":core"
+  },
+  {
+    "id": "k01",
+    "category": "kotlin",
+    "prompt": "Show me the implementation of the top-level function kotlinx.coroutines.delay in the worker module.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_source",
+      "search_classes",
+      "find_in_class_source"
+    ]
+  },
+  {
+    "id": "k02",
+    "category": "kotlin",
+    "prompt": "Show me the source of kotlinx.coroutines.CoroutineScope in the worker module.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_source",
+      "get_class_structure"
+    ]
+  },
+  {
+    "id": "k03",
+    "category": "kotlin",
+    "prompt": "Show me lines 1 to 60 of the kotlinx.coroutines.Job source in the worker module.",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_source"
+    ]
+  },
+  {
+    "id": "k04",
+    "category": "kotlin",
+    "prompt": "What public API does kotlinx.coroutines.Job declare in the worker module?",
+    "expectJvmsrc": true,
+    "expectFirstTools": [
+      "get_class_structure",
+      "get_class_source"
+    ]
   }
 ]

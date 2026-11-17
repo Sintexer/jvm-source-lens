@@ -26,6 +26,8 @@ projects=(
   "gradle-properties-version/lib"
   "gradle-properties-version/app"
   "flatdir-jar/app"
+  "kotlin-library/producer"
+  "kotlin-library/consumer"
 )
 
 if ! command -v gradle >/dev/null 2>&1; then

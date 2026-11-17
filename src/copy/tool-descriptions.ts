@@ -26,7 +26,7 @@ export const MCP_TOOL_COPY = {
 
   get_class_source: {
     title: 'Get Java source for a class',
-    description: `Read a dependency class's Java source, ideally only specific methods via methodNames (or startLine/endLine). Use only when you need the implementation, not names or signatures. Sources JAR if present, else decompiled (sourceAvailable=false). Whole files over ~64KiB are refused: pass methodNames.`,
+    description: `Read a dependency class's Java source, ideally only specific methods via methodNames (or startLine/endLine; Kotlin/Scala/Groovy: startLine/endLine only). Use only when you need the implementation, not names or signatures. Sources JAR if present, else decompiled (sourceAvailable=false). Whole files over ~64KiB are refused: pass methodNames.`,
   },
 
   resolve_dependencies: {

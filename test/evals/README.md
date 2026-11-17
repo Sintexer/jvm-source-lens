@@ -5,7 +5,7 @@ It drives Claude Code headlessly (`claude -p`, your existing login, no API key).
 network + Gradle, so it is **not** part of `bun test` or CI (only `scoring.test.ts` runs there).
 
 ```bash
-bun run eval                              # all 48 prompts
+bun run eval                              # all 52 prompts
 bun run eval --filter negative            # a category or id; comma-separate several: d01,i05,m03
 bun run eval --limit 5                    # first N prompts (cheap smoke run)
 bun run eval --mode competing             # also allow WebSearch / WebFetch
@@ -23,15 +23,16 @@ bun run eval --rescore test/evals/results/<run>   # re-score saved transcripts, 
 - Isolation: `--strict-mcp-config` and `--setting-sources project`, so your user-level `CLAUDE.md`, hooks and MCP servers do not leak in.
 - Tools allowed: jvmsrc, Read/Grep/Glob, and read-only Bash (including `javap`, `unzip`, `jar`) **on purpose**: the point is to see whether the agent prefers jvmsrc, not to force it. Anything else is denied (`dontAsk`).
 
-## Prompts (`prompts.json`, 44)
+## Prompts (`prompts.json`, 52)
 
 | Category | n | What it checks |
 |---|---|---|
-| `direct` | 10 | Names a library class/method: should go straight to jvmsrc |
+| `direct` | 14 | Names a library class/method: should go straight to jvmsrc |
 | `indirect` | 10 | Symptoms ("NoSuchMethodError…", "which library defines…"): should still pick jvmsrc |
 | `multimodule` | 8 | Class only in one module, or the same artifact at different versions per module |
 | `sloppy` | 6 | Simple names, `.class` paths, `Outer.Inner`, module without `:` |
 | `filecontext` | 4 | Only a file the user is editing is named (no module): the agent should pass `modulePath` (module or that file) on its first call so it gets *that module's* versions |
+| `kotlin` | 4 | kotlinx-coroutines in `:worker`: a `*Kt` facade, a class, a line range, a structure question. Source must come back as `.kt` |
 | `negative` | 6 | Questions about this repo's own code or general Java: must **not** call jvmsrc |
 
 Each prompt has `expectJvmsrc` and `expectFirstTools` (any-of sensible first jvmsrc calls).
@@ -74,6 +75,8 @@ Add one row for each full run. Write the model and the client version in the row
 | 2026-11-10 | Checkpoint 3 code, default mode, 44 prompts, Claude Code 2.1.322, default model (not recorded by the harness), jvmsrc + read-only Bash, no hook | 100% (38/38; 6/6 negatives) | 87% strict (33/38) / 97% usable (37/38) | 97% | 0% | Precision 100%, 1.45 calls/task, filecontext module correct 100%, all 44 prompts passed. 5 first-call errors: 4 `MODULE_AMBIGUOUS` on `ObjectMapper` (`i08`, `m03`, `s01`, `s03`; retry-ready, all recovered in the next call), 1 `search_classes` with no `query` (`i07`): the agent called before `ToolSearch` loaded the schema, then recovered. Eager tokens 1,982 (`chars / 4`). Hook not measured in this run; see the probe below |
 | 2026-11-10 | Checkpoint 3 code, `--with-hook`, 44 prompts, Claude Code 2.1.322, default model (not recorded), jvmsrc + read-only Bash | 100% (38/38; 6/6 negatives) | 87% strict (33/38) / 97% usable (37/38) | 97% | 0% | All 44 passed. Filecontext module correct 100%. No run made a Bash call, so 0 denials here. The hook was checked with a separate probe (below) |
 | 2026-11-10 | Checkpoint 3 code, `--mode competing`, 44 prompts, Claude Code 2.1.322, default model (not recorded), jvmsrc + read-only Bash + WebSearch/WebFetch | 100% (38/38; 6/6 negatives) | 89% strict (34/38) / 100% usable (38/38) | 97% | 0% | All 44 passed. Filecontext module correct 100%. No web tool used. The strict gain is the `i07` empty call, which did not recur |
+| 2026-11-17 | Checkpoint 6 code, `--filter kotlin` (4 Kotlin prompts), default mode, Claude Code 2.1.325, default model (not recorded), jvmsrc + read-only Bash | 100% (4/4) | 75% strict / 75% usable (3/4) | 100% | 0% | All 4 passed, 1.3 calls/task, eager tokens 1,993 (`chars / 4`). `get` returned `.kt` text for the `DelayKt` facade, `CoroutineScope` and `Job` from the Multiplatform sources JAR. The one first-call error is `k01`: the agent passed `methodNames: "delay"` on Kotlin source, got the Java-only message and retried with a line range. This is the designed behavior until checkpoint 7 |
+| 2026-11-17 | Checkpoint 6 code, `--limit 5` (`d01`–`d05`) regression check, same setup | 100% (5/5) | 100% / 100% | 100% | 0% | All 5 passed, 1.0 calls/task. Not a full run |
 
 **Hook probe (2026-11-10, after the `--with-hook` run).** The prompt asked for `javap -version` with the hook installed, in `project/`, with the harness flags. The hook denied the call. The agent got the deny reason as the tool result (`PreToolUse:Bash hook error: Blocked: javap reads whatever version is on disk … Use the jvmsrc MCP tools instead …`) and reported it to the user. Cost $0.06. Scoring counts this as a hook denial (`isHookDenial`).
 The eval prompts never make the agent reach for a shell command, so the harness cannot test the hook on its own. The probe is the only check of the hook path.

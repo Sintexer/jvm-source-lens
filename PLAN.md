@@ -23,7 +23,7 @@ Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGEL
 
 Released together in 1.19.0: checkpoints 1 and 2.
 
-Checkpoints 3, 4 and 5 are done and not released. Release them in order: 3, 4, then 5. Checkpoint 6 is in progress.
+Checkpoints 3, 4, 5 and 6 are done and not released. Release them in order: 3, 4, 5, then 6.
 
 
 | # | Checkpoint | Why at this position | Size |
@@ -110,7 +110,7 @@ Checkpoints 3, 4 and 5 are done and not released. Release them in order: 3, 4, t
 
 **Done when:** `ImmutableList$Builder` with `methodNames: ["build"]` succeeds with sources and without sources.
 
-## Checkpoint 6 — Non-Java source lookup (Kotlin, Scala, Groovy)
+## Checkpoint 6 — Non-Java source lookup (Kotlin, Scala, Groovy) (done)
 
 **Problem:** the lookup expects `Foo.java`. Kotlin sources JARs contain `.kt` files, and the class name and the file name often differ (`FooKt`, many classes in one file). Today these classes go to CFR.
 
@@ -120,9 +120,11 @@ Checkpoints 3, 4 and 5 are done and not released. Release them in order: 3, 4, t
   Result: a `.java` lookup also tries `.kt`, `.scala` and `.groovy`. A compiled class's `SourceFile` is tried first (`FooKt` → `Foo.kt`). The index FQN is the `package` declaration plus the file name. Kotlin text is not passed to the Java parser.
 - [x] Response: add `sourceLanguage` (`java` | `kotlin` | `scala` | `groovy`). `sourceAvailable: true` for original source. Update SPEC §7.1.
   Result: the field is the extension of the file that was read. CFR text is `java` with `sourceAvailable: false`. CLI stderr, `--json` and MCP `get_class_source` include it.
-- [ ] Line-range excerpts and `find_in_class_source` work on all languages. For non-Java files, `methodNames` returns a clear message ("method excerpts are Java-only; use startLine/endLine") until checkpoint 7. `get_class_structure` uses `javap` for non-Java.
-- [ ] Scenario `test/scenarios/gradle/kotlin-library/`: a Kotlin producer publishes a JAR and a sources JAR to a temp Maven repo, and a Java consumer uses it.
-- [ ] Evals: add a Kotlin dependency to the eval project and 4 Kotlin prompts.
+- [x] Line-range excerpts and `find_in_class_source` work on all languages. For non-Java files, `methodNames` returns a clear message ("method excerpts are Java-only; use startLine/endLine") until checkpoint 7. `get_class_structure` uses `javap` for non-Java.
+  Result: `methodNames` on non-Java source returns `EXCERPT_REQUEST_INVALID` with the Java-only message (no new code). `find_in_class_source` does not narrow a nested name in non-Java files.
+- [x] Scenario `test/scenarios/gradle/kotlin-library/`: a Kotlin producer publishes a JAR and a sources JAR to a temp Maven repo, and a Java consumer uses it.
+- [x] Evals: add a Kotlin dependency to the eval project and 4 Kotlin prompts.
+  Result: kotlinx-coroutines-core-jvm 1.10.2 in `:worker`, new `kotlin` category (`k01`–`k04`). 4/4 passed, 75% first-call (the miss is the designed Java-only message). The run found a real gap: Kotlin Multiplatform sources JARs use `commonMain/…` folders, so the `<package dir>/<SourceFile>` path missed and every class went to CFR. Fix: if that path is absent, scan the sources JAR for the `SourceFile` name and keep entries whose `package` line matches (SPEC §7.1). Facades of `@JvmMultifileClass` files (`BuildersKt`, `JobKt`) have no `SourceFile` and still go to CFR. Scala and Groovy are covered by unit tests only, not by a scenario or eval.
 
 **Done when:** a class from a Kotlin library (including a `FooKt` facade) returns its `.kt` source with `sourceAvailable: true`.
 
