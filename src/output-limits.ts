@@ -24,6 +24,11 @@ export type FullSourceSizeCheck =
   | { ok: true }
   | { ok: false; charLength: number; maxChars: number; message: string };
 
+/** First sentence of the `SOURCE_OUTPUT_TOO_LARGE` message; also the MCP error summary. */
+export function fullSourceTooLargeSummary(className: string, charLength: number, maxChars: number): string {
+  return `Full source for ${JSON.stringify(className)} is ${charLength} chars (limit ${maxChars}).`;
+}
+
 /** True when unscoped full source must be refused (agent must narrow with excerpts). */
 export function checkUnscopedFullSourceSize(className: string, source: string): FullSourceSizeCheck {
   const maxChars = maxFullSourceChars();
@@ -36,9 +41,8 @@ export function checkUnscopedFullSourceSize(className: string, source: string): 
     charLength,
     maxChars,
     message:
-      `Refusing unscoped full source for ${JSON.stringify(className)}: ` +
-      `${charLength} characters exceeds JVMSRC_MAX_FULL_SOURCE_CHARS (${maxChars}). ` +
-      `Pass methodNames or startLine/endLine to narrow the response.`,
+      `${fullSourceTooLargeSummary(className, charLength, maxChars)} ` +
+      `Pass methodNames or startLine/endLine, or raise JVMSRC_MAX_FULL_SOURCE_CHARS.`,
   };
 }
 

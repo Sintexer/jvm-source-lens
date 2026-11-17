@@ -72,6 +72,9 @@ describe('normalizeClassNameSyntax', () => {
     ['com.example.Foo.java', 'com.example.Foo'],
     ['com/example/Foo.class', 'com.example.Foo'],
     ['com\\example\\Foo', 'com.example.Foo'],
+    ['com/example/Foo.kt', 'com.example.Foo'],
+    ['com/example/Foo.scala', 'com.example.Foo'],
+    ['com/example/Foo.groovy', 'com.example.Foo'],
   ])('%j → %j', (raw, expected) => {
     expect(normalizeClassNameSyntax(raw)).toBe(expected);
   });

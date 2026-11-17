@@ -87,7 +87,8 @@ export interface DependencyResolver {
   detect(projectRoot: string): boolean;
   findBuildRoot(start: string): string | null;
   cacheInputs(projectRoot: string): BuildCacheInputs;
-  isImmutableArtifact(artifact: ResolvedArtifact): boolean;
+  /** `projectRoot` lets a resolver read project-level settings (e.g. Maven local repository). */
+  isImmutableArtifact(artifact: ResolvedArtifact, projectRoot: string): boolean;
   resolve(projectRoot: string, options?: ResolveOptions): Promise<ResolutionResult>;
   resolveSourcesJar(
     projectRoot: string,

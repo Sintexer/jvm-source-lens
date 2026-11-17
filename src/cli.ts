@@ -48,7 +48,7 @@ function injectImplicitGetSubcommand(): void {
 
 injectImplicitGetSubcommand();
 
-/** Same discovery as MCP (`JVMSRC_PROJECT_ROOT`, then cwd, lifted to the Gradle root); the lift note goes to stderr. */
+/** Same discovery as MCP (`JVMSRC_PROJECT_ROOT`, then cwd, lifted to the build root); the lift note goes to stderr. */
 function cliProjectRoot(project: string | undefined, quiet = false): ResolvedProjectRoot {
   const root = resolveProjectRoot(project);
   if (root.ok && root.note && !quiet) {
@@ -64,25 +64,25 @@ const program = new Command();
 
 program
   .name('jvmsrc')
-  .description('JVM Source Lens — resolve JVM build-tool dependencies and extract sources (Gradle first)')
+  .description('JVM Source Lens — resolve Gradle and Maven dependencies and extract class sources')
   .version(pkg.version ?? '0.0.0');
 
 program
   .command('get')
   .description(
-    'Print Java source for a fully-qualified class (inter-project submodule source, sources JAR, or CFR fallback)',
+    'Print source for a fully-qualified class (inter-project submodule source, sources JAR, or CFR fallback)',
   )
   .argument('<className>', 'e.g. com.example.MyClass')
-  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle build containing cwd)')
-  .option('-m, --module <module>', 'Gradle module path (e.g. :core:utils); defaults to root')
+  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle or Maven build containing cwd)')
+  .option('-m, --module <module>', 'Module path (Gradle :core:utils or Maven artifactId / directory); defaults to root')
   .option(
     '-c, --configuration <name>',
     'Resolved configuration name (default: compileClasspath, or testCompileClasspath with --include-test)',
   )
   .option('--include-test', 'When --configuration is omitted, use testCompileClasspath (implied when --module is a src/test path)')
-  .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle', false)
-  .option('-q, --quiet', 'On success, write only Java source to stdout (no metadata JSON on stderr)', false)
-  .option('-v, --verbose', 'Stream Gradle stderr during resolution and sources JAR fetch', false)
+  .option('--force-refresh', 'Bypass resolution cache and re-invoke the build tool', false)
+  .option('-q, --quiet', 'On success, write only source to stdout (no metadata JSON on stderr)', false)
+  .option('-v, --verbose', 'Stream build-tool stderr during resolution and sources JAR fetch', false)
   .option('--json', 'Print one JSON object on stdout for success or failure (agent-friendly)', false)
   .option(
     '--method <name>',
@@ -168,11 +168,11 @@ program
 program
   .command('resolve')
   .description(
-    'Resolve Gradle dependencies (compact text summary by default; --full or --json for ResolutionOutput JSON)',
+    'Resolve build dependencies (compact text summary by default; --full or --json for ResolutionOutput JSON)',
   )
-  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle build containing cwd)')
-  .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle')
-  .option('-v, --verbose', 'Stream Gradle stderr during resolution', false)
+  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle or Maven build containing cwd)')
+  .option('--force-refresh', 'Bypass resolution cache and re-invoke the build tool')
+  .option('-v, --verbose', 'Stream build-tool stderr during resolution', false)
   .option('--full', 'Print full ResolutionOutput JSON (same as --json)', false)
   .option('--json', 'Alias for --full', false)
   .action(async (options: { project?: string; forceRefresh?: boolean; verbose?: boolean; full?: boolean; json?: boolean }) => {
@@ -221,17 +221,17 @@ program
 program
   .command('find-in-class')
   .description(
-    'Search resolved Java source for a class (literal substring by default; optional regex)',
+    'Search resolved source for a class (literal substring by default; optional regex)',
   )
   .argument('<className>', 'e.g. com.example.MyClass')
   .argument('<query>', 'substring or regex to find')
-  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle build containing cwd)')
-  .option('-m, --module <module>', 'Gradle module path (e.g. :core:utils)')
+  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle or Maven build containing cwd)')
+  .option('-m, --module <module>', 'Module path (Gradle :core:utils or Maven artifactId / directory)')
   .option('-c, --configuration <name>', 'Resolved configuration name')
   .option('--include-test', 'Use testCompileClasspath when configuration omitted (implied when --module is a src/test path)')
-  .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle', false)
+  .option('--force-refresh', 'Bypass resolution cache and re-invoke the build tool', false)
   .option('-q, --quiet', 'Disable progress labels on stderr', false)
-  .option('-v, --verbose', 'Stream Gradle stderr during resolution', false)
+  .option('-v, --verbose', 'Stream build-tool stderr during resolution', false)
   .option('--json', 'Print one JSON object on stdout (full structured result)', false)
   .option('--full', 'Alias for --json on find-in-class', false)
   .option('--context-lines <n>', 'Context lines above/below each hit (default 3)', (v) => parseInt(v, 10))
@@ -293,15 +293,15 @@ program
     'Search for a literal or regex query across all classes in one resolved dependency JAR',
   )
   .argument('<query>', 'substring or regex to find')
-  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle build containing cwd)')
+  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle or Maven build containing cwd)')
   .option('-g, --group <group>', 'Maven group ID (required with --name)')
   .option('-n, --name <name>', 'Maven artifact name (required with --group)')
   .option('--version <version>', 'Maven version (optional with coordinates)')
   .option('--jar-path <path>', 'Absolute JAR path from resolve output (alternative to coordinates)')
-  .option('-m, --module <module>', 'Gradle module path (e.g. :core:utils)')
+  .option('-m, --module <module>', 'Module path (Gradle :core:utils or Maven artifactId / directory)')
   .option('-c, --configuration <name>', 'Resolved configuration name')
   .option('--include-test', 'Use testCompileClasspath when configuration omitted (implied when --module is a src/test path)')
-  .option('--force-refresh', 'Bypass resolution cache and re-invoke Gradle', false)
+  .option('--force-refresh', 'Bypass resolution cache and re-invoke the build tool', false)
   .option('--regex', 'Treat query as a JavaScript RegExp pattern', false)
   .option('--context-lines <n>', 'Context lines above/below each hit (default 3)', (v) => parseInt(v, 10))
   .option('--max-hits <n>', 'Maximum total hits across all classes (default 20, max 100)', (v) => parseInt(v, 10))
@@ -418,7 +418,7 @@ const doctorCmd = new Command('doctor').description('Run environment diagnostics
 doctorCmd
   .command('java')
   .description('Diagnose project JDK requirement, selection, and candidate scan')
-  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle build containing cwd)')
+  .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle or Maven build containing cwd)')
   .action((options: { project?: string }) => {
     const root = cliProjectRoot(options.project);
     if (!root.ok) {

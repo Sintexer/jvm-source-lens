@@ -138,9 +138,28 @@ export class MavenResolver implements DependencyResolver {
     return mavenCacheInputs(projectRoot);
   }
 
-  isImmutableArtifact(artifact: ResolvedArtifact): boolean {
-    return isMavenImmutableArtifact(artifact);
+  isImmutableArtifact(artifact: ResolvedArtifact, projectRoot: string): boolean {
+    return isMavenImmutableArtifact(artifact, this.localRepositoryFor(projectRoot));
   }
+
+  /**
+   * Effective local repository, memoized for one synchronous pass (cleared on the next microtask),
+   * so a digest over many artifacts reads the settings once and a long session still sees edits.
+   */
+  private localRepositoryFor(projectRoot: string): string {
+    const root = path.resolve(projectRoot);
+    if (this.localRepoMemo?.root === root) {
+      return this.localRepoMemo.repo;
+    }
+    const repo = resolveMavenLocalRepository(root);
+    this.localRepoMemo = { root, repo };
+    queueMicrotask(() => {
+      this.localRepoMemo = null;
+    });
+    return repo;
+  }
+
+  private localRepoMemo: { root: string; repo: string } | null = null;
 
   async resolve(projectRoot: string, options?: ResolveOptions): Promise<ResolutionResult> {
     const root = path.resolve(projectRoot);

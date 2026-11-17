@@ -133,6 +133,29 @@ describe('collectLocalArtifactJarPaths', () => {
     expect(paths).toHaveLength(1);
   });
 
+  test('shouldTreatReleaseJarAsImmutableWhenItIsInCustomMavenLocalRepository', () => {
+    const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-lad-mvn-'));
+    try {
+      const repo = path.join(proj, 'custom-repo');
+      fs.mkdirSync(path.join(proj, '.mvn'), { recursive: true });
+      fs.writeFileSync(path.join(proj, 'pom.xml'), '<project/>', 'utf8');
+      fs.writeFileSync(path.join(proj, '.mvn', 'maven.config'), `-Dmaven.repo.local=${repo}\n`, 'utf8');
+      const releaseJar = path.join(repo, 'com', 'example', 'lib', '1.0.0', 'lib-1.0.0.jar');
+      const snapshotJar = path.join(repo, 'com', 'example', 'lib', '1.1.0-SNAPSHOT', 'lib-1.1.0-SNAPSHOT.jar');
+      const out: ResolutionOutput = {
+        ...makeOutput([
+          makeArtifact({ version: '1.0.0', jarPath: releaseJar }),
+          makeArtifact({ version: '1.1.0-SNAPSHOT', jarPath: snapshotJar }),
+        ]),
+        buildSystem: { type: 'maven', version: '3.9.9', wrapper: false },
+        projectRoot: proj,
+      };
+      expect(collectLocalArtifactJarPaths(out)).toEqual([path.resolve(snapshotJar)]);
+    } finally {
+      fs.rmSync(proj, { recursive: true, force: true });
+    }
+  });
+
   test('delegates immutability check with full artifact coordinates to resolver.isImmutableArtifact', () => {
     const releaseJar = path.join(os.tmpdir(), 'm2', 'lib-1.0.0.jar');
     const snapshotJar = path.join(os.tmpdir(), 'm2', 'lib-1.0.0-SNAPSHOT.jar');

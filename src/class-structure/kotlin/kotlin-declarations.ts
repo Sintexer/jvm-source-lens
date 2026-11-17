@@ -143,7 +143,7 @@ export function normalizeKdoc(raw: string): string {
   return inner.replace(/^[ \t]*\*[ \t]?/gm, '').trim();
 }
 
-function parseAnnotation(src: string, i: number, limit: number): { ann: KotlinAnnotation; end: number } | null {
+export function parseAnnotation(src: string, i: number, limit: number): { ann: KotlinAnnotation; end: number } | null {
   let j = i + 1;
   let useSite: string | null = null;
   const site = /^([a-z]+):/.exec(src.slice(j, j + 12));
@@ -184,9 +184,6 @@ class LastSignificant {
   }
 }
 
-function nextSignificantIndex(src: string, i: number, limit: number): number {
-  return skipSpaces(src, i, limit);
-}
 
 function startsWithWord(src: string, p: number, word: string, limit: number): boolean {
   return src.startsWith(word, p) && p + word.length <= limit && !isIdentChar(src[p + word.length]);
@@ -204,7 +201,7 @@ function continuesAfterNewline(src: string, last: LastSignificant, newlineIdx: n
   if (c === '/' && last.prev !== '*') {
     return true;
   }
-  const p = nextSignificantIndex(src, newlineIdx + 1, limit);
+  const p = skipSpaces(src, newlineIdx + 1, limit);
   if (p >= limit) {
     return false;
   }
@@ -419,7 +416,7 @@ function scanClassTail(src: string, from: number, limit: number): { openBrace: n
     } else if (depth === 0 && c === ';') {
       return { openBrace: -1, end: k };
     } else if (depth === 0 && angle === 0 && c === '\n') {
-      const p = nextSignificantIndex(src, k + 1, limit);
+      const p = skipSpaces(src, k + 1, limit);
       const next = src[p];
       const joins =
         last.char === ',' ||

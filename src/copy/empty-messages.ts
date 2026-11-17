@@ -43,9 +43,8 @@ export function buildClassNotFoundMessage(ctx: ClassNotFoundContext): string {
       ? ` while looking up method ${JSON.stringify(ctx.methodName)}`
       : '';
   const parts = [
-    `Classpath resolved successfully${scope}; scanned ${ctx.searchedArtifactCount} classpath edge(s) (JARs, inter-project outputs, local file JARs, and this module's src/main source roots` +
-      `${ctx.includeTest ? ' and src/test source roots' : ''}) but found no .class for ${JSON.stringify(ctx.className)}${methodBit}.`,
-    'This is not a transient failure — the type is absent from the selected scope.',
+    `No ${JSON.stringify(ctx.className)}${methodBit} in ${ctx.searchedArtifactCount} classpath entries${scope}: ` +
+      `JARs, module outputs, ${ctx.includeTest ? 'main and test' : 'main'} source roots. Not a transient failure.`,
   ];
   if (looksLikeSimpleName(ctx.className)) {
     parts.push(
@@ -53,7 +52,7 @@ export function buildClassNotFoundMessage(ctx: ClassNotFoundContext): string {
     );
   } else {
     parts.push(
-      'Confirm the fully-qualified className, that the dependency is declared in the build, and that modulePath matches the owning module (resolve_dependencies → resolution.modules[].name if unsure).',
+      'Confirm the fully-qualified className, that the dependency is declared in the build, and that modulePath matches the owning module (module names: resolve_dependencies).',
     );
   }
   if (ctx.suggestions !== undefined && ctx.suggestions.length > 0) {

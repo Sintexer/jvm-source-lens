@@ -10,23 +10,23 @@ export const MCP_TOOL_COPY = {
   },
 
   get_class_structure: {
-    title: 'Get structured Java class API',
+    title: 'Get structured JVM class API',
     description: `Show what a third-party library (JAR) class is and does: purpose and method names; scope=declared adds all signatures and fields, scope=effective adds inherited members. First call for any dependency class you can name; use instead of reading source or javap. One method's overloads: get_method_signature.`,
   },
 
   get_method_signature: {
-    title: 'Get Java method overload signatures',
+    title: 'Get JVM method overload signatures',
     description: `List every overload (parameters, generics, return type) of one or more methods or constructors ("<init>") of a dependency class. Use to verify a call or pick an overload. Not for bodies: use get_class_source.`,
   },
 
   find_in_class_source: {
-    title: 'Find text in resolved Java source',
+    title: 'Find text in resolved JVM source',
     description: `Grep one known dependency class's source for a string, identifier, or pattern (literal; regex optional). Unknown class: search_classes. Whole JAR: search_in_artifact.`,
   },
 
   get_class_source: {
-    title: 'Get Java source for a class',
-    description: `Read a dependency class's Java source, ideally only specific methods via methodNames (or startLine/endLine; Scala/Groovy: startLine/endLine only). Use only when you need the implementation, not names or signatures. Sources JAR if present, else decompiled (sourceAvailable=false). Whole files over ~64KiB are refused: pass methodNames.`,
+    title: 'Get JVM source for a class',
+    description: `Read a dependency class's source (Java, Kotlin, Scala, Groovy), ideally only specific methods via methodNames (or startLine/endLine; Scala/Groovy: startLine/endLine only). Use only when you need the implementation, not names or signatures. Sources JAR if present, else decompiled (sourceAvailable=false). Whole files over ~64KiB are refused: pass methodNames.`,
   },
 
   resolve_dependencies: {

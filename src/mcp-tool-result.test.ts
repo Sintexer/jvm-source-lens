@@ -48,7 +48,7 @@ test('CLASS_NOT_FOUND is not an MCP error (valid empty result)', () => {
   const sc = r.structuredContent as { found: boolean; querySucceeded: boolean; message: string };
   expect(sc.found).toBe(false);
   expect(sc.querySucceeded).toBe(true);
-  expect(sc.message).toContain('Classpath resolved successfully');
+  expect(sc.message).toContain('Not a transient failure');
   expect(sc.message).toContain('12');
 });
 

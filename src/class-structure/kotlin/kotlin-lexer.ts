@@ -182,11 +182,19 @@ export function skipAngle(src: string, i: number, limit: number = src.length): n
 
 export type TextPart = { text: string; start: number; end: number };
 
-/** Splits `text` on commas outside brackets, generics, strings and comments. */
+/** Type-argument text only: names, dots, commas, `?`, `*`, variance, nested `<>`, function types. */
+const TYPE_ARGUMENTS = /^<[\w\s.,?*<>:()-]*>$/;
+
+/**
+ * Splits `text` on commas outside brackets, generics, strings and comments.
+ * After a top-level `=` (a default value), `<` is a type argument list only when it closes
+ * on type-only text (`listOf<Int>()`); otherwise it is the less-than operator (`x < y`).
+ */
 export function splitTopLevel(text: string): TextPart[] {
   const parts: TextPart[] = [];
   let depth = 0;
   let start = 0;
+  let afterEquals = false;
   let j = 0;
   while (j < text.length) {
     const k = skipKotlinNoise(text, j);
@@ -195,13 +203,25 @@ export function splitTopLevel(text: string): TextPart[] {
       continue;
     }
     const c = text[j];
-    if (c === '(' || c === '[' || c === '{' || c === '<') {
+    if (afterEquals && (c === '<' || c === '>')) {
+      // In a default value, angle brackets never change depth: skip type arguments, else an operator.
+      if (c === '<') {
+        const close = skipAngle(text, j);
+        if (close > 0 && TYPE_ARGUMENTS.test(text.slice(j, close))) {
+          j = close;
+          continue;
+        }
+      }
+    } else if (c === '(' || c === '[' || c === '{' || c === '<') {
       depth++;
     } else if (c === ')' || c === ']' || c === '}' || (c === '>' && text[j - 1] !== '-')) {
       depth = Math.max(0, depth - 1);
+    } else if (c === '=' && depth === 0 && text[j + 1] !== '=' && text[j - 1] !== '!' && text[j - 1] !== '<' && text[j - 1] !== '>') {
+      afterEquals = true;
     } else if (c === ',' && depth === 0) {
       parts.push({ text: text.slice(start, j), start, end: j });
       start = j + 1;
+      afterEquals = false;
     }
     j++;
   }

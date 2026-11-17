@@ -125,7 +125,7 @@ export function resolveJdkForProject(
     return findAndOverride(required, hint, env, ctx);
   }
 
-  if (hint.source === 'maven-wrapper-inferred') {
+  if (hint.source === 'maven-wrapper-inferred' || hint.source === 'maven-compiler-inferred') {
     if (currentMajor !== null && currentMajor >= required) {
       return passThroughCurrentJdk(env, hint);
     }
@@ -320,7 +320,9 @@ function describeHintSource(hint: JavaVersionHint): string {
     case 'java-version-file':
       return '.java-version';
     case 'toolchain-script':
-      return 'JavaLanguageVersion.of() / maven.compiler setting in build file';
+      return 'JavaLanguageVersion.of() / org.gradle.jvmargs in build files';
+    case 'maven-compiler-inferred':
+      return 'maven.compiler / compiler plugin level in pom.xml (minimum Java)';
     case 'gradle-wrapper-inferred':
       return 'Gradle wrapper version (minimum Java inferred)';
     case 'maven-wrapper-inferred':

@@ -120,14 +120,17 @@ function simpleJvmName(jvmType: string): string {
  * parameters, type aliases and inline classes, whose JVM type is not the written name.
  */
 export function kotlinTypeMatchesJvm(kotlinType: string, jvmType: string): 'match' | 'mismatch' | 'unknown' {
-  const jvm = stripGenerics(jvmType.trim());
+  // javap shows a vararg as `T...`; it is a `T[]` on the JVM. Check the array suffix before generics are cut.
+  const raw = jvmType.trim().replace(/\.\.\.$/, '[]');
+  const isArray = raw.endsWith('[]');
+  const jvm = isArray ? `${stripGenerics(raw.slice(0, -2))}[]` : stripGenerics(raw);
   const expected = expectedJvmType(kotlinType);
   if (expected !== null) {
     if (expected === 'kotlin.jvm.functions.Function') {
       return jvm.startsWith('kotlin.jvm.functions.Function') ? 'match' : 'mismatch';
     }
     if (expected === '[]') {
-      return jvm.endsWith('[]') ? 'match' : 'mismatch';
+      return isArray ? 'match' : 'mismatch';
     }
     return jvm === expected ? 'match' : 'mismatch';
   }
@@ -162,8 +165,11 @@ export function setterName(m: KotlinMember): string {
   return isBooleanStyleName(m.name) ? `set${m.name.slice(2)}` : `set${capitalize(m.name)}`;
 }
 
+const VARARG_PRIMITIVE_ELEMENT = /^(Int|Long|Short|Byte|Char|Boolean|Float|Double)$/;
+
 function paramSlot(p: KotlinParameter): JvmParamSlot {
-  const type = p.vararg ? `Array<${p.type}>` : p.type;
+  // `vararg xs: Int` compiles to `int...`; a nullable or reference element stays `T[]`.
+  const type = !p.vararg ? p.type : VARARG_PRIMITIVE_ELEMENT.test(p.type) ? `${p.type}Array` : `Array<${p.type}>`;
   return { name: p.name, synthetic: false, kotlinType: type.length > 0 ? type : null };
 }
 
@@ -243,10 +249,13 @@ function propertyMethods(m: KotlinMember): KotlinJvmMethod[] {
   return out;
 }
 
-function constructorMethods(m: KotlinMember, enumType: boolean): KotlinJvmMethod[] {
+function constructorMethods(m: KotlinMember, enumType: boolean, innerType: boolean): KotlinJvmMethod[] {
   const out: KotlinJvmMethod[] = [];
   for (const variant of parameterVariants(m.parameters, m.jvmOverloads, true)) {
     const params: JvmParamSlot[] = [];
+    if (innerType) {
+      params.push({ name: 'this$0', synthetic: true, kotlinType: null });
+    }
     if (enumType) {
       params.push(
         { name: '$enum$name', synthetic: true, kotlinType: 'String' },
@@ -308,7 +317,7 @@ export function kotlinJvmMethods(meta: KotlinTypeMetadata, includeCompanionStati
     } else if (m.kind === 'property') {
       out.push(...propertyMethods(m));
     } else {
-      out.push(...constructorMethods(m, enumType));
+      out.push(...constructorMethods(m, enumType, meta.isInner));
     }
   }
   out.push(...dataClassMethods(meta, ctors[0]));

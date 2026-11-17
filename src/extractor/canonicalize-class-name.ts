@@ -11,6 +11,7 @@ import {
 } from './infer-module-path.js';
 import { matchModule, withoutAllModules } from './match-module.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
+import { NOT_FULLY_QUALIFIED_PHRASE } from '../copy/retry-ready-phrases.js';
 
 const SEGMENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const MAX_PICK_LIST = 10;
@@ -25,7 +26,7 @@ type Scope = Pick<InferModulePathOptions, 'modulePath' | 'configuration' | 'incl
 /** `com/foo/Bar.class`, `com.foo.Bar.java`, surrounding whitespace → `com.foo.Bar`. */
 export function normalizeClassNameSyntax(raw: string): string {
   const s = raw.trim().replace(/[\\/]+/g, '.');
-  const stripped = s.replace(/\.(class|java)$/, '');
+  const stripped = s.replace(/\.(class|java|kt|scala|groovy)$/, '');
   return stripped.length > 0 ? stripped : s;
 }
 
@@ -136,7 +137,7 @@ export function canonicalizeClassName(
           error: {
             code: 'INVALID_FQN',
             message:
-              `${JSON.stringify(name)} is not fully qualified and matches ${candidates.length} classes: ` +
+              `${JSON.stringify(name)} ${NOT_FULLY_QUALIFIED_PHRASE} ${candidates.length} classes: ` +
               `${shown.join(', ')}${more}. Retry with className set to one of these.`,
           },
         };

@@ -107,3 +107,12 @@ test('shouldMentionProjectOwnSourcesWhenFqnNotFound', () => {
   });
   expect(msg).toContain("project's own");
 });
+
+test('shouldSummarizeScanInOneSentenceWhenClassIsNotFound', () => {
+  const msg = buildClassNotFoundMessage({ className: 'com.example.Foo', searchedArtifactCount: 12 });
+  expect(msg).not.toContain('Classpath resolved successfully');
+  expect(msg).toContain('12');
+  expect(msg.split('transient').length - 1).toBe(1);
+  expect(msg).not.toContain('resolution.modules[]');
+  expect(msg).toContain('resolve_dependencies');
+});

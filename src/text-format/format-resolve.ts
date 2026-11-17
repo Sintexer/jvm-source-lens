@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
 
 const MAX_ARTIFACT_LINES = 60;
@@ -102,12 +103,20 @@ export function formatResolutionSummaryText(
     `Modules (${output.modules.length}):`,
   ];
 
+  const empty: string[] = [];
   for (const mod of output.modules) {
-    lines.push(`  ${mod.name}  ${mod.path}`);
+    if (mod.configurations.every((cfg) => cfg.artifacts.length === 0)) {
+      empty.push(mod.name);
+      continue;
+    }
+    lines.push(`  ${mod.name}  ${path.relative(output.projectRoot, mod.path) || '.'}`);
     for (const cfg of mod.configurations) {
       const direct = cfg.artifacts.filter((a) => a.direct).length;
       lines.push(`    ${cfg.name} (${cfg.scope}): ${cfg.artifacts.length} artifact(s), ${direct} direct`);
     }
+  }
+  if (empty.length > 0) {
+    lines.push(`  No artifacts: ${empty.join(', ')}`);
   }
 
   if (output.errors.length > 0) {

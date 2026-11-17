@@ -316,3 +316,12 @@ describe('PreToolUse hook denials', () => {
     expect(aggregate([scorePrompt(positive, t), scorePrompt(positive, t)]).hookDenials).toBe(2);
   });
 });
+
+describe('retry-ready phrases are shared with the producers', () => {
+  test('shouldDetectRetryReadyErrorWhenTextUsesSharedPhrases', async () => {
+    const { PER_MODULE_ARTIFACT_PHRASE, NOT_FULLY_QUALIFIED_PHRASE } = await import('../../src/copy/retry-ready-phrases.js');
+    const { isRetryReadyError } = await import('./scoring.js');
+    expect(isRetryReadyError({ isError: true, resultText: `Class "X" ${PER_MODULE_ARTIFACT_PHRASE}: a, b.` } as never)).toBe(true);
+    expect(isRetryReadyError({ isError: true, resultText: `"X" ${NOT_FULLY_QUALIFIED_PHRASE} 2 classes: a, b.` } as never)).toBe(true);
+  });
+});

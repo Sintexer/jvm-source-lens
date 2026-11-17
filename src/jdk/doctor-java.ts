@@ -58,7 +58,7 @@ function describeRequirement(
       text: `Java >= ${hint.majorVersion}`,
     };
   }
-  if (hint.source === 'maven-wrapper-inferred') {
+  if (hint.source === 'maven-wrapper-inferred' || hint.source === 'maven-compiler-inferred') {
     return {
       requiredMajor: hint.majorVersion,
       range: { minMajor: hint.majorVersion, maxMajor: 99 },

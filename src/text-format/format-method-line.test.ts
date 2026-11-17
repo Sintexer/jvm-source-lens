@@ -37,3 +37,39 @@ test('formatJavapOverloadLine formats constructors', () => {
   );
   expect(line).toBe('  P Box(String name)');
 });
+
+test('shouldPrintMethodTypeParametersWhenDeclarationHasThem', () => {
+  const line = formatJavapOverloadLine(
+    overload({
+      declarationLine: 'public <T extends java.lang.Comparable<T>> T readValue(java.lang.String, java.lang.Class<T>) throws java.io.IOException;',
+      returnTypeDisplay: 'T',
+      thrownExceptions: ['java.io.IOException'],
+      parameters: [
+        { name: 'content', typeDisplay: 'String' },
+        { name: 'valueType', typeDisplay: 'Class<T>' },
+      ],
+    }),
+    { methodName: 'readValue' },
+  );
+  expect(line).toBe('  P <T extends java.lang.Comparable<T>> T readValue(String content, Class<T> valueType) throws IOException');
+});
+
+test('shouldPrintSimpleThrowsNamesUnlessTwoShareASimpleName', () => {
+  const simple = formatJavapOverloadLine(
+    overload({
+      declarationLine: 'public void run() throws java.io.IOException, com.x.Outer$Failure;',
+      thrownExceptions: ['java.io.IOException', 'com.x.Outer$Failure'],
+    }),
+    { methodName: 'run' },
+  );
+  expect(simple).toBe('  P void run() throws IOException, Outer.Failure');
+
+  const clash = formatJavapOverloadLine(
+    overload({
+      declarationLine: 'public void run() throws a.Oops, b.Oops;',
+      thrownExceptions: ['a.Oops', 'b.Oops'],
+    }),
+    { methodName: 'run' },
+  );
+  expect(clash).toBe('  P void run() throws a.Oops, b.Oops');
+});

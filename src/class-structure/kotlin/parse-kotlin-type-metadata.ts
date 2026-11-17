@@ -1,5 +1,6 @@
 import {
   membersRegion,
+  parseAnnotation,
   readWord,
   scanKotlinDeclarations,
   visibilityOf,
@@ -57,6 +58,8 @@ export type KotlinTypeMetadata = {
   kind: 'class' | 'interface' | 'object' | 'enum' | 'annotation' | 'facade';
   name: string;
   isData: boolean;
+  /** `inner class`: constructors take the outer instance as a synthetic first parameter. */
+  isInner: boolean;
   typeKdoc: string | null;
   members: KotlinMember[];
   companion: KotlinCompanion | null;
@@ -80,7 +83,12 @@ const PARAMETER_MODIFIERS = new Set([
   'final',
 ]);
 
-type ParsedParameter = KotlinParameter & { start: number; end: number; visibility: KotlinVisibility };
+type ParsedParameter = KotlinParameter & {
+  start: number;
+  end: number;
+  visibility: KotlinVisibility;
+  annotations: KotlinAnnotation[];
+};
 
 function findTopLevelEquals(text: string, from: number): number {
   let depth = 0;
@@ -109,11 +117,18 @@ function parseOneParameter(segment: string, absStart: number, absEnd: number): P
   let vararg = false;
   let property: 'val' | 'var' | null = null;
   let visibility: KotlinVisibility = 'public';
+  const annotations: KotlinAnnotation[] = [];
   for (;;) {
     while (i < segment.length && /\s/.test(segment[i]!)) {
       i++;
     }
     if (segment[i] === '@') {
+      const parsed = parseAnnotation(segment, i, segment.length);
+      if (parsed) {
+        annotations.push(parsed.ann);
+        i = parsed.end;
+        continue;
+      }
       let j = i + 1;
       while (j < segment.length && /[A-Za-z0-9_.$:]/.test(segment[j]!)) {
         j++;
@@ -150,11 +165,11 @@ function parseOneParameter(segment: string, absStart: number, absEnd: number): P
       i++;
     }
     if (segment[i] !== ':') {
-      return { name, type: '', hasDefault: false, vararg, property, start: absStart, end: absEnd, visibility };
+      return { name, type: '', hasDefault: false, vararg, property, start: absStart, end: absEnd, visibility, annotations };
     }
     const eq = findTopLevelEquals(segment, i + 1);
     const typeText = segment.slice(i + 1, eq < 0 ? segment.length : eq).replace(/\s+/g, ' ').trim();
-    return { name, type: typeText, hasDefault: eq >= 0, vararg, property, start: absStart, end: absEnd, visibility };
+    return { name, type: typeText, hasDefault: eq >= 0, vararg, property, start: absStart, end: absEnd, visibility, annotations };
   }
 }
 
@@ -245,7 +260,7 @@ function kdocTag(typeKdoc: string | null, name: string): string | null {
   return text && text.length > 0 ? text : null;
 }
 
-function constructorMembers(source: string, d: KotlinRawDeclaration): KotlinMember[] {
+function constructorMembers(d: KotlinRawDeclaration): KotlinMember[] {
   const out: KotlinMember[] = [];
   const parsed = parseKotlinParameters(d.params, d.paramsStart);
   const ctorVisibility = d.ctorModifiers[0] as KotlinVisibility | undefined;
@@ -266,12 +281,14 @@ function constructorMembers(source: string, d: KotlinRawDeclaration): KotlinMemb
       type: p.type.length > 0 ? p.type : null,
       visibility: p.visibility,
       mutable: p.property === 'var',
+      getterJvmName: stringArg(annotationNamed(p.annotations, 'JvmName', 'get')),
+      setterJvmName: stringArg(annotationNamed(p.annotations, 'JvmName', 'set')),
+      jvmField: annotationNamed(p.annotations, 'JvmField') !== undefined,
       kdoc: kdocTag(d.kdoc, p.name),
       start: p.start,
       end: p.end,
     });
   }
-  void source;
   return out;
 }
 
@@ -328,7 +345,7 @@ function typeFromDeclaration(source: string, d: KotlinRawDeclaration): KotlinTyp
   const hasSecondary = body.some((b) => b.keyword === 'constructor');
   if (kind === 'class' || kind === 'enum') {
     if (d.params !== null) {
-      members.push(...constructorMembers(source, d));
+      members.push(...constructorMembers(d));
     } else if (!hasSecondary) {
       members.push({
         ...emptyMember('constructor', '<init>'),
@@ -357,6 +374,7 @@ function typeFromDeclaration(source: string, d: KotlinRawDeclaration): KotlinTyp
     kind,
     name: d.name.length > 0 ? d.name : 'Companion',
     isData: d.modifiers.includes('data'),
+    isInner: d.modifiers.includes('inner'),
     typeKdoc: d.kdoc,
     members,
     companion,
@@ -384,5 +402,5 @@ export function parseKotlinTypeMetadata(source: string, className: string): Kotl
   if (members.length === 0) {
     return null;
   }
-  return { kind: 'facade', name: names[0]!, isData: false, typeKdoc: null, members, companion: null };
+  return { kind: 'facade', name: names[0]!, isData: false, isInner: false, typeKdoc: null, members, companion: null };
 }

@@ -4,6 +4,8 @@
  * calls per task, shell-fallback rate). No I/O, so it is unit-tested without a model.
  */
 
+import { NOT_FULLY_QUALIFIED_PHRASE, PER_MODULE_ARTIFACT_PHRASE } from '../../src/copy/retry-ready-phrases.js';
+
 export type EvalPrompt = {
   id: string;
   category: 'direct' | 'indirect' | 'multimodule' | 'sloppy' | 'filecontext' | 'kotlin' | 'negative';
@@ -79,10 +81,8 @@ function resultTextOf(content: unknown): string {
 export function isRetryReadyError(call: ToolCall): boolean {
   // Only genuine ambiguity: the class differs per module, or a simple name matches several classes.
   // Generic "pass modulePath" module errors are tolerance gaps and must still count as failures.
-  return (
-    call.isError === true &&
-    /resolves to different artifacts per module|is not fully qualified and matches/.test(call.resultText ?? '')
-  );
+  const text = call.resultText ?? '';
+  return call.isError === true && (text.includes(PER_MODULE_ARTIFACT_PHRASE) || text.includes(NOT_FULLY_QUALIFIED_PHRASE));
 }
 
 /** Parses `claude -p --output-format stream-json --verbose` lines; unknown/garbled lines are skipped. */

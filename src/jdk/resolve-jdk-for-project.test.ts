@@ -130,6 +130,30 @@ describe('resolveJdkForProject', () => {
     expect(result.message).toContain('Further operations for this project will fail');
   });
 
+  test('shouldUseNewerInstalledJdkWhenMavenCompilerTargetsJavaEight', () => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-resolve-mvn-compiler-'));
+    fs.writeFileSync(
+      path.join(tmpRoot, 'pom.xml'),
+      '<project><properties><maven.compiler.source>1.8</maven.compiler.source></properties></project>',
+      'utf8',
+    );
+    const jdk21 = path.join(tmpRoot, '.jdks', 'temurin-21');
+    writeReleaseFile(jdk21, '21.0.4');
+
+    const pass = resolveJdkForProject(tmpRoot, undefined, { JAVA_HOME: jdk21 }, hermeticLinux(tmpRoot));
+    expect(pass.ok).toBe(true);
+    if (pass.ok) {
+      expect(pass.jdkHome).toBe(jdk21);
+      expect(pass.hint.source).toBe('maven-compiler-inferred');
+    }
+
+    const found = resolveJdkForProject(tmpRoot, undefined, {}, hermeticLinux(tmpRoot));
+    expect(found.ok).toBe(true);
+    if (found.ok) {
+      expect(found.majorVersion).toBe(21);
+    }
+  });
+
   test('for maven-wrapper-inferred, passes through newer JAVA_HOME and upgrades too-old JAVA_HOME', () => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-resolve-mvn-jdk-'));
     fs.writeFileSync(path.join(tmpRoot, 'pom.xml'), '<project/>', 'utf8');

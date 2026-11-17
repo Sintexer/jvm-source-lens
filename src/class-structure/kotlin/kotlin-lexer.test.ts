@@ -57,6 +57,28 @@ describe('splitTopLevel', () => {
     ]);
   });
 
+  test('shouldSplitParametersWhenDefaultValueUsesLessThanOperator', () => {
+    expect(splitTopLevel('a: Boolean = x < y, b: Int').map((p) => p.text.trim())).toEqual(['a: Boolean = x < y', 'b: Int']);
+    expect(splitTopLevel('a: Boolean = x < y, b: Map<K, V>').map((p) => p.text.trim())).toEqual([
+      'a: Boolean = x < y',
+      'b: Map<K, V>',
+    ]);
+  });
+
+  test('shouldKeepCallArgumentsTogetherWhenDefaultValueComparesInsideParentheses', () => {
+    expect(splitTopLevel('a: Boolean = f(x > y, z), b: Int').map((p) => p.text.trim())).toEqual([
+      'a: Boolean = f(x > y, z)',
+      'b: Int',
+    ]);
+  });
+
+  test('shouldKeepGenericCallTogetherWhenDefaultValueHasTypeArguments', () => {
+    expect(splitTopLevel('a: Any = listOf<Pair<Int, Int>>(), b: Int').map((p) => p.text.trim())).toEqual([
+      'a: Any = listOf<Pair<Int, Int>>()',
+      'b: Int',
+    ]);
+  });
+
   test('shouldKeepOffsetsRelativeToTheText', () => {
     const text = 'a, bb';
     const parts = splitTopLevel(text);

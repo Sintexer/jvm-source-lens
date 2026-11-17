@@ -109,3 +109,35 @@ describe('formatResolutionSummaryText hints', () => {
     expect(text).not.toContain('Modules (');
   });
 });
+
+describe('formatResolutionSummaryText module lines', () => {
+  const withEmptyRoot: ResolutionOutput = {
+    ...output,
+    modules: [
+      {
+        name: 'root',
+        path: '/p',
+        configurations: [
+          { name: 'compileClasspath', scope: 'compile', artifacts: [] },
+          { name: 'testCompileClasspath', scope: 'test-compile', artifacts: [] },
+        ],
+      },
+      { name: ':empty', path: '/p/empty', configurations: [] },
+      ...output.modules,
+    ],
+  };
+
+  test('shouldPrintModulePathsRelativeToProjectRootWhenSummarizing', () => {
+    const text = formatResolutionSummaryText(withEmptyRoot);
+    expect(text).toContain('Project: /p');
+    expect(text).toContain('  :app  app');
+    expect(text).not.toContain('/p/app');
+  });
+
+  test('shouldCollapseModulesIntoOneLineWhenTheyHaveNoArtifacts', () => {
+    const text = formatResolutionSummaryText(withEmptyRoot);
+    expect(text).toContain('  No artifacts: root, :empty');
+    expect(text).not.toContain('0 artifact(s)');
+    expect(text).toContain('Modules (4):');
+  });
+});

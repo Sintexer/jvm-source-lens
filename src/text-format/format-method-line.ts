@@ -1,5 +1,6 @@
 import type { ClassStructureMethod } from '../class-structure/types.js';
 import type { JavapMethodOverload } from '../class-structure/types.js';
+import { stripLeadingModifiers } from '../class-structure/strip-leading-modifiers.js';
 import { formatCompactModifiers } from './format-compact-modifiers.js';
 
 function formatParamsFromStructure(m: ClassStructureMethod): string {
@@ -8,6 +9,41 @@ function formatParamsFromStructure(m: ClassStructureMethod): string {
 
 function formatParamsFromJavap(o: JavapMethodOverload): string {
   return o.parameters.map((p) => (p.name ? `${p.typeDisplay} ${p.name}` : p.typeDisplay)).join(', ');
+}
+
+/** `java.io.IOException` → `IOException`, `p.Outer$Inner` → `Outer.Inner`; full names stay when two share a simple name. */
+function formatThrows(names: readonly string[]): string {
+  if (names.length === 0) {
+    return '';
+  }
+  const short = names.map((n) => n.slice(n.lastIndexOf('.') + 1).replace(/\$/g, '.'));
+  const shown = new Set(short).size === short.length ? short : names;
+  return ` throws ${shown.join(', ')}`;
+}
+
+/** Method type parameters (`<T extends Foo>`) at the start of a declaration, after annotations and modifiers. */
+function methodTypeParameters(declarationLine: string): string {
+  let s = declarationLine.trimStart();
+  for (;;) {
+    const ann = /^@[\w$.]+(?:\s*\([^)]*\))?\s*/.exec(s);
+    const next = stripLeadingModifiers(ann ? s.slice(ann[0].length) : s);
+    if (next === s) {
+      break;
+    }
+    s = next;
+  }
+  if (!s.startsWith('<')) {
+    return '';
+  }
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '<') {
+      depth++;
+    } else if (s[i] === '>' && --depth === 0) {
+      return `${s.slice(0, i + 1)} `;
+    }
+  }
+  return '';
 }
 
 function synthesizeStructureLine(m: ClassStructureMethod): string {
@@ -19,9 +55,7 @@ function synthesizeStructureLine(m: ClassStructureMethod): string {
   if (m.jvmMethodName === '<init>') {
     return `${mods}${m.name}(${formatParamsFromStructure(m)})`;
   }
-  const throws =
-    m.throws.length > 0 ? ` throws ${m.throws.join(', ')}` : '';
-  return `${mods}${m.returnType} ${m.name}(${formatParamsFromStructure(m)})${throws}`;
+  return `${mods}${m.returnType} ${m.name}(${formatParamsFromStructure(m)})${formatThrows(m.throws)}`;
 }
 
 /** IDE-style one-line method signature for compact text output. */
@@ -63,8 +97,7 @@ export function formatJavapOverloadLine(
     abstract:
       /\babstract\b/.test(o.declarationLine) || Boolean(o.flagsLine?.includes('ACC_ABSTRACT')),
   });
-  const throws =
-    o.thrownExceptions.length > 0 ? ` throws ${o.thrownExceptions.join(', ')}` : '';
+  const throws = formatThrows(o.thrownExceptions);
   const params = formatParamsFromJavap(o);
 
   if (opts.methodName === '<init>') {
@@ -73,5 +106,5 @@ export function formatJavapOverloadLine(
   }
 
   const ret = o.returnTypeDisplay ?? 'void';
-  return `  ${mods}${ret} ${opts.methodName}(${params})${throws}`;
+  return `  ${mods}${methodTypeParameters(o.declarationLine)}${ret} ${opts.methodName}(${params})${throws}`;
 }

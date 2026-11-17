@@ -61,7 +61,7 @@ describe('Maven Java version detection', () => {
       );
       expect(readMavenCompilerJavaVersion(dir)).toBe(21);
       expect(detectRequiredJavaVersion(dir, { env: {} })).toEqual({
-        source: 'toolchain-script',
+        source: 'maven-compiler-inferred',
         majorVersion: 21,
       });
 
@@ -83,6 +83,29 @@ describe('Maven Java version detection', () => {
         'utf8',
       );
       expect(readMavenCompilerJavaVersion(dir)).toBe(17);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('shouldRaiseCompilerMinimumToSeventeenWhenMavenFourWrapperBuildsJavaEight', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-mvn4-jdk8-'));
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'pom.xml'),
+        '<project><properties><maven.compiler.source>1.8</maven.compiler.source></properties></project>',
+        'utf8',
+      );
+      fs.mkdirSync(path.join(dir, '.mvn', 'wrapper'), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, '.mvn', 'wrapper', 'maven-wrapper.properties'),
+        'distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/4.0.0-rc-3/apache-maven-4.0.0-rc-3-bin.zip\n',
+        'utf8',
+      );
+      expect(detectRequiredJavaVersion(dir, { env: {} })).toEqual({
+        source: 'maven-compiler-inferred',
+        majorVersion: 17,
+      });
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

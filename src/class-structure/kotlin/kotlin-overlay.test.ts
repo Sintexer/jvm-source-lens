@@ -96,3 +96,21 @@ describe('buildKotlinOverlay ties', () => {
     expect(buildKotlinOverlay('package p\n\nclass A\n', 'p.Missing$X')).toBeNull();
   });
 });
+
+describe('buildKotlinOverlay on small snippets', () => {
+  test('shouldNameVarargParametersWhenJavapShowsEllipsis', () => {
+    const overlay = buildKotlinOverlay('package p\n\n/** Joins. */\nfun join(sep: String, vararg parts: String): String = ""\n', 'p.FileKt')!;
+    const m = overlay.matchMethod('join', ['java.lang.String', 'java.lang.String...'])!;
+    expect(m.params.map((p) => p.name)).toEqual(['sep', 'parts']);
+    expect(m.kdoc).toBe('Joins.');
+  });
+
+  test('shouldNameInnerClassConstructorParametersWhenOuterInstanceIsFirst', () => {
+    const overlay = buildKotlinOverlay('package p\n\nclass O {\n  inner class I(val a: Int)\n}\n', 'p.O$I')!;
+    const m = overlay.matchMethod('<init>', ['p.O', 'int'])!;
+    expect(m.params.map((p) => [p.name, p.synthetic])).toEqual([
+      ['this$0', true],
+      ['a', false],
+    ]);
+  });
+});

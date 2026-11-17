@@ -23,7 +23,7 @@ export function collectLocalArtifactJarPaths(
         if (art.origin !== 'external') continue;
         if (!art.jarPath) continue;
         const abs = path.resolve(art.jarPath);
-        if (resolver?.isImmutableArtifact({ ...art, jarPath: abs })) continue;
+        if (resolver?.isImmutableArtifact({ ...art, jarPath: abs }, output.projectRoot)) continue;
         seen.add(abs);
       }
     }

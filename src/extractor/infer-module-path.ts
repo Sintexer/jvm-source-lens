@@ -6,6 +6,7 @@ import { candidateInterprojectJavaSourcePaths } from './interproject-paths.js';
 import { matchModule, withoutAllModules } from './match-module.js';
 import { pickResolvedConfiguration } from './pick-classpath.js';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
+import { PER_MODULE_ARTIFACT_PHRASE } from '../copy/retry-ready-phrases.js';
 
 export type InferModulePathOptions = Pick<
   ClassSourceLookupOptions,
@@ -191,7 +192,7 @@ export function resolveModuleScopeOrError(
         error: {
           code: 'MODULE_AMBIGUOUS',
           message:
-            `Class ${JSON.stringify(opts.className)} resolves to different artifacts per module: ${listed}. ` +
+            `Class ${JSON.stringify(opts.className)} ${PER_MODULE_ARTIFACT_PHRASE}: ${listed}. ` +
             `Retry with ${retry}.`,
           modulePaths: inferred.modulePaths,
           className: opts.className,

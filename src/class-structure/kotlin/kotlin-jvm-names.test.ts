@@ -85,6 +85,27 @@ class A {
     expect(ctor.params.map((p) => p.synthetic)).toEqual([true, true, false]);
   });
 
+  test('shouldAddOuterInstanceSlotWhenConstructorBelongsToInnerClass', () => {
+    const src = 'package p\n\nclass O {\n  inner class I(val a: Int)\n}\n';
+    const ctor = methods(src, 'p.O$I').find((m) => m.role === 'constructor')!;
+    expect(sig(ctor)).toBe('<init>/2');
+    expect(ctor.params.map((p) => p.synthetic)).toEqual([true, false]);
+  });
+
+  test('shouldUseJvmNameGetterAndSkipJvmFieldWhenPrimaryConstructorPropertyIsAnnotated', () => {
+    const src = 'package p\n\nclass A(@get:JvmName("fetch") val y: Int, @JvmField val z: Int)\n';
+    const names = methods(src, 'p.A').map(sig).sort();
+    expect(names).toContain('fetch/0');
+    expect(names).not.toContain('getY/0');
+    expect(names).not.toContain('getZ/0');
+  });
+
+  test('shouldMapPrimitiveVarargToPrimitiveArrayWhenElementIsNotNullable', () => {
+    const src = 'package p\n\nfun f(vararg xs: Int, vararg names: String) {}\n';
+    const [m] = methods(src, 'p.FileKt');
+    expect(m!.params.map((p) => p.kotlinType)).toEqual(['IntArray', 'Array<String>']);
+  });
+
   test('shouldMapCompanionStaticsOntoTheOuterClassOnlyWhenAsked', () => {
     const src = 'package p\n\nclass A {\n  companion object {\n    @JvmStatic fun make(x: Int) = 1\n    fun plain() = 2\n  }\n}\n';
     expect(methods(src, 'p.A', true).map(sig)).toContain('make/1');
@@ -110,6 +131,14 @@ describe('kotlinTypeMatchesJvm', () => {
     expect(kotlinTypeMatchesJvm('(Int) -> Unit', 'java.lang.String')).toBe('mismatch');
     expect(kotlinTypeMatchesJvm('IntArray', 'int[]')).toBe('match');
     expect(kotlinTypeMatchesJvm('Array<String>', 'java.lang.String[]')).toBe('match');
+  });
+
+  test('shouldMatchArrayWhenJavapShowsVarargsOrGenericElementArray', () => {
+    expect(kotlinTypeMatchesJvm('Array<String>', 'java.lang.String...')).toBe('match');
+    expect(kotlinTypeMatchesJvm('IntArray', 'int...')).toBe('match');
+    expect(kotlinTypeMatchesJvm('Array<List<X>>', 'java.util.List<X>[]')).toBe('match');
+    expect(kotlinTypeMatchesJvm('Array<List<X>>', 'java.util.List<X>...')).toBe('match');
+    expect(kotlinTypeMatchesJvm('String', 'java.lang.String...')).toBe('mismatch');
   });
 
   test('shouldComparePlainTypesBySimpleNameAndOtherwiseBeUnknown', () => {

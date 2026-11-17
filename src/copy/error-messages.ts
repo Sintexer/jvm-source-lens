@@ -1,5 +1,6 @@
 import type { ClassSourceError } from '../extractor/class-source-types.js';
 import type { McpErrorCategory } from '../guided-response/types.js';
+import { fullSourceTooLargeSummary } from '../output-limits.js';
 import type { ClassifyErrorQueryContext } from './types.js';
 
 export type ClassifiedFailurePayload = {
@@ -46,7 +47,7 @@ export function classifyClassSourceError(
           : `No resolved submodule matches modulePath ${JSON.stringify(error.modulePath)}.`) +
           listed +
           (listed.length === 0
-            ? ` Inspect resolve_dependencies output (resolution.modules[].name) for valid module names (e.g. ":app" or "app").`
+            ? ` Call resolve_dependencies for valid module names (e.g. ":app" or "app").`
             : ` Retry with modulePath set to one of these.`) +
           ` Omit modulePath when a single module owns the wanted configuration.`,
       );
@@ -147,10 +148,8 @@ export function classifyClassSourceError(
         error,
         'validation',
         true,
-        `Full source for ${JSON.stringify(error.className)} exceeds size limit.`,
-        `${error.message} (${error.charLength} chars; limit ${error.maxChars}). ` +
-          `Pass methodNames and/or startLine/endLine to narrow the response, or raise JVMSRC_MAX_FULL_SOURCE_CHARS. ` +
-          `Prefer get_class_structure / get_method_signature / find_in_class_source before full source.`,
+        fullSourceTooLargeSummary(error.className, error.charLength, error.maxChars),
+        `${error.message} Prefer get_class_structure / get_method_signature / find_in_class_source first.`,
       );
     case 'ARTIFACT_NOT_FOUND':
       return envelope(

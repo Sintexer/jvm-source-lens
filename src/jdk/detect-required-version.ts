@@ -11,6 +11,8 @@ import os from 'node:os';
  * - `java-version-file`        – `.java-version` in project root (`17` or `temurin-17`).
  * - `toolchain-script`         – `JavaLanguageVersion.of(N)` found in build script (best-effort regex).
  * - `gradle-wrapper-inferred`  – minimum Java inferred from the Gradle wrapper distribution version.
+ * - `maven-wrapper-inferred`   – minimum Java inferred from the Maven wrapper distribution version.
+ * - `maven-compiler-inferred`  – minimum Java from `maven.compiler.*` / compiler plugin (raised to the Maven wrapper minimum).
  * - `cached-toolchain`         – `javaToolchainVersion` stored in a previous successful resolution.
  * - `none`                     – no hint found; caller should pass through current `JAVA_HOME`.
  */
@@ -22,6 +24,7 @@ export type JavaVersionHintSource =
   | 'toolchain-script'
   | 'gradle-wrapper-inferred'
   | 'maven-wrapper-inferred'
+  | 'maven-compiler-inferred'
   | 'cached-toolchain';
 
 export type JavaVersionHint =
@@ -479,8 +482,9 @@ export function readMavenCompilerJavaVersion(projectRoot: string): number | null
  *   3. `gradle.properties` → `org.gradle.jvmargs` version flag
  *   4. `.sdkmanrc` `java=` entry
  *   5. `.java-version` file
- *   6. `build.gradle[.kts]` `JavaLanguageVersion.of(N)` declaration
- *   7. Gradle wrapper distribution version → minimum Java
+ *   6. `build.gradle[.kts]` `JavaLanguageVersion.of(N)` declaration (exact), then `pom.xml`
+ *      compiler level (minimum, at least the Maven wrapper minimum)
+ *   7. Gradle or Maven wrapper distribution version → minimum Java
  *   8. `cachedToolchainVersion` from a previous successful resolution
  *   9. `{ source: 'none' }` — no information available
  */
@@ -522,10 +526,19 @@ export function detectRequiredJavaVersion(
     return { source: 'java-version-file', majorVersion: javaVersionFile };
   }
 
-  // 6. Build script / POM toolchain declaration
-  const toolchain = readToolchainFromBuildScript(projectRoot) ?? readMavenCompilerJavaVersion(projectRoot);
+  // 6. Gradle toolchain declaration (exact)
+  const toolchain = readToolchainFromBuildScript(projectRoot);
   if (toolchain !== null) {
     return { source: 'toolchain-script', majorVersion: toolchain };
+  }
+
+  // 6b. Maven compiler level (minimum; Maven 4 wrapper itself needs Java 17)
+  const mavenCompiler = readMavenCompilerJavaVersion(projectRoot);
+  if (mavenCompiler !== null) {
+    return {
+      source: 'maven-compiler-inferred',
+      majorVersion: Math.max(mavenCompiler, readMavenWrapperMinJava(projectRoot) ?? 0),
+    };
   }
 
   // 7. Gradle or Maven wrapper inferred minimum
