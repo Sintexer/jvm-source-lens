@@ -1,0 +1,4 @@
+pluginManagement {
+    includeBuild('../picker')
+}
+rootProject.name = 'app'

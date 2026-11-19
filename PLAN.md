@@ -23,7 +23,7 @@ Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGEL
 
 Released together in 1.19.0: checkpoints 1 and 2.
 
-Checkpoints 3, 4, 5, 6, 7, 8, 9 and 10 are done and not released. Release them in order: 3, 4, 5, 6, 7, 8, 9, then 10.
+Checkpoints 3, 4, 5, 6, 7, 8, 9, 10 and 11 are done and not released. Release them in order: 3 to 11.
 
 
 | # | Checkpoint | Why at this position | Size |
@@ -38,7 +38,7 @@ Checkpoints 3, 4, 5, 6, 7, 8, 9 and 10 are done and not released. Release them i
 | 8 | Build-tool-neutral core | Gives a stable base for Maven. No behavior change | M |
 | 9 | Maven: external dependencies | Second build tool | L |
 | 10 | Maven: reactor modules and polish | Maven reaches the same level as Gradle | M |
-| 11 | Gradle cache gaps (`buildSrc`, env, composite) | Removes the need for `forceRefresh` | M |
+| 11 | Gradle cache gaps (`buildSrc`, composite; env stays a known gap) | Removes most needs for `forceRefresh` | M |
 | 12 | Package and javadoc-JAR documentation | New capability | L |
 | 13 | Hierarchy tools | New capability, low frequency | L |
 | 14 | Exploration: more build tools and decompilers | Optional. Only spikes | — |
@@ -198,14 +198,15 @@ Checkpoints 3, 4, 5, 6, 7, 8, 9 and 10 are done and not released. Release them i
 
 **Done when:** the Maven eval prompts meet the same targets as Gradle.
 
-## Checkpoint 11 — Gradle cache gaps
+## Checkpoint 11 — Gradle cache gaps (done)
 
 **Problem:** these changes need `forceRefresh` today: `buildSrc/src/**`, versions from `System.getenv()`, and included (composite) builds.
 
-- [ ] **Spike:** measure a configuration-cache (CC) hit on the eval project and on a large build. Compare it with today's hash skip (no Gradle run).
-- [ ] If the CC hit is ≤ 2 s: redesign `analyzer-init.gradle` with tasks per project that are made at configuration time, and run with `--configuration-cache`. Keep the hash only as a fast pre-check.
-- [ ] Else: add `buildSrc/**`, `build-logic/**` and the build files of included builds to the digest. Write in SPEC §6.1 that env-based versions still need `forceRefresh`.
-- [ ] Scenarios: a change in `buildSrc` and a change in an included build cause re-resolution without `forceRefresh`.
+- [x] **Spike:** measure a configuration-cache (CC) hit on the eval project and on a large build. Compare it with today's hash skip (no Gradle run).
+  Result (Gradle 8.14.5, `test/evals/project`, 3 modules, warm daemon): without CC, cold 2.9 s and warm 0.48 s. With `--configuration-cache`, the current init script fails (`Task.project` used at execution time, `analyzer-init.gradle:18`), so no CC hit exists to measure without a redesign. A warm run is already under 0.5 s here, so CC can gain little. A large build was not measured. Decision: design 2 (wider digest).
+- [x] (Not chosen, see spike result.) If the CC hit is ≤ 2 s: redesign `analyzer-init.gradle` with tasks per project that are made at configuration time, and run with `--configuration-cache`. Keep the hash only as a fast pre-check.
+- [x] Else: add `buildSrc/**`, `build-logic/**` and the build files of included builds to the digest. Write in SPEC §6.1 that env-based versions still need `forceRefresh`.
+- [x] Scenarios: a change in `buildSrc` and a change in an included build cause re-resolution without `forceRefresh`.
 
 **Done when:** both scenarios pass, and the cost of a warm call does not increase by more than 2 s.
 
@@ -255,3 +256,4 @@ Do these only when users ask for them. Each item is a spike with a written resul
 | Answer the first module on a real version conflict | The agent could use the wrong version without notice. Keep `MODULE_AMBIGUOUS` |
 | Bulk sources download in `jvmsrcResolve` | Slow. On-demand `jvmsrcResolveSources` is sufficient |
 | Fallback scan of `~/.gradle` / `~/.m2` when resolution fails | Gives wrong versions. Return the error |
+| Items known but not scheduled (build-tool source roots, JDK/env digest gaps) | Listed in [docs/deferred.md](docs/deferred.md) with triggers for maintainers |

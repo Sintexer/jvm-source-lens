@@ -1,0 +1,6 @@
+.gradle/
+build/
+libs/
+buildSrc/build/
+buildSrc/.gradle/
+gradle/wrapper/gradle-wrapper.jar

@@ -1,0 +1,12 @@
+plugins {
+    id 'java-gradle-plugin'
+}
+
+gradlePlugin {
+    plugins {
+        picker {
+            id = 'example.picker'
+            implementationClass = 'example.PickerPlugin'
+        }
+    }
+}

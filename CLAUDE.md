@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **JVM Source Lens** (`jvmsrc`) — a CLI + MCP server that resolves a JVM project's actual classpath by invoking the build tool (Gradle first), then extracts Java source for a fully-qualified class (sources JAR preferred, CFR decompilation fallback planned).
 
-Local review and refactor plan (gitignored, may be absent; batches 1–10 done): [.local/review-2026-11/README.md](.local/review-2026-11/README.md) — read it before fixing items it lists.
+Local review and refactor plan (gitignored, may be absent; batches 1–10 done, 11 deferred: [docs/deferred.md](docs/deferred.md)): [.local/review-2026-11/README.md](.local/review-2026-11/README.md) — read it before fixing items it lists.
 
 User-facing overview: [README.md](README.md). Authoritative spec: [SPEC.md](SPEC.md). Plan and status: [PLAN.md](PLAN.md). Update **SPEC** when behavior or schemas change; update **README** for install/usage; check off **PLAN** steps when shipping features and follow its checkpoint rules.
 
@@ -52,6 +52,9 @@ Current scenarios:
 - **`gradle/flatdir-jar/`** — `app/` depends on a flatDir jar (`implementation name: 'feedos_client_api'`, no group/version, no sources) built at test time. Tests verify `get` decompiles it via CFR instead of failing on the empty decompile-cache group.
 - **`gradle/version-conflict/`** — direct dep (v2) and transitive dep (v1) of the same library in `app/`. Tests verify the tool reports exactly the version Gradle selected (`highest-wins`) and that extracted source matches that version.
 - **`gradle/kotlin-library/`** — `producer/` publishes a Kotlin JAR plus sources JAR (a class and a top-level function in the `GreetKt` facade) to a temp Maven repo; `consumer/` is a Java project that uses it. Tests verify `get` returns `.kt` text (`sourceLanguage: kotlin`), `methodNames` returns Kotlin method excerpts (the "not supported" message is only for Scala/Groovy), line ranges work, and `get_class_structure` uses `javap`.
+
+- **`gradle/buildsrc-change/`** — jar name comes from `buildSrc/src/main/java/Deps.java`; editing it re-resolves without `forceRefresh` (digest covers `buildSrc/`, `build-logic/`).
+- **`gradle/included-build-change/`** — jar name comes from a plugin in an out-of-tree included build (`pluginManagement { includeBuild('../picker') }`); editing it re-resolves without `forceRefresh`.
 
 - **`maven/single-module/`** — real Maven resolution (`resources/maven-analyzer.jar`), on-demand `-sources.jar` fetch, CFR decompilation fallback, `get_class_structure`, `search_classes`, `search_in_artifact`, and zero `target/` writes.
 - **`maven/version-conflict/`** — direct dep (v1) vs transitive dep (v2); verifies Maven **nearest-wins** selects v1.

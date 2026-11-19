@@ -52,6 +52,8 @@ gradle_projects=(
   "gradle-properties-version/lib"
   "gradle-properties-version/app"
   "flatdir-jar/app"
+  "buildsrc-change/app"
+  "included-build-change/app"
   "kotlin-library/producer"
   "kotlin-library/consumer"
 )
