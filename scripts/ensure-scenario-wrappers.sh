@@ -5,6 +5,10 @@
 # Usage:
 #   bash scripts/ensure-scenario-wrappers.sh
 #
+# Optional filter: SCENARIO_FILTER=maven/multi-module limits generation to projects whose
+# "<tool>/<project>" id starts with that prefix (for example "maven" or "maven/multi-module").
+# The eval Maven project is skipped when a filter is set.
+#
 # Requires `gradle` on PATH when Gradle wrapper JARs are missing, and `mvn` (via
 # JVMSRC_MAVEN_BIN, MAVEN_HOME, M2_HOME, PATH, or IntelliJ bundled Maven) when Maven
 # wrapper JARs are missing.
@@ -17,6 +21,24 @@ SCENARIOS_MAVEN="$ROOT/test/scenarios/maven"
 EVALS_MAVEN="$ROOT/test/evals/maven-project"
 GRADLE_VERSION="9.3.1"
 MAVEN_VERSION="3.9.9"
+
+SCENARIO_FILTER="${SCENARIO_FILTER:-}"
+
+# True when no filter is set or "<tool>/<project>" starts with the filter.
+selected() {
+  [[ -z "$SCENARIO_FILTER" || "$1" == "$SCENARIO_FILTER"* ]]
+}
+
+filter_projects() {
+  local tool="$1"
+  shift
+  local p
+  for p in "$@"; do
+    if selected "$tool/$p"; then
+      printf '%s\n' "$p"
+    fi
+  done
+}
 
 gradle_projects=(
   "multi-module"
@@ -46,8 +68,15 @@ maven_projects=(
   "multi-module"
 )
 
+# Apply the filter (arrays stay plain bash 3 compatible).
+gradle_projects=($(filter_projects gradle "${gradle_projects[@]}"))
+maven_projects=($(filter_projects maven "${maven_projects[@]}"))
+if [[ -n "$SCENARIO_FILTER" ]]; then
+  EVALS_MAVEN=""
+fi
+
 need_gradle=0
-for project in "${gradle_projects[@]}"; do
+for project in ${gradle_projects[@]+"${gradle_projects[@]}"}; do
   if [[ ! -f "$SCENARIOS_GRADLE/$project/gradle/wrapper/gradle-wrapper.jar" ]]; then
     need_gradle=1
     break
@@ -59,7 +88,7 @@ if [[ "$need_gradle" -eq 1 ]] && ! command -v gradle >/dev/null 2>&1; then
   exit 1
 fi
 
-for project in "${gradle_projects[@]}"; do
+for project in ${gradle_projects[@]+"${gradle_projects[@]}"}; do
   dir="$SCENARIOS_GRADLE/$project"
   jar="$dir/gradle/wrapper/gradle-wrapper.jar"
 
@@ -110,13 +139,13 @@ resolve_mvn_bin() {
 }
 
 need_maven=0
-for project in "${maven_projects[@]}"; do
+for project in ${maven_projects[@]+"${maven_projects[@]}"}; do
   if [[ ! -f "$SCENARIOS_MAVEN/$project/.mvn/wrapper/maven-wrapper.jar" ]]; then
     need_maven=1
     break
   fi
 done
-if [[ -d "$EVALS_MAVEN" && ! -f "$EVALS_MAVEN/.mvn/wrapper/maven-wrapper.jar" ]]; then
+if [[ -n "$EVALS_MAVEN" && -d "$EVALS_MAVEN" && ! -f "$EVALS_MAVEN/.mvn/wrapper/maven-wrapper.jar" ]]; then
   need_maven=1
 fi
 
@@ -125,7 +154,7 @@ if [[ "$need_maven" -eq 1 ]]; then
     echo "ensure-scenario-wrappers: mvn not found; cannot generate Maven wrapper JARs" >&2
     exit 1
   fi
-  for project in "${maven_projects[@]}"; do
+  for project in ${maven_projects[@]+"${maven_projects[@]}"}; do
     dir="$SCENARIOS_MAVEN/$project"
     jar="$dir/.mvn/wrapper/maven-wrapper.jar"
 
@@ -142,7 +171,7 @@ if [[ "$need_maven" -eq 1 ]]; then
     fi
     echo "ensure-scenario-wrappers: maven/$project — done"
   done
-  if [[ -d "$EVALS_MAVEN" ]]; then
+  if [[ -n "$EVALS_MAVEN" && -d "$EVALS_MAVEN" ]]; then
     if [[ -f "$EVALS_MAVEN/.mvn/wrapper/maven-wrapper.jar" ]]; then
       echo "ensure-scenario-wrappers: evals/maven-project — wrapper JAR already present, skipping"
     else
@@ -155,7 +184,7 @@ if [[ "$need_maven" -eq 1 ]]; then
     fi
   fi
 else
-  for project in "${maven_projects[@]}"; do
+  for project in ${maven_projects[@]+"${maven_projects[@]}"}; do
     echo "ensure-scenario-wrappers: maven/$project — wrapper JAR already present, skipping"
   done
 fi

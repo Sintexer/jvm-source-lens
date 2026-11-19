@@ -54,14 +54,20 @@ function isDirectory(p: string): boolean {
   }
 }
 
+/**
+ * Asks every registered resolver for its nearest root. The deepest root (closest to `start`) wins,
+ * so a Maven project nested in a Gradle project is not lifted out of itself.
+ * On equal roots the earlier resolver in registry order wins.
+ */
 function findMatchingBuildRoot(start: string): { root: string; resolver: DependencyResolver } | null {
+  let best: { root: string; resolver: DependencyResolver } | null = null;
   for (const resolver of allResolvers()) {
     const root = resolver.findBuildRoot(start);
-    if (root !== null) {
-      return { root, resolver };
+    if (root !== null && (best === null || root.length > best.root.length)) {
+      best = { root, resolver };
     }
   }
-  return null;
+  return best;
 }
 
 /** Nearest ancestor (or `start` itself) recognized by any registered resolver, or `null`. */

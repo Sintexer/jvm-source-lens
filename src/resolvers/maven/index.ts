@@ -111,6 +111,10 @@ export class MavenResolver implements DependencyResolver {
   readonly id = 'maven';
   readonly displayName = 'Maven';
   readonly rootHint = 'pom.xml';
+  readonly configurationNames = {
+    compile: ['compile'],
+    'test-compile': ['test'],
+  } as const;
 
   detect(projectRoot: string): boolean {
     return hasPomXml(path.resolve(projectRoot));

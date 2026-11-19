@@ -11,6 +11,7 @@ import {
   setDefaultTimeout,
   test,
 } from 'bun:test';
+import { createTempLocalRepo, runMvnw, type TempLocalRepo } from '../_helpers.js';
 import { getClassSource } from '../../../../src/get-class-source.js';
 import { getClassStructure } from '../../../../src/get-class-structure.js';
 import { resolveWithResolutionCache } from '../../../../src/resolve-with-cache.js';
@@ -33,27 +34,14 @@ const scenarioReady =
   fs.existsSync(binaryWrapperJar) &&
   fs.existsSync(appWrapperJar);
 
-async function runMvnw(projectDir: string, ...args: string[]): Promise<void> {
-  const mvnw = path.join(projectDir, process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw');
-  const proc = Bun.spawn([mvnw, '-B', '-q', ...args], {
-    cwd: projectDir,
-    env: { ...process.env },
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-  const code = await proc.exited;
-  if (code !== 0) {
-    throw new Error(`Maven ${args.join(' ')} in ${path.basename(projectDir)} exited with ${code}`);
-  }
-}
-
 let sharedTmpDir = '';
 let remoteFileRepo = '';
-const m2CachedNamespace = path.join(os.homedir(), '.m2', 'repository', 'com', 'example', 'mvnsingle');
+const m2CachedGroup = 'com/example/mvnsingle';
+let m2: TempLocalRepo;
 
 if (scenarioReady) {
   beforeAll(async () => {
-    fs.rmSync(m2CachedNamespace, { recursive: true, force: true });
+    m2 = createTempLocalRepo('jvmsrc-mvn-single');
     sharedTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-mvn-single-'));
     remoteFileRepo = path.join(sharedTmpDir, 'remote-repo');
     fs.mkdirSync(remoteFileRepo, { recursive: true });
@@ -74,16 +62,16 @@ if (scenarioReady) {
       '-DskipTests',
       deployArg,
     );
-    // Clean producer target/ and ensure ~/.m2 has NOT pre-cached com.example.mvnsingle
+    // Clean producer target/ and ensure the temp local repo has NOT pre-cached com.example.mvnsingle
     // so consumer exercises real Maven download + on-demand sources resolution.
     fs.rmSync(path.join(sourcedRoot, 'target'), { recursive: true, force: true });
     fs.rmSync(path.join(binaryRoot, 'target'), { recursive: true, force: true });
-    fs.rmSync(m2CachedNamespace, { recursive: true, force: true });
+    m2.clearGroup(m2CachedGroup);
   });
 
   afterAll(() => {
     delete process.env.JVMSRC_LOCAL_MAVEN_REPO;
-    fs.rmSync(m2CachedNamespace, { recursive: true, force: true });
+    m2.dispose();
     fs.rmSync(path.join(sourcedRoot, 'target'), { recursive: true, force: true });
     fs.rmSync(path.join(binaryRoot, 'target'), { recursive: true, force: true });
     fs.rmSync(sharedTmpDir, { recursive: true, force: true });
@@ -98,7 +86,7 @@ describe.skipIf(!scenarioReady)('maven/single-module scenario (real Maven)', () 
     tmpCache = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-mvn-single-cache-'));
     prevCache = process.env.JVMSRC_CACHE_ROOT;
     process.env.JVMSRC_CACHE_ROOT = tmpCache;
-    fs.rmSync(m2CachedNamespace, { recursive: true, force: true });
+    m2.clearGroup(m2CachedGroup);
   });
 
   afterEach(() => {

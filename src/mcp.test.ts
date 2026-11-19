@@ -7,7 +7,7 @@ import {
   mcpListModulesPayloadSchema,
   mcpResolveDependenciesPayloadSchema,
   mcpSearchClassesPayloadSchema,
-} from './mcp.js';
+} from './mcp-schemas/index.js';
 import {
   mcpToolResultFromFindInClassSource,
   mcpToolResultFromListModules,

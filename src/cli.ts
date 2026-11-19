@@ -79,7 +79,7 @@ program
     '-c, --configuration <name>',
     'Resolved configuration name (default: compileClasspath, or testCompileClasspath with --include-test)',
   )
-  .option('--include-test', 'When --configuration is omitted, use testCompileClasspath (implied when --module is a src/test path)')
+  .option('--include-test', 'When --configuration is omitted, use testCompileClasspath (implied when --module is under src/test, src/jvmTest, src/testFixtures or src/integrationTest)')
   .option('--force-refresh', 'Bypass resolution cache and re-invoke the build tool', false)
   .option('-q, --quiet', 'On success, write only source to stdout (no metadata JSON on stderr)', false)
   .option('-v, --verbose', 'Stream build-tool stderr during resolution and sources JAR fetch', false)
@@ -228,7 +228,7 @@ program
   .option('-p, --project <path>', 'Project root (default: JVMSRC_PROJECT_ROOT, else the Gradle or Maven build containing cwd)')
   .option('-m, --module <module>', 'Module path (Gradle :core:utils or Maven artifactId / directory)')
   .option('-c, --configuration <name>', 'Resolved configuration name')
-  .option('--include-test', 'Use testCompileClasspath when configuration omitted (implied when --module is a src/test path)')
+  .option('--include-test', 'Use testCompileClasspath when configuration omitted (implied when --module is under src/test, src/jvmTest, src/testFixtures or src/integrationTest)')
   .option('--force-refresh', 'Bypass resolution cache and re-invoke the build tool', false)
   .option('-q, --quiet', 'Disable progress labels on stderr', false)
   .option('-v, --verbose', 'Stream build-tool stderr during resolution', false)
@@ -300,7 +300,7 @@ program
   .option('--jar-path <path>', 'Absolute JAR path from resolve output (alternative to coordinates)')
   .option('-m, --module <module>', 'Module path (Gradle :core:utils or Maven artifactId / directory)')
   .option('-c, --configuration <name>', 'Resolved configuration name')
-  .option('--include-test', 'Use testCompileClasspath when configuration omitted (implied when --module is a src/test path)')
+  .option('--include-test', 'Use testCompileClasspath when configuration omitted (implied when --module is under src/test, src/jvmTest, src/testFixtures or src/integrationTest)')
   .option('--force-refresh', 'Bypass resolution cache and re-invoke the build tool', false)
   .option('--regex', 'Treat query as a JavaScript RegExp pattern', false)
   .option('--context-lines <n>', 'Context lines above/below each hit (default 3)', (v) => parseInt(v, 10))

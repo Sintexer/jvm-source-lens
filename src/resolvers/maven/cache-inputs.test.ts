@@ -97,6 +97,26 @@ describe('Maven cache inputs and immutability', () => {
     expect(inputs.env[1]?.[1]).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  test('resolveMavenLocalRepository honours MAVEN_ARGS below .mvn/maven.config and above settings.xml', () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-mvn-args-'));
+    const proj = path.join(tmp, 'proj');
+    const fakeHome = path.join(tmp, 'home');
+    fs.mkdirSync(path.join(proj, '.mvn'), { recursive: true });
+    fs.mkdirSync(path.join(fakeHome, '.m2'), { recursive: true });
+    fs.writeFileSync(
+      path.join(fakeHome, '.m2', 'settings.xml'),
+      '<settings><localRepository>/custom/from-settings</localRepository></settings>',
+      'utf8',
+    );
+    const env = { MAVEN_ARGS: '-B -Dmaven.repo.local=/custom/from-args -q' };
+
+    expect(resolveMavenLocalRepository(proj, fakeHome, env)).toBe('/custom/from-args');
+    expect(resolveMavenLocalRepository(proj, fakeHome, { MAVEN_ARGS: '-B' })).toBe('/custom/from-settings');
+
+    fs.writeFileSync(path.join(proj, '.mvn', 'maven.config'), '-Dmaven.repo.local=/custom/from-config\n', 'utf8');
+    expect(resolveMavenLocalRepository(proj, fakeHome, env)).toBe('/custom/from-config');
+  });
+
   test('isMavenImmutableArtifact marks SNAPSHOTs and external paths mutable and release m2 jars immutable', () => {
     const repo = path.join(os.tmpdir(), 'fake-m2-repo');
     const releaseJar = path.join(repo, 'com', 'example', 'lib', '1.0.0', 'lib-1.0.0.jar');

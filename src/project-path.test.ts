@@ -130,6 +130,63 @@ describe('project root discovery', () => {
     });
   });
 
+  describe('nearest root wins across build tools', () => {
+    const nested = path.join(tmp, 'nested');
+    const gradleOverMaven = path.join(nested, 'g-over-m');
+    const mavenInner = path.join(gradleOverMaven, 'svc');
+    const mavenOverGradle = path.join(nested, 'm-over-g');
+    const gradleInner = path.join(mavenOverGradle, 'svc');
+    const both = path.join(nested, 'both');
+    for (const d of [path.join(mavenInner, 'src'), path.join(gradleInner, 'src'), both]) {
+      fs.mkdirSync(d, { recursive: true });
+    }
+    fs.mkdirSync(path.join(both, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(gradleOverMaven, 'settings.gradle'), '');
+    fs.writeFileSync(path.join(mavenInner, 'pom.xml'), '<project/>');
+    fs.writeFileSync(path.join(mavenOverGradle, 'pom.xml'), '<project/>');
+    fs.writeFileSync(path.join(gradleInner, 'settings.gradle'), '');
+    fs.writeFileSync(path.join(both, 'settings.gradle'), '');
+    fs.writeFileSync(path.join(both, 'pom.xml'), '<project/>');
+
+    test('shouldPickMavenRootWhenMavenProjectIsNestedInGradleProject', () => {
+      expect(findBuildRoot(path.join(mavenInner, 'src'))).toBe(mavenInner);
+    });
+
+    test('shouldPickGradleRootWhenGradleProjectIsNestedInMavenProject', () => {
+      expect(findBuildRoot(path.join(gradleInner, 'src'))).toBe(gradleInner);
+    });
+
+    test('shouldPreferGradleWhenBothToolsMatchSameDirectory', () => {
+      const lifted = resolveProjectRoot(path.join(both, 'src'));
+      expect(lifted).toEqual({
+        ok: true,
+        path: both,
+        note: `projectRoot ${path.join(both, 'src')} is inside the Gradle project at ${both}; using that.`,
+      });
+    });
+
+    test('shouldPreferPrependedResolverWhenRootsTie', () => {
+      const start = path.join(both, 'src');
+      const fake = {
+        id: 'tie',
+        displayName: 'TieTool',
+        rootHint: 'tie.marker',
+        detect: () => true,
+        findBuildRoot: () => both,
+      } as unknown as DependencyResolver;
+      const restore = registerResolverForTesting(fake);
+      try {
+        expect(resolveProjectRoot(start)).toEqual({
+          ok: true,
+          path: both,
+          note: `projectRoot ${start} is inside the TieTool project at ${both}; using that.`,
+        });
+      } finally {
+        restore();
+      }
+    });
+  });
+
   test('lifts subdirectory and names custom resolver via registry findBuildRoot', () => {
     const fakeProj = path.join(tmp, 'fake-proj');
     const fakeSub = path.join(fakeProj, 'mod', 'src');

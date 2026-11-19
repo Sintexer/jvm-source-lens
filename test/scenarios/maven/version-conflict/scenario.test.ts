@@ -11,6 +11,7 @@ import {
   setDefaultTimeout,
   test,
 } from 'bun:test';
+import { createTempLocalRepo, runMvnw, type TempLocalRepo } from '../_helpers.js';
 import { getClassSource } from '../../../../src/get-class-source.js';
 import { resolveWithResolutionCache } from '../../../../src/resolve-with-cache.js';
 
@@ -39,28 +40,14 @@ const widgetSrc = path.join(libRoot, 'src/main/java/com/example/widget/Widget.ja
 const scenarioReady =
   fs.existsSync(libWrapperJar) && fs.existsSync(adapterWrapperJar) && fs.existsSync(appWrapperJar);
 
-async function runMvnw(projectDir: string, ...args: string[]): Promise<void> {
-  const mvnw = path.join(projectDir, process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw');
-  const proc = Bun.spawn([mvnw, '-B', '-q', ...args], {
-    cwd: projectDir,
-    env: { ...process.env },
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-  const code = await proc.exited;
-  if (code !== 0) {
-    throw new Error(`Maven ${args.join(' ')} in ${path.basename(projectDir)} exited with ${code}`);
-  }
-}
-
 let sharedTmpDir = '';
 let remoteRepo = '';
 let originalWidgetSrc = '';
-const m2CachedNamespace = path.join(os.homedir(), '.m2', 'repository', 'com', 'example', 'mvnvc');
+let m2: TempLocalRepo;
 
 if (scenarioReady) {
   beforeAll(async () => {
-    fs.rmSync(m2CachedNamespace, { recursive: true, force: true });
+    m2 = createTempLocalRepo('jvmsrc-mvn-vc');
     sharedTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-mvn-vc-'));
     remoteRepo = path.join(sharedTmpDir, 'remote-repo');
     fs.mkdirSync(remoteRepo, { recursive: true });
@@ -98,7 +85,7 @@ if (scenarioReady) {
     fs.rmSync(path.join(libRoot, '.flattened-pom.xml'), { force: true });
     fs.rmSync(path.join(libRoot, 'target'), { recursive: true, force: true });
     fs.rmSync(path.join(adapterRoot, 'target'), { recursive: true, force: true });
-    fs.rmSync(m2CachedNamespace, { recursive: true, force: true });
+    m2.dispose();
     fs.rmSync(sharedTmpDir, { recursive: true, force: true });
   });
 }

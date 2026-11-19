@@ -75,6 +75,10 @@ export class GradleResolver implements DependencyResolver {
   readonly id = 'gradle';
   readonly displayName = 'Gradle';
   readonly rootHint = 'gradlew or settings.gradle(.kts)';
+  readonly configurationNames = {
+    compile: ['compileClasspath', 'jvmCompileClasspath'],
+    'test-compile': ['testCompileClasspath', 'jvmTestCompileClasspath'],
+  } as const;
 
   detect(projectRoot: string): boolean {
     const root = path.resolve(projectRoot);

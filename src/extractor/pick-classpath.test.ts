@@ -325,3 +325,57 @@ describe('pickResolvedConfiguration with a file path as modulePath', () => {
     }
   });
 });
+
+describe('pickResolvedConfiguration error wording per build tool', () => {
+  function outputWithoutConfigurations(type: string): ResolutionOutput {
+    return {
+      ...minimalOutput(),
+      buildSystem: { type, version: '1', wrapper: true },
+      modules: [{ name: 'root', path: '/tmp/p', configurations: [] }],
+    };
+  }
+
+  test('shouldNameMavenConfigurationsWhenMavenOutputHasNone', () => {
+    const r = pickResolvedConfiguration(outputWithoutConfigurations('maven'), {});
+    expect(r.ok).toBe(false);
+    if (!r.ok && r.error.code === 'CONFIGURATION_NOT_FOUND') {
+      expect(r.error.message).toContain('none of: compile.');
+      expect(r.error.message).not.toContain('Classpath');
+      expect(r.error.configuration).toBe('compile');
+    }
+  });
+
+  test('shouldNameMavenTestConfigurationWhenIncludeTestIsSet', () => {
+    const r = pickResolvedConfiguration(outputWithoutConfigurations('maven'), { includeTest: true });
+    if (!r.ok && r.error.code === 'CONFIGURATION_NOT_FOUND') {
+      expect(r.error.message).toContain('none of: test.');
+      expect(r.error.configuration).toBe('test');
+    } else {
+      throw new Error('expected CONFIGURATION_NOT_FOUND');
+    }
+  });
+
+  test('shouldKeepGradleNamesWhenGradleOutputHasNone', () => {
+    const r = pickResolvedConfiguration(outputWithoutConfigurations('gradle'), {});
+    if (!r.ok && r.error.code === 'CONFIGURATION_NOT_FOUND') {
+      expect(r.error.message).toContain('none of: compileClasspath or jvmCompileClasspath.');
+    } else {
+      throw new Error('expected CONFIGURATION_NOT_FOUND');
+    }
+  });
+
+  test('shouldDescribeScopeWhenBuildToolIsUnknown', () => {
+    const r = pickResolvedConfiguration(outputWithoutConfigurations('bazel'), {});
+    if (!r.ok && r.error.code === 'CONFIGURATION_NOT_FOUND') {
+      expect(r.error.message).toContain('no configuration with scope compile');
+      expect(r.error.configuration).toBe('compile');
+    } else {
+      throw new Error('expected CONFIGURATION_NOT_FOUND');
+    }
+  });
+
+  test('shouldNotHardCodeGradleClasspathNamesInPickClasspathSource', async () => {
+    const src = await Bun.file(new URL('./pick-classpath.ts', import.meta.url)).text();
+    expect(src).not.toMatch(/'\w*Classpath'/);
+  });
+});

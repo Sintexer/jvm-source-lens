@@ -5,16 +5,25 @@ const stderrMessages: string[] = [];
 const stdoutJsonLines: string[] = [];
 const origConsoleError = console.error;
 const origConsoleLog = console.log;
+const origStdoutWrite = process.stdout.write.bind(process.stdout);
+let stdoutRaw = '';
 
 afterEach(() => {
   console.error = origConsoleError;
   console.log = origConsoleLog;
+  process.stdout.write = origStdoutWrite;
+  stdoutRaw = '';
   stderrMessages.length = 0;
   stdoutJsonLines.length = 0;
   process.exitCode = 0;
 });
 
 function captureConsoleError(): void {
+  stdoutRaw = '';
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    stdoutRaw += String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
   stderrMessages.length = 0;
   console.error = ((msg: string) => {
     stderrMessages.push(msg);
@@ -48,6 +57,7 @@ describe('writeCliGetResult', () => {
     expect(stderrMessages.length).toBe(1);
     expect(stderrMessages[0]).toContain('"sourceAvailable":true');
     expect(stderrMessages[0]).toContain('"sourceLanguage":"java"');
+    expect(stdoutRaw).toBe('class Foo {}\n');
   });
 
   test('quiet mode skips success metadata on stderr', () => {

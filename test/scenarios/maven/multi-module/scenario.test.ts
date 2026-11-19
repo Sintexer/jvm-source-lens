@@ -13,6 +13,7 @@ import {
   test,
 } from 'bun:test';
 import { zipSync } from 'fflate';
+import { createTempLocalRepo, runMvnwFrom, type TempLocalRepo } from '../_helpers.js';
 import { getClassSource } from '../../../../src/get-class-source.js';
 import { getClassStructure } from '../../../../src/get-class-structure.js';
 import { resolveProjectRoot } from '../../../../src/project-path.js';
@@ -26,7 +27,7 @@ const appRoot = path.join(scenarioRoot, 'services', 'app');
 const wrapperJar = path.join(scenarioRoot, '.mvn/wrapper/maven-wrapper.jar');
 
 const scenarioReady = fs.existsSync(wrapperJar);
-const m2ReactorNamespace = path.join(os.homedir(), '.m2', 'repository', 'com', 'acme', 'reactor');
+let m2: TempLocalRepo;
 
 function buildLegacySystemJar(destJar: string): void {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-sysjar-'));
@@ -65,25 +66,14 @@ function buildLegacySystemJar(destJar: string): void {
   }
 }
 
-async function runMvnw(projectDir: string, ...args: string[]): Promise<void> {
-  const mvnw = path.join(scenarioRoot, process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw');
-  const proc = Bun.spawn([mvnw, '-B', '-q', ...args], {
-    cwd: projectDir,
-    env: { ...process.env },
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-  const code = await proc.exited;
-  if (code !== 0) {
-    throw new Error(`Maven ${args.join(' ')} exited with ${code}`);
-  }
-}
+const runMvnw = (projectDir: string, ...args: string[]): Promise<void> =>
+  runMvnwFrom(scenarioRoot, projectDir, ...args);
 
 const appLibsDir = path.join(appRoot, 'libs');
 
 if (scenarioReady) {
   beforeAll(() => {
-    fs.rmSync(m2ReactorNamespace, { recursive: true, force: true });
+    m2 = createTempLocalRepo('jvmsrc-mvn-mm');
     fs.rmSync(path.join(coreRoot, 'target'), { recursive: true, force: true });
     fs.rmSync(path.join(appRoot, 'target'), { recursive: true, force: true });
     fs.mkdirSync(appLibsDir, { recursive: true });
@@ -94,7 +84,7 @@ if (scenarioReady) {
     fs.rmSync(appLibsDir, { recursive: true, force: true });
     fs.rmSync(path.join(coreRoot, 'target'), { recursive: true, force: true });
     fs.rmSync(path.join(appRoot, 'target'), { recursive: true, force: true });
-    fs.rmSync(m2ReactorNamespace, { recursive: true, force: true });
+    m2.dispose();
   });
 }
 

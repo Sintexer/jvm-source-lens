@@ -1,5 +1,6 @@
 import type { ClassSourceError } from './class-source-types.js';
 import { matchModule, withoutAllModules } from './match-module.js';
+import { resolverById } from '../resolvers/index.js';
 import type {
   ResolutionOutput,
   ResolvedConfiguration,
@@ -16,19 +17,30 @@ export type PickClasspathResult =
   | { ok: true; module: ResolvedModule; configuration: ResolvedConfiguration }
   | { ok: false; error: ClassSourceError };
 
-const COMPILE_CONFIGURATION_CANDIDATES = ['compileClasspath', 'jvmCompileClasspath'] as const;
-const TEST_CONFIGURATION_CANDIDATES = ['testCompileClasspath', 'jvmTestCompileClasspath'] as const;
-
 const AVAILABLE_MODULES_MESSAGE_CAP = 12;
 
+/** Explicit name, else the owning resolver's names for the scope. Empty for an unknown build tool (scope-only match). */
 function configurationCandidates(
   explicitName: string | undefined,
-  includeTest: boolean | undefined,
+  scope: 'compile' | 'test-compile',
+  buildSystemType: string,
 ): readonly string[] {
   if (explicitName !== undefined && explicitName.length > 0) {
     return [explicitName];
   }
-  return includeTest ? TEST_CONFIGURATION_CANDIDATES : COMPILE_CONFIGURATION_CANDIDATES;
+  return resolverById(buildSystemType)?.configurationNames?.[scope] ?? [];
+}
+
+/** Tail of the CONFIGURATION_NOT_FOUND message, after the module name. */
+function missingPhrase(candidates: readonly string[], scope: 'compile' | 'test-compile'): string {
+  return candidates.length > 0
+    ? `has none of: ${candidates.join(' or ')}.`
+    : `has no configuration with scope ${scope}.`;
+}
+
+/** Wording for "wanted" in error messages: the candidate names, or the scope when there are none. */
+function describeWanted(candidates: readonly string[], scope: 'compile' | 'test-compile'): string {
+  return candidates.length > 0 ? candidates.join(' or ') : `a configuration with scope ${scope}`;
 }
 
 function pickConfiguration(
@@ -79,13 +91,10 @@ export function pickResolvedConfiguration(
   rawOpts: PickClasspathOptions,
 ): PickClasspathResult {
   const opts = withoutAllModules(rawOpts);
-  const candidates = configurationCandidates(opts.configuration, opts.includeTest);
+  const scope = opts.includeTest ? 'test-compile' : 'compile';
+  const candidates = configurationCandidates(opts.configuration, scope, output.buildSystem.type);
   const fallbackScope: ResolvedConfiguration['scope'] | undefined =
-    opts.configuration && opts.configuration.length > 0
-      ? undefined
-      : opts.includeTest
-        ? 'test-compile'
-        : 'compile';
+    opts.configuration && opts.configuration.length > 0 ? undefined : scope;
   const availableModules = listModuleNames(output);
   const wantModule = opts.modulePath;
 
@@ -110,16 +119,15 @@ export function pickResolvedConfiguration(
     const module = match.module;
     const configuration = pickConfiguration(module, candidates, fallbackScope);
     if (configuration === undefined) {
-      const wanted = candidates.join(' or ');
       return {
         ok: false,
         error: {
           code: 'CONFIGURATION_NOT_FOUND',
           message:
-            `Module ${JSON.stringify(module.name)} has none of: ${wanted}.` +
+            `Module ${JSON.stringify(module.name)} ${missingPhrase(candidates, scope)}` +
             formatAvailableModulesHint(availableModules),
           moduleName: module.name,
-          configuration: candidates[0] ?? 'compileClasspath',
+          configuration: candidates[0] ?? scope,
           availableModules,
         },
       };
@@ -143,7 +151,7 @@ export function pickResolvedConfiguration(
 
   if (withConfig.length > 1) {
     const modulePaths = withConfig.map((x) => x.module.name);
-    const wanted = candidates.join(' or ');
+    const wanted = describeWanted(candidates, scope);
     return {
       ok: false,
       error: {
@@ -157,17 +165,16 @@ export function pickResolvedConfiguration(
     };
   }
 
-  const wanted = candidates.join(' or ');
   const triedName = root?.name ?? 'root';
   return {
     ok: false,
     error: {
       code: 'CONFIGURATION_NOT_FOUND',
       message:
-        `Module ${JSON.stringify(triedName)} has none of: ${wanted}.` +
+        `Module ${JSON.stringify(triedName)} ${missingPhrase(candidates, scope)}` +
         formatAvailableModulesHint(availableModules),
       moduleName: triedName,
-      configuration: candidates[0] ?? 'compileClasspath',
+      configuration: candidates[0] ?? scope,
       availableModules,
     },
   };

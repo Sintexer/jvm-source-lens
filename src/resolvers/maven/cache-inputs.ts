@@ -64,15 +64,45 @@ function readRepoLocalFromSettingsXml(homeDir: string): string | null {
 }
 
 /**
+ * `-Dmaven.repo.local=...` from the `MAVEN_ARGS` env var, resolved against `projectRoot`.
+ * Maven 3.9 ignores `maven.repo.local` when it arrives through `MAVEN_ARGS`, so the spawner forwards it
+ * as an explicit argument (see `mavenArgsRepoLocalArg`).
+ */
+function readRepoLocalFromMavenArgs(projectRoot: string, env: NodeJS.ProcessEnv): string | null {
+  const raw = env.MAVEN_ARGS;
+  if (!raw) {
+    return null;
+  }
+  const m = raw.match(/-Dmaven\.repo\.local=(?:"([^"]+)"|'([^']+)'|(\S+))/);
+  const val = (m?.[1] ?? m?.[2] ?? m?.[3] ?? '').trim();
+  return val.length > 0 ? path.resolve(projectRoot, val) : null;
+}
+
+/**
+ * Explicit `-Dmaven.repo.local=...` argument to add to a Maven command line so that `MAVEN_ARGS` takes effect.
+ * Returns `null` when `MAVEN_ARGS` has none or `.mvn/maven.config` already sets it (the config file wins).
+ */
+export function mavenArgsRepoLocalArg(projectRoot: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  if (readRepoLocalFromMavenConfig(projectRoot) !== null) {
+    return null;
+  }
+  const repo = readRepoLocalFromMavenArgs(projectRoot, env);
+  return repo === null ? null : `-Dmaven.repo.local=${repo}`;
+}
+
+/**
  * Effective Maven local repository directory for `projectRoot`:
- * `.mvn/maven.config` `-Dmaven.repo.local=...` -> `~/.m2/settings.xml` `<localRepository>` -> `~/.m2/repository`.
+ * `.mvn/maven.config` `-Dmaven.repo.local=...` -> `MAVEN_ARGS` -> `~/.m2/settings.xml` `<localRepository>` -> `~/.m2/repository`.
+ * Maven applies `.mvn/maven.config` after `MAVEN_ARGS`, so the config file wins.
  */
 export function resolveMavenLocalRepository(
   projectRoot: string,
   homeDir: string = os.homedir(),
+  env: NodeJS.ProcessEnv = process.env,
 ): string {
   return (
     readRepoLocalFromMavenConfig(projectRoot) ??
+    readRepoLocalFromMavenArgs(projectRoot, env) ??
     readRepoLocalFromSettingsXml(homeDir) ??
     path.join(homeDir, '.m2', 'repository')
   );

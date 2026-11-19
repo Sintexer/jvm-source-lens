@@ -26,11 +26,24 @@ test('resolveCfrJarPath prefers JVMSRC_CFR_PATH over JVM_ORACLE_CFR_PATH', () =>
   fs.writeFileSync(jar, 'not a real jar');
   process.env.JVM_ORACLE_CFR_PATH = path.join(dir, 'wrong.jar');
   process.env.JVMSRC_CFR_PATH = jar;
-  const r = resolveCfrJarPath();
+  const origWrite = process.stderr.write.bind(process.stderr);
+  let stderrText = '';
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderrText += String(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+  let r: ReturnType<typeof resolveCfrJarPath>;
+  try {
+    r = resolveCfrJarPath();
+  } finally {
+    process.stderr.write = origWrite;
+  }
   expect(r.ok).toBe(true);
   if (r.ok) {
     expect(r.path).toBe(jar);
   }
+  // The override notice is printed once per process, so it may already have been shown.
+  expect(stderrText === '' || stderrText.includes('using CFR JAR override from JVMSRC_CFR_PATH')).toBe(true);
 });
 
 test('resolveCfrJarPath uses JVM_ORACLE_CFR_PATH when JVMSRC unset', () => {

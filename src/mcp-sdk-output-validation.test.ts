@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { normalizeObjectSchema, safeParseAsync } from '@modelcontextprotocol/sdk/server/zod-compat.js';
-import { mcpClassSourceToolPayloadSchema } from './mcp.js';
+import { mcpClassSourceToolPayloadSchema } from './mcp-schemas/index.js';
 
 /**
  * Documents why MCP tools omit outputSchema (see mcp.ts registerTool).

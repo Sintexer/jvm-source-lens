@@ -89,6 +89,12 @@ export interface DependencyResolver {
   readonly displayName: string;
   /** Root marker hint for error guidance (e.g. `'gradlew or settings.gradle(.kts)'`). */
   readonly rootHint: string;
+  /**
+   * Configuration names that hold the compile and test-compile classpaths, in lookup order.
+   * Used to pick a configuration when the caller gives none, and in error messages.
+   * When omitted, selection falls back to the configuration `scope` only.
+   */
+  readonly configurationNames?: Readonly<Record<'compile' | 'test-compile', readonly string[]>>;
   detect(projectRoot: string): boolean;
   findBuildRoot(start: string): string | null;
   cacheInputs(projectRoot: string): BuildCacheInputs;

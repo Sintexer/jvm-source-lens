@@ -8,6 +8,7 @@ import { resolveJdkForProject } from '../../jdk/resolve-jdk-for-project.js';
 import { awaitChildExit, readProcessStreamToText, spawnChild } from '../../spawn-child.js';
 import type { SubprocessCapture } from '../base.js';
 import { formatMavenUserMessage } from './maven-failure-message.js';
+import { mavenArgsRepoLocalArg } from './cache-inputs.js';
 import { resolveMavenWrapperCommand } from './maven-wrapper-command.js';
 
 export { resolveMavenWrapperCommand } from './maven-wrapper-command.js';
@@ -171,10 +172,12 @@ export async function runMavenAnalyzer(
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-mvn-out-'));
   const outputFile = path.join(tmpDir, 'output.json');
 
+  const repoLocalArg = mavenArgsRepoLocalArg(root);
   const argv: string[] = [
     ...wrapper.command,
     '-B',
     '-q',
+    ...(repoLocalArg ? [repoLocalArg] : []),
     `-Dmaven.ext.class.path=${extClassPath}`,
     `-Djvmsrc.wrapper=${useWrapper ? 'true' : 'false'}`,
     `-Djvmsrc.projectRoot=${root}`,

@@ -27,12 +27,15 @@ export function withoutAllModules<T extends { modulePath?: string }>(opts: T): T
   return isAllModules(opts.modulePath) ? { ...opts, modulePath: undefined } : opts;
 }
 
-/** A `modulePath` that points into `src/test/` means the test classpath, unless `includeTest` is explicit. */
+const TEST_SOURCE_SETS = ['test', 'jvmTest', 'testFixtures', 'integrationTest'] as const;
+const TEST_SOURCE_SET_PATH = new RegExp(`(^|/)src/(${TEST_SOURCE_SETS.join('|')})(/|$)`);
+
+/** A `modulePath` that points into a test source set (`src/test`, `src/jvmTest`, ...) means the test classpath, unless `includeTest` is explicit. */
 export function inferIncludeTest(modulePath: string | undefined, includeTest: boolean | undefined): boolean | undefined {
   if (includeTest !== undefined || modulePath === undefined) {
     return includeTest;
   }
-  return /(^|\/)src\/test(\/|$)/.test(modulePath.trim().replace(/\\/g, '/')) ? true : undefined;
+  return TEST_SOURCE_SET_PATH.test(modulePath.trim().replace(/\\/g, '/')) ? true : undefined;
 }
 
 export type ModuleMatch =

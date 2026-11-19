@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { createTempLocalRepo, runMvnw, type TempLocalRepo } from '../_helpers.js';
 import { getClassSource } from '../../../../src/get-class-source.js';
 import { resolveWithResolutionCache } from '../../../../src/resolve-with-cache.js';
 
@@ -15,33 +16,21 @@ const consumerWrapperJar = path.join(consumerRoot, '.mvn/wrapper/maven-wrapper.j
 const greeterSrc = path.join(producerRoot, 'src/main/java/com/example/snap/SnapGreeter.java');
 
 const scenarioReady = fs.existsSync(producerWrapperJar) && fs.existsSync(consumerWrapperJar);
-const m2SnapNamespace = path.join(os.homedir(), '.m2', 'repository', 'com', 'example', 'mvnsnap');
-
-async function runMvnw(projectDir: string, ...args: string[]): Promise<void> {
-  const mvnw = path.join(projectDir, process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw');
-  const proc = Bun.spawn([mvnw, '-B', '-q', ...args], {
-    cwd: projectDir,
-    env: { ...process.env },
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-  const code = await proc.exited;
-  if (code !== 0) {
-    throw new Error(`Maven ${args.join(' ')} in ${path.basename(projectDir)} exited with ${code}`);
-  }
-}
+const m2SnapGroup = 'com/example/mvnsnap';
 
 describe.skipIf(!scenarioReady)('maven/local-install-snapshot scenario (real Maven)', () => {
   let prevCache: string | undefined;
   let tmpCache = '';
   let originalSrc = '';
+  let m2: TempLocalRepo;
 
   beforeEach(() => {
+    m2 = createTempLocalRepo('jvmsrc-mvn-snap');
     tmpCache = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-mvn-snap-cache-'));
     prevCache = process.env.JVMSRC_CACHE_ROOT;
     process.env.JVMSRC_CACHE_ROOT = tmpCache;
     originalSrc = fs.readFileSync(greeterSrc, 'utf8');
-    fs.rmSync(m2SnapNamespace, { recursive: true, force: true });
+    m2.clearGroup(m2SnapGroup);
   });
 
   afterEach(() => {
@@ -52,12 +41,12 @@ describe.skipIf(!scenarioReady)('maven/local-install-snapshot scenario (real Mav
       process.env.JVMSRC_CACHE_ROOT = prevCache;
     }
     fs.rmSync(path.join(producerRoot, 'target'), { recursive: true, force: true });
-    fs.rmSync(m2SnapNamespace, { recursive: true, force: true });
+    m2.dispose();
     fs.rmSync(tmpCache, { recursive: true, force: true });
   });
 
   test('shouldInvalidateCacheAutomaticallyWhenSnapshotIsReinstalledToLocalM2WithoutForceRefresh', async () => {
-    // 1. Install initial 1.0.0-SNAPSHOT into ~/.m2/repository
+    // 1. Install initial 1.0.0-SNAPSHOT into the temp local repository
     await runMvnw(producerRoot, 'install', '-DskipTests');
 
     const r1 = await resolveWithResolutionCache(consumerRoot, { forceRefresh: false });
@@ -80,7 +69,7 @@ describe.skipIf(!scenarioReady)('maven/local-install-snapshot scenario (real Mav
       expect(srcV1.source).not.toContain('farewell');
     }
 
-    // 2. Add farewell() and run `mvn install` again (overwriting 1.0.0-SNAPSHOT in ~/.m2/repository)
+    // 2. Add farewell() and run `mvn install` again (overwriting 1.0.0-SNAPSHOT in the temp local repository)
     const updatedSrc = originalSrc.replace(
       /(\s*}\s*)$/,
       '\n  public String farewell(String name) {\n    return "Bye, " + name + "!";\n  }\n$1',
@@ -88,7 +77,7 @@ describe.skipIf(!scenarioReady)('maven/local-install-snapshot scenario (real Mav
     fs.writeFileSync(greeterSrc, updatedSrc, 'utf8');
     await runMvnw(producerRoot, 'install', '-DskipTests');
 
-    // 3. Resolve WITHOUT forceRefresh — local-artifact.hash detects mutated SNAPSHOT in ~/.m2
+    // 3. Resolve WITHOUT forceRefresh — local-artifact.hash detects mutated SNAPSHOT in the temp local repository
     const r2 = await resolveWithResolutionCache(consumerRoot, { forceRefresh: false });
     expect(r2.ok).toBe(true);
     if (r2.ok) {

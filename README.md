@@ -210,7 +210,7 @@ Primarily **Java + Spring Boot** projects on **Gradle** and **Maven**. Other JVM
 | **Maven** | Supported — multimodule reactor, nearest-wins conflict resolution, `system` scope, sources JARs + CFR |
 | Bazel | Planned ([SPEC.md](SPEC.md)) |
 
-`-p` / `projectRoot` can be the build root or any directory inside it; jvmsrc walks up to the Gradle root (`gradlew` / `settings.gradle(.kts)`) or Maven reactor root (`pom.xml`). MCP tools can omit `projectRoot`, and the CLI can omit `-p` (it uses `JVMSRC_PROJECT_ROOT`, else the build that contains the working directory). Uses `./gradlew` / `./mvnw` when present, else `gradle` / `mvn`.
+`-p` / `projectRoot` can be the build root or any directory inside it; jvmsrc walks up to the Gradle root (`gradlew` / `settings.gradle(.kts)`) or Maven reactor root (`pom.xml`); the nearest root wins. MCP tools can omit `projectRoot`, and the CLI can omit `-p` (it uses `JVMSRC_PROJECT_ROOT`, else the build that contains the working directory). Uses `./gradlew` / `./mvnw` when present, else `gradle` / `mvn`.
 
 </details>
 

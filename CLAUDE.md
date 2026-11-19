@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **JVM Source Lens** (`jvmsrc`) — a CLI + MCP server that resolves a JVM project's actual classpath by invoking the build tool (Gradle first), then extracts Java source for a fully-qualified class (sources JAR preferred, CFR decompilation fallback planned).
 
-Local review and refactor plan (gitignored, may be absent): [.local/review-2026-11/README.md](.local/review-2026-11/README.md) — read it before fixing items it lists.
+Local review and refactor plan (gitignored, may be absent; batches 1–10 done): [.local/review-2026-11/README.md](.local/review-2026-11/README.md) — read it before fixing items it lists.
 
 User-facing overview: [README.md](README.md). Authoritative spec: [SPEC.md](SPEC.md). Plan and status: [PLAN.md](PLAN.md). Update **SPEC** when behavior or schemas change; update **README** for install/usage; check off **PLAN** steps when shipping features and follow its checkpoint rules.
 
@@ -30,7 +30,7 @@ Three tiers, all run with `bun test`:
 |---|---|---|
 | `src/**/*.test.ts` | Unit tests, co-located with source | No |
 | `test/fixtures/` | Fast regression with **synthetic** `ResolutionOutput` | No (wrapper JAR optional for local Gradle debugging) |
-| `test/scenarios/` | Real-Gradle scenario tests | Yes — wrapper JARs required (gitignored) |
+| `test/scenarios/` | Real-build-tool scenario tests (Gradle and Maven) | Yes — wrapper JARs required (gitignored) |
 
 ### Gradle smoke fixture
 
@@ -57,8 +57,9 @@ Current scenarios:
 - **`maven/version-conflict/`** — direct dep (v1) vs transitive dep (v2); verifies Maven **nearest-wins** selects v1.
 - **`maven/local-install-snapshot/`** — `producer/` runs `mvn install` for `1.0.0-SNAPSHOT` twice; verifies automatic `local-artifact.hash` invalidation without `forceRefresh`.
 - **`maven/multi-module/`** — reactor sibling Java + Kotlin sources (`origin: interproject`) without `mvn install`, `artifactId` + relative directory + file `modulePath` matching, `system`-scope JAR CFR decompilation (`origin: local-file`), and `target/classes` `javap` + Kotlin `*Kt` `SourceFile`.
+- **`maven/partial-failure/`** — temp reactor (wrapper copied from `multi-module`): one module with an unresolvable dependency yields a non-fatal `errors[]` entry while other modules still resolve; two modules sharing an `artifactId` get `groupId:artifactId` names.
 
-Wrapper JARs are generated once via `bun run ensure:scenario-wrappers` (calls `scripts/ensure-scenario-wrappers.sh`). All scenario tests use `describe.skipIf(!wrapperJar)` — silent no-op in CI.
+Wrapper JARs are generated once via `bun run ensure:scenario-wrappers` (calls `scripts/ensure-scenario-wrappers.sh`; `SCENARIO_FILTER=maven/multi-module` limits it to one project). All scenario tests use `describe.skipIf(!wrapperJar)` — a silent no-op in the main CI job. The optional `maven-scenario` CI job generates the `maven/multi-module` wrapper and runs the `multi-module` and `partial-failure` Maven scenarios. Maven scenarios use a temp local repository (`test/scenarios/maven/_helpers.ts`, `MAVEN_ARGS` + explicit `-Dmaven.repo.local`), never the real `~/.m2`.
 
 `test/scenarios/bazel/` is a stub (`.gitkeep`) for future build systems.
 
