@@ -6,7 +6,7 @@ function isIdentPart(c: string | undefined): boolean {
   return c !== undefined && /[A-Za-z0-9_$]/.test(c);
 }
 
-function isPackageName(name: string): boolean {
+export function isPackageName(name: string): boolean {
   if (name.length === 0 || name.startsWith('.') || name.endsWith('.') || name.includes('..')) {
     return false;
   }

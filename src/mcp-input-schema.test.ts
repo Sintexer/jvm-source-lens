@@ -74,19 +74,21 @@ describe('advertised input schemas', () => {
     expect(scope.enum).toEqual(['overview', 'declared', 'effective']);
   });
 
+  test('get_package_docs advertises an exact package and standard module scoping', () => {
+    const schema = tools.find((t) => t.name === 'get_package_docs')?.inputSchema;
+    expect(schema?.required).toEqual(['packageName']);
+    expect(Object.keys(schema!.properties!)).toEqual(['packageName', 'modulePath', 'includeTest']);
+    expect(props('get_class_structure')).not.toContain('packageName');
+  });
+
   test('server instructions and tool titles/descriptions match registered Gradle + Maven copy', () => {
     expect(client.getInstructions()).toBe(
-      "\njvmsrc reads third-party JVM dependencies: classes inside JARs on a Gradle or Maven project's classpath\n" +
-        '(structure, signatures, source, versions). Gradle and Maven projects only.\n\n' +
-        'Use it instead of memory, web search, or javap/unzip/Gradle/Maven-cache digging for any question about\n' +
-        'a library class, method, or version — "what does X do", "which JAR has Y", NoSuchMethodError,\n' +
-        "ClassCastException, version conflicts. Code under this repo's src/ → grep/read instead.\n\n" +
+      '\nGradle and Maven projects only. Use jvmsrc for dependency classes, methods and versions instead of memory,\n' +
+        'web search or cache digging. Package docs cover workspace and dependency packages; for other workspace source, grep/read.\n\n' +
         'Flow: search_classes (only if the name is unknown) → get_class_structure → get_class_source with\n' +
         'methodNames. For version problems start with resolve_dependencies.\n\n' +
-        "When you are working inside a specific module, pass modulePath (':app', or the\n" +
-        "file you are editing) so you get that module's dependency versions; otherwise omit it to search\n" +
-        'all modules. If a call fails, fix the arguments as the error says and retry; never fall back to\n' +
-        'javap/unzip.\n\n' +
+        "In a module, pass modulePath (':app' or current file); otherwise omit for all modules.\n" +
+        'On error follow retry guidance, not javap/unzip.\n\n' +
         'Declaration lines use short modifiers: P=public p=private prot=protected pack=package-private\n' +
         's=static f=final a=abstract (e.g. "Psf long ZERO").\n',
     );
@@ -135,6 +137,11 @@ describe('advertised input schemas', () => {
         title: 'Search text across all classes in one resolved dependency JAR',
         description:
           'Grep every class in one dependency JAR for a string (log message, exception text, constant). Use when you know the library but not the class. Pass coordinates {group, name, version} (see resolve_dependencies with query) or jarPath.',
+      },
+      {
+        name: 'get_package_docs',
+        title: 'Package docs',
+        description: 'Source-backed package description, types and summaries by owner.',
       },
     ]);
   });

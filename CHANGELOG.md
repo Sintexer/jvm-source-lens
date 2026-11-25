@@ -4,6 +4,10 @@ All notable changes to **jvmsrc** are documented in this file.
 
 This file is updated by **[Release Please](https://github.com/googleapis/release-please)** when a release PR merges to `master`. Contributors use **Conventional Commits** on PRs to `master` — see [RELEASING.md](RELEASING.md).
 
+## Unreleased
+
+* Add the MCP tool `get_package_docs` for source-backed package descriptions and type summaries. It reports `DOCS_NOT_FOUND` when no package owner is found and `DOCS_RESOLVE_FAILED` when documentation lookup fails.
+
 ## [1.20.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.19.0...v1.20.0) (2026-11-25)
 
 

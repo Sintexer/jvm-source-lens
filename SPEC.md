@@ -821,6 +821,10 @@ Once a **`ResolutionOutput`** is loaded (from cache or a fresh Gradle run), the 
 
 **Stable `code` values** on failures: **`RESOLUTION_FAILED`**, **`SOURCES_RESOLVE_FAILED`**, **`INVALID_FQN`**, **`MODULE_NOT_FOUND`**, **`CONFIGURATION_NOT_FOUND`**, **`MODULE_AMBIGUOUS`**, **`ZIP_READ_ERROR`**, **`CLASS_NOT_FOUND`**, **`DECOMPILE_FAILED`**, **`SIGNATURE_EXTRACT_FAILED`**, **`EXCERPT_REQUEST_INVALID`**, **`EXCERPT_NOT_FOUND`**, **`FIND_QUERY_INVALID`**, **`FIND_SOURCE_TOO_LARGE`**, **`SOURCE_OUTPUT_TOO_LARGE`**. **`SIGNATURE_EXTRACT_FAILED`** covers **javap** failures for **`get_method_signature`** (per-method) and **`get_class_structure`** (whole-class disassembly; `methodName` may be omitted in the error object). Excerpt failures apply when **`get_class_source`** / CLI **`get`** is called with **`methodNames`** / **`methodName`** and/or **`startLine`** / **`endLine`**. Find-in-source failures apply to **`find_in_class_source`** / CLI **`find-in-class`**. **`SOURCE_OUTPUT_TOO_LARGE`** applies when **`get_class_source`** / CLI **`get`** is asked for **unscoped full source** larger than **`JVMSRC_MAX_FULL_SOURCE_CHARS`** (default 64 KiB); agents must pass **`methodNames`** or a line range (or raise the env). Soft truncation via **`JVMSRC_MAX_SOURCE_OUTPUT_CHARS`** still applies to excerpted responses.
 
+**Package documentation (`get_package_docs`):** `packageName` is an exact dotted package, not a glob or class name. Module selection, configuration and test-classpath inputs apply. If several modules have the package on their classpath, callers must pick a `modulePath` (`MODULE_AMBIGUOUS`). Within one classpath, split packages are returned as separate `owners`. Each owner contains `provenance`, a nullable `description`, its nullable `docsPath` (module-relative path or sources-JAR entry), and `types` with simple `name` and nullable `summary`. Prose comes from source, never from decompiled code. `package-info.java` is preferred over `package.html`; generated Javadoc classifiers are not read yet. A package without prose can still return its known types.
+
+`DOCS_NOT_FOUND` means no package owner was found. `DOCS_RESOLVE_FAILED` covers a failed source resolver invocation or package lookup limit; malformed or oversized input archives return `ZIP_READ_ERROR`. Invalid package input returns `INVALID_FQN`. Package reads are limited to 512 KiB per source entry and 8 MiB per owner, with at most 256 types per owner, 16 owners and 64 KiB of serialized owner data.
+
 **Resource limits (no new codes):**
 
 | Setting | Default | Effect |
@@ -1307,4 +1311,3 @@ The following represents the minimum build that validates the architecture end-t
 ## 12. Future Work
 
 Planned work, priorities and checkpoints are in [PLAN.md](PLAN.md). This spec describes shipped behavior only.
-

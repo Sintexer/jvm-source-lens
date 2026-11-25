@@ -23,7 +23,7 @@ Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGEL
 
 Released together in 1.19.0: checkpoints 1 and 2.
 
-Checkpoints 3, 4, 5, 6, 7, 8, 9, 10 and 11 are done and not released. Release them in order: 3 to 11.
+Checkpoints 3–10 shipped together in `v1.20.0`. Checkpoint 11 is implemented on `master` (`fab1443`) but not in that tag. Checkpoint 12 is in progress at the maintainer's request; neither checkpoint is part of `v1.20.0`.
 
 
 | # | Checkpoint | Why at this position | Size |
@@ -217,10 +217,20 @@ Checkpoints 3, 4, 5, 6, 7, 8, 9, 10 and 11 are done and not released. Release th
 1. Which "docs-only" JARs are used: `-javadoc.jar` classifiers, internal Markdown or HTML artifacts, or other? Give a concrete example.
 2. A new `get_package_docs` tool, or a package name as input to `get_class_structure`?
 
+**Spike gate:** At `5a85180`, `bun run measure:tokens --json` reports 1,978 eager tokens (`chars / 4`), leaving 22 under the 2,000 target. Measure both candidate schemas with the same counting method. Compare a dedicated tool against an explicit package input, not a fallback from a failed class lookup. Run the same six prompts against both: workspace package description, external package type summaries, classifier-only package, classifier-only class purpose, equal-arity overload docs, and missing docs. Check which tool **and input** the agent chooses; verify the returned prose separately with fixtures. Record a real artifact and question, both measurements, and the routing results before choosing the API. `org.apache.commons:commons-lang3:3.14.0` in the eval project is a candidate for package docs, not evidence of a docs-only publication.
+
+**Delivery order after the spike:**
+
+1. Return source-backed package docs end to end on the chosen surface. List types in the exact package, exclude `package-info`, and label the owners of split packages.
+2. Return the same answer from a Javadoc classifier on both Gradle and Maven. Distinguish an unpublished classifier from a failed lookup. Bound inflated HTML as well as archive size; verify that replacing only the docs JAR invalidates the parsed page.
+3. Enrich existing structure and signature results on a source miss. Keep bytecode authoritative and `sourceAvailable: false`. Never guess an overload match or fail a successful signature lookup because optional docs are missing. Verify both MCP text and structured output.
+
 Steps:
 
-- [ ] **Spike:** find docs-only artifacts and `package-info` / `package.html` on real projects. Check the Gradle API for javadoc artifacts (and Maven `javadoc` classifier). Get HTML samples from JDK 8, 11 and 17+. Decide the tool surface with 6 eval prompts and `measure:tokens`.
-- [ ] Package Javadoc from `package-info.java` (sources JAR and inter-project).
+- [x] **Spike:** chose `get_package_docs`. Across six first-call routing prompts (Claude Code 2.1.332, Haiku 5.5), the dedicated tool routed 4/4 package questions correctly; an explicit package input on structure routed 3/4. Neither chose the signature tool for the equal-arity overload question. With the same shorter instructions the prototypes measured 1,977 vs 1,879 eager tokens (`chars / 4`). The implemented eight-tool surface measures 1,986. These are first-call probes, not end-to-end correctness scores.
+  - Source examples: Commons Lang 3.14.0 (`package-info.java`), Commons Collections 3.1 (`package.html`). Oracle `com.oracle.database.jdbc:ojdbc8:21.5.0.0` ships dummy sources but real Javadoc: `setDefaultRowPrefetch` does not affect existing statements. Standalone docs bundles such as `org.eclipse.platform.doc.isv` are outside the classifier design.
+  - Classifier implementation references: Gradle `ArtifactResolutionQuery` with `JvmLibrary` and `JavadocArtifact`; Maven Resolver `DefaultArtifact` with classifier `javadoc`. Oracle standard doclet samples use `name="substring-int-int-"` on JDK 8, `id="substring(int,int)"` on 11, and a detail section with that ID on 17. Module-prefixed paths must also be supported.
+- [x] Package Javadoc from `package-info.java` (sources JAR and inter-project), with a `package.html` fallback. Verified on `:core` in the eval project: the exact `org.apache.commons.lang3.math` package returns a description and summaries for `Fraction`, `IEEE754rUtils`, and `NumberUtils` from the selected 3.14.0 sources.
 - [ ] `jvmsrcResolveJavadoc` (and the Maven equivalent through the checkpoint 8 interface), a tolerant HTML-to-text extractor without new dependencies, and a `docs/` cache beside `decompiled/`.
 - [ ] Class and member Javadoc when there are no sources: `get_class_structure` / `get_method_signature` fill it from the javadoc JAR. Add a `docsSource` field. `sourceAvailable` stays `false`.
 - [ ] New codes `DOCS_NOT_FOUND` / `DOCS_RESOLVE_FAILED`: SPEC §7 and a release note. Treat HTML as untrusted: remove scripts and styles, use the size guard, and do not fetch from the network.

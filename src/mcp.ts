@@ -7,6 +7,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import * as z from 'zod';
 import { getClassSource } from './get-class-source.js';
+import { getPackageDocs } from './get-package-docs.js';
 import { mergeSourceExcerptInputs } from './source-excerpt.js';
 import {
   classNameNote,
@@ -14,6 +15,7 @@ import {
   mcpToolResultFromClassSource,
   mcpToolResultFromFindInClassSource,
   mcpToolResultFromMethodSignature,
+  mcpToolResultFromPackageDocs,
   mcpToolResultFromProjectRootError,
   mcpToolResultFromResolutionResult,
   mcpToolResultFromSearchClasses,
@@ -564,6 +566,37 @@ export function createMcpServer(): McpServer {
           forceRefresh: Boolean(args.forceRefresh),
         });
         return withResolutionNotes(mcpToolResultFromSearchInArtifact(result, query), [root.note]);
+      } catch (e) {
+        if (e instanceof UnsupportedProjectError) {
+          return mcpToolResultFromProjectRootError(e.message, root.path);
+        }
+        return mcpToolResultFromUnexpectedError(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_package_docs',
+    {
+      ...MCP_TOOL_COPY.get_package_docs,
+      inputSchema: z.object({
+        packageName: z.string().min(1).describe('Exact package name.'),
+        projectRoot: z.string().optional().describe(D.projectRoot),
+        modulePath: z.string().optional().describe(D.modulePath),
+        configuration: z.string().optional().describe(D.configuration),
+        includeTest: z.boolean().optional().describe(D.includeTest),
+        forceRefresh: z.boolean().optional().describe(D.forceRefresh),
+      }),
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async (args) => {
+      const root = await locateProjectRoot(args.projectRoot);
+      if (!root.ok) {
+        return mcpToolResultFromProjectRootError(root.message, args.projectRoot ?? process.cwd());
+      }
+      try {
+        const result = await getPackageDocs({ ...args, projectRoot: root.path });
+        return withResolutionNotes(mcpToolResultFromPackageDocs(result), [root.note]);
       } catch (e) {
         if (e instanceof UnsupportedProjectError) {
           return mcpToolResultFromProjectRootError(e.message, root.path);

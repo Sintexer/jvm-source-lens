@@ -8,6 +8,7 @@ import {
   withResolutionNotes,
   mcpToolResultFromClassSource,
   mcpToolResultFromClassStructure,
+  mcpToolResultFromPackageDocs,
   mcpToolResultFromProjectRootError,
 } from './mcp-tool-result.js';
 
@@ -416,4 +417,13 @@ test('MODULE_AMBIGUOUS text names the class once when the message already names 
   );
   const text = (r.content[0] as { text: string }).text;
   expect(text.split('com.example.Foo').length - 1).toBe(1);
+});
+
+test('get_package_docs exposes retry module paths even to text-only clients', () => {
+  const error = { code: 'MODULE_AMBIGUOUS' as const, modulePaths: [':app', ':worker'], message: 'Retry with modulePath.' };
+  const result = mcpToolResultFromPackageDocs({ ok: false, error });
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent).toMatchObject({ ok: false, code: error.code, error });
+  const text = result.content[0]?.type === 'text' ? result.content[0].text : '';
+  for (const expected of [error.code, error.message, ...error.modulePaths]) expect(text).toContain(expected);
 });

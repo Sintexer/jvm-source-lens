@@ -13,6 +13,7 @@ import { FailureSeverity } from './diagnostics/failure-severity.js';
 import type { ResolutionResult } from './resolvers/base.js';
 import type { ResolutionOutput } from './resolvers/resolution-output.js';
 import type { GetMethodSignatureResult } from './get-method-signatures.js';
+import type { GetPackageDocsResult } from './get-package-docs.js';
 import { isSyntheticJvmDescriptor } from './class-structure/parse-java-type-metadata.js';
 import { normalizeClassNameSyntax } from './extractor/canonicalize-class-name.js';
 import type {
@@ -77,6 +78,36 @@ import {
 import type { GuidedEnvelopeFields, McpErrorCategory } from './guided-response/types.js';
 
 export type { McpErrorCategory };
+
+export function mcpToolResultFromPackageDocs(result: GetPackageDocsResult): CallToolResult {
+  if (!result.ok) {
+    const { error } = result;
+    const choices = error.code === 'MODULE_AMBIGUOUS' ? ` Choices: ${error.modulePaths.join(', ')}.` : '';
+    return {
+      isError: true,
+      structuredContent: { ...result, code: error.code },
+      content: [{ type: 'text', text: `${error.code}: ${error.message}${choices}` }],
+    };
+  }
+
+  const sections = result.owners.map(({ provenance, description, docsPath, types }) => {
+    const { group, name, version } = provenance.coordinates;
+    const owner = provenance.kind === 'interproject'
+      ? `module ${provenance.moduleName} (${provenance.moduleRoot})`
+      : `${[group, name, version].filter(Boolean).join(':')} (${provenance.sourcesJarPath ?? `binary only: ${provenance.jarPath}`})`;
+    return [
+      `Owner: ${owner}`,
+      ...(docsPath ? [`Package docs: ${docsPath}`] : []),
+      description ?? 'No package description.',
+      ...types.map(({ name, summary }) => summary ? `${name}: ${summary}` : name),
+    ].join('\n');
+  });
+  return {
+    isError: false,
+    structuredContent: result,
+    content: [{ type: 'text', text: [result.packageName, ...sections].join('\n\n') }],
+  };
+}
 export type { ClassStructureIncludeSection, ResolutionIncludeSection, FindInClassIncludeSection, MethodSignatureIncludeSection };
 
 export type McpClassSourceSuccessPayload = {

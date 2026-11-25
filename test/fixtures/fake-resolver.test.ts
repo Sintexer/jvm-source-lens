@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { ListRootsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { strToU8, zipSync } from 'fflate';
 import { buildClassFile } from '../../src/extractor/test-class-file.js';
 import { getClassSource } from '../../src/get-class-source.js';
@@ -264,6 +266,44 @@ describe('pluggable fake resolver end-to-end', () => {
     } finally {
       gradleResolveSpy.mockRestore();
       gradleSourcesSpy.mockRestore();
+    }
+  });
+
+  test('get_package_docs returns source-backed prose and ownership using the client workspace', async () => {
+    const workspacePackage = path.join(projectDir, 'src/main/java/com/fake');
+    fs.mkdirSync(workspacePackage, { recursive: true });
+    fs.writeFileSync(path.join(workspacePackage, 'package-info.java'), '/** Workspace greetings. */\npackage com.fake;');
+    fs.writeFileSync(sourcesJarPath, zipSync({
+      'com/fake/package-info.java': strToU8('/** Greeting utilities. */\npackage com.fake;'),
+      'com/fake/Greeter.java': strToU8('package com.fake;\n/** Sends a greeting. */\npublic class Greeter {}'),
+    }));
+    const server = createMcpServer();
+    const client = new Client({ name: 'package-test', version: '1' }, { capabilities: { roots: {} } });
+    client.setRequestHandler(ListRootsRequestSchema, () => ({ roots: [{ uri: pathToFileURL(projectDir).href }] }));
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    try {
+      const call = (packageName: string) => client.callTool({ name: 'get_package_docs', arguments: { packageName } });
+      const result = await call('com.fake');
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toMatchObject({ ok: true, packageName: 'com.fake' });
+      expect(result.structuredContent?.owners).toEqual(expect.arrayContaining([
+        expect.objectContaining({ description: 'Workspace greetings.', provenance: expect.objectContaining({ moduleName: 'root' }) }),
+        expect.objectContaining({ description: 'Greeting utilities.', provenance: expect.objectContaining({ sourcesJarPath }) }),
+      ]));
+      for (const representation of [result.content, result.structuredContent]) {
+        const value = JSON.stringify(representation);
+        for (const expected of ['Workspace greetings.', 'Greeting utilities.', 'Greeter', 'Sends a greeting.', 'greeter-lib', sourcesJarPath, 'com/fake/package-info.java']) {
+          expect(value).toContain(expected);
+        }
+      }
+      const missing = await call('com.absent');
+      expect(missing.isError).toBe(true);
+      expect(missing.structuredContent).toMatchObject({ ok: false, error: { code: 'DOCS_NOT_FOUND', message: expect.any(String) } });
+      expect(JSON.stringify(missing.content)).toContain('DOCS_NOT_FOUND');
+      expect(JSON.stringify(missing.content)).toContain('com.absent');
+    } finally {
+      await client.close();
     }
   });
 

@@ -112,6 +112,7 @@ The MCP server runs over stdio (`jvmsrc mcp`). It needs no environment variables
 |:---|:---|
 | **`search_classes`** | Find a class by simple name or glob; returns compact FQN + lib name lists |
 | **`get_class_structure`** | Retrieves class overview (purpose + method names) or declared signatures |
+| **`get_package_docs`** | Reads an exact package's description and top-level type summaries from source. Lists each contributing module or JAR separately. |
 | **`get_method_signature`**| Fetches real overloads for a method, with parameter names and generics |
 | **`find_in_class_source`**| Greps one known class's source for a string or identifier (literal; regex optional) |
 | **`get_class_source`** | Retrieves method bodies or line ranges (used as a last resort) |

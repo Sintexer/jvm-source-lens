@@ -4,6 +4,11 @@ export type McpToolCopy = {
 };
 
 export const MCP_TOOL_COPY = {
+  get_package_docs: {
+    title: 'Package docs',
+    description: 'Source-backed package description, types and summaries by owner.',
+  },
+
   search_classes: {
     title: 'Search classes on the resolved classpath',
     description: `Find which dependency JAR provides a class when you only have a simple name, partial name, or keyword (e.g. ObjectMapper, retry). Use for unknown types in stack traces or imports, instead of unzip/jar searches. Returns FQN + library per hit; next call get_class_structure.`,

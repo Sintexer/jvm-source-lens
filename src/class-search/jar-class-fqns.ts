@@ -47,6 +47,8 @@ function classEntryToFqn(entryName: string, includeNested: boolean): string | nu
 export type ListJarClassFqnsOptions = {
   /** When true, include `Outer$Inner` binary names. Default lists top-level types only. */
   includeNested?: boolean;
+  /** When present, retain entries directly in this package directory only. */
+  packageName?: string;
 };
 
 /**
@@ -81,6 +83,7 @@ export function listFqnsFromJarClassEntries(
   }
 
   const fqns: string[] = [];
+  const packagePrefix = options?.packageName === undefined ? undefined : options.packageName.replaceAll('.', '/') + '/';
   let pos = cdOffset;
   const end = cdOffset + cdSize;
 
@@ -102,9 +105,11 @@ export function listFqnsFromJarClassEntries(
     } catch {
       entryName = nameBuf.toString('latin1');
     }
-    const fqn = classEntryToFqn(entryName, Boolean(options?.includeNested));
-    if (fqn !== null) {
-      fqns.push(fqn);
+    if (packagePrefix === undefined || (entryName.startsWith(packagePrefix) && entryName.indexOf('/', packagePrefix.length) < 0)) {
+      const fqn = classEntryToFqn(entryName, Boolean(options?.includeNested));
+      if (fqn !== null) {
+        fqns.push(fqn);
+      }
     }
     pos += recLen;
   }

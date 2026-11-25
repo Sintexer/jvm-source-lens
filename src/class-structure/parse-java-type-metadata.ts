@@ -279,7 +279,7 @@ const TYPE_KEYWORDS: ReadonlyArray<{ keyword: string; kind: ClassStructureKind }
 const IDENT_CHAR = /[\w$]/;
 
 /** Type declaration keyword plus name that starts exactly at code position `i`, else null. */
-function typeKeywordAt(src: string, i: number): { kind: ClassStructureKind; name: string; end: number } | null {
+export function typeKeywordAt(src: string, i: number): { kind: ClassStructureKind; name: string; end: number } | null {
   const prev = i > 0 ? src[i - 1]! : '';
   if (IDENT_CHAR.test(prev) || prev === '.' || prev === '@') {
     return null;
