@@ -6,6 +6,7 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 
 ## Unreleased
 
+* Add `docs: true` to `search_in_artifact` to search the class-page prose of a dependency's Javadoc JAR. Literal queries only; unpublished or failed Javadoc lookups return `DOCS_NOT_FOUND` / `DOCS_RESOLVE_FAILED`.
 * Add `find_subtypes(typeName)` to find implementing classes or subclasses on a module's resolved binary classpath, grouped by owning JAR or module. Contradictory references to an undefined target return `HIERARCHY_TARGET_AMBIGUOUS`.
 
 * Show class, field and overload documentation from the matching Javadoc JAR when original source is absent. Bytecode remains authoritative, and missing docs do not prevent structure or signature lookup.

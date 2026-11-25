@@ -80,6 +80,7 @@ export type ClassSourceError =
       availableModules?: string[];
     }
   | { code: 'INVALID_FQN'; message: string }
+  | { code: 'DOCS_NOT_FOUND' | 'DOCS_RESOLVE_FAILED'; message: string }
   | {
       code: 'CONFIGURATION_NOT_FOUND';
       message: string;

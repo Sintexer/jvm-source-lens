@@ -182,6 +182,7 @@ const searchInArtifactInputSchema = z
     contextLines: z.number().int().min(0).max(50).optional().describe(D.contextLines),
     maxHits: z.number().int().min(1).max(100).optional().describe(D.maxHits),
     maxClasses: z.number().int().min(1).max(500).optional().describe('Maximum classes to scan.'),
+    docs: z.boolean().optional().describe('Search Javadoc prose, not source (literal only).'),
   })
   .refine((v) => v.coordinates !== undefined || v.jarPath !== undefined, {
     message: 'At least one of coordinates or jarPath must be provided.',
@@ -569,6 +570,7 @@ export function createMcpServer(): McpServer {
           contextLines: args.contextLines,
           maxHits: args.maxHits,
           maxClasses: args.maxClasses,
+          docs: Boolean(args.docs),
           modulePath: args.modulePath,
           configuration: args.configuration,
           includeTest: Boolean(args.includeTest),

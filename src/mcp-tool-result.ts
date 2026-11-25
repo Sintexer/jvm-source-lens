@@ -989,6 +989,7 @@ export function mcpToolResultFromSearchInArtifact(
     hitCount: result.hitCount,
     truncated: result.truncated,
     hits: result.hits,
+    ...(result.docs ? { docsSource: 'javadoc-jar' } : {}),
   };
   return returnFullPlain(
     `search_in_artifact: ${result.totalMatches} match(es) for ${JSON.stringify(result.query)} across ${result.hits.length} class(es) in ${result.artifact.group}:${result.artifact.name}.`,

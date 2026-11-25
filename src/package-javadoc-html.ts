@@ -23,6 +23,25 @@ export function plainText(node: Element, limit: number) {
   }).replace(/\s+/g, ' ').trim().slice(0, limit);
 }
 
+/** Like {@link plainText}, but keeps one line per block element so matches have line numbers. */
+export function plainLines(node: Element, limit: number) {
+  const parts: string[] = [];
+  function visit(el: Element) {
+    if (blockTags.has(el.tag)) parts.push('\n');
+    for (const child of el.children) {
+      if (typeof child === 'string') parts.push(child);
+      else visit(child);
+    }
+    if (blockTags.has(el.tag)) parts.push('\n');
+  }
+  visit(node);
+  return parts.join('').replace(/&(amp|lt|gt|quot|apos|nbsp|#\d{1,7}|#x[\da-f]{1,6});/gi, (all, key: string) => {
+    if (!key.startsWith('#')) return entities[key.toLowerCase()] ?? all;
+    const n = key[1]?.toLowerCase() === 'x' ? parseInt(key.slice(2), 16) : Number(key.slice(1));
+    return n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) ? String.fromCodePoint(n) : ' ';
+  }).split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n').slice(0, limit);
+}
+
 // A bounded tree of inert text and the four attributes the standard doclet uses.
 // Sticky scans consume each token once; raw script/style bodies are never tokenized.
 export function parseElements(html: string) {

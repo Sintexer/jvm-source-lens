@@ -151,6 +151,16 @@ export function classifyClassSourceError(
         fullSourceTooLargeSummary(error.className, error.charLength, error.maxChars),
         `${error.message} Prefer get_class_structure / get_method_signature / find_in_class_source first.`,
       );
+    case 'DOCS_NOT_FOUND':
+      return envelope(
+        error,
+        'business',
+        false,
+        'No Javadoc available.',
+        `${error.message} Search source instead: omit docs.`,
+      );
+    case 'DOCS_RESOLVE_FAILED':
+      return envelope(error, 'transient', true, 'Javadoc lookup failed.', error.message);
     case 'ARTIFACT_NOT_FOUND':
       return envelope(
         error,

@@ -117,7 +117,7 @@ The MCP server runs over stdio (`jvmsrc mcp`). It needs no environment variables
 | **`get_method_signature`**| Fetches real overloads for a method, with parameter names and generics |
 | **`find_in_class_source`**| Greps one known class's source for a string or identifier (literal; regex optional) |
 | **`get_class_source`** | Retrieves method bodies or line ranges (used as a last resort) |
-| **`search_in_artifact`** | Greps text across all classes in one resolved dependency JAR |
+| **`search_in_artifact`** | Greps text across all classes in one resolved dependency JAR; `docs: true` searches the class pages of its Javadoc JAR instead |
 | **`resolve_dependencies`**| Analyzes the actual dependency graph this project uses |
 
 If a dependency publishes Javadoc but no usable source file, `get_class_structure` and `get_method_signature` can still show its class description and documented overloads. Prose from the Javadoc JAR is labelled `docsSource: "javadoc-jar"`. Signatures still come from bytecode (`sourceAvailable: false`); use `bytecodeOnly: true` on a signature lookup to skip docs entirely.

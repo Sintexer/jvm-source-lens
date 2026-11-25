@@ -8,7 +8,7 @@ export function formatSearchInArtifactText(
   result: Extract<SearchInArtifactResult, { ok: true; found: true }>,
 ): string {
   const lines: string[] = [
-    `search_in_artifact: ${result.totalMatches} match(es) for ${JSON.stringify(result.query)} in ${artifactLabel(result.artifact)}`,
+    `search_in_artifact: ${result.totalMatches} match(es) for ${JSON.stringify(result.query)} in ${artifactLabel(result.artifact)}${result.docs ? ' (javadoc-jar prose; line numbers are page text lines)' : ''}`,
     `Scanned ${result.classesScanned} class(es) — ${result.hits.length} class(es) with hits`,
   ];
 
@@ -18,7 +18,7 @@ export function formatSearchInArtifactText(
   lines.push('');
 
   for (const cls of result.hits) {
-    lines.push(`## ${cls.className}${cls.sourceAvailable ? '' : '  [decompiled]'}`);
+    lines.push(`## ${cls.className}${cls.sourceAvailable ? '' : result.docs ? '  [javadoc]' : '  [decompiled]'}`);
     for (const h of cls.hits) {
       lines.push(`  ${h.line}:${h.column}  ${h.matchedText.trim()}`);
       const before = h.contextBefore.filter((l) => l.length > 0);

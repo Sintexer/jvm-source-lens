@@ -143,7 +143,7 @@ describe('advertised input schemas', () => {
         name: 'search_in_artifact',
         title: 'Search text across all classes in one resolved dependency JAR',
         description:
-          'Grep one known JAR, unknown class, for logs, exceptions or constants. Get coordinates from resolve_dependencies.',
+          'Grep one known JAR, unknown class, for logs, exceptions or constants; docs=true searches its Javadoc. Get coordinates from resolve_dependencies.',
       },
       {
         name: 'get_package_docs',

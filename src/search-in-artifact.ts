@@ -19,6 +19,9 @@ import {
 } from './class-source-text-search.js';
 import { listFqnsFromJarClassEntries } from './class-search/jar-class-fqns.js';
 import { RegexMatchRunner } from './regex-match-runner.js';
+import { searchJavadocJar } from './search-javadoc.js';
+import { resolverById } from './resolvers/index.js';
+import type { ResolveJavadocJarResult } from './resolvers/base.js';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -48,6 +51,8 @@ export type SearchInArtifactOptions = {
   configuration?: string;
   includeTest?: boolean;
   forceRefresh?: boolean;
+  /** Search the artifact's Javadoc JAR (class page prose, literal only) instead of its source. */
+  docs?: boolean;
 };
 
 /** Options for the lower-level variant that accepts a pre-resolved output (used in tests). */
@@ -55,6 +60,12 @@ export type SearchInArtifactFromOutputOptions = Omit<SearchInArtifactOptions, 'p
   projectRoot?: string;
   /** Override sources-JAR resolution (for tests). */
   resolveSourcesJarFn?: (projectRoot: string, coordinates: ArtifactCoordinates) => Promise<string | null>;
+  /** Override Javadoc-JAR resolution (for tests). */
+  resolveJavadocJarFn?: (
+    projectRoot: string,
+    coordinates: ArtifactCoordinates,
+    moduleName: string,
+  ) => Promise<ResolveJavadocJarResult>;
 };
 
 export type SearchInArtifactHitClass = {
@@ -82,6 +93,8 @@ export type SearchInArtifactSuccess = {
   hitCount: number;
   truncated: boolean;
   hits: SearchInArtifactHitClass[];
+  /** `true` when the search ran over the Javadoc JAR; hit lines are lines of the page text. */
+  docs?: true;
 };
 
 export type SearchInArtifactNotFound = {
@@ -288,6 +301,48 @@ function skipNestedAlreadyScanned(
   return false;
 }
 
+async function searchArtifactDocs(
+  output: ResolutionOutput,
+  opts: SearchInArtifactFromOutputOptions,
+  artifact: ResolvedArtifact,
+  moduleName: string,
+  limits: { maxHits: number; contextLines: number; maxClasses: number; regex: boolean },
+): Promise<SearchInArtifactResult> {
+  const projectRoot = opts.projectRoot ?? output.projectRoot;
+  if (artifact.jarPath === null) return { ok: false, error: { code: 'DOCS_NOT_FOUND', message: 'Artifact has no binary JAR.' } };
+  const coordinates: ArtifactCoordinates = { group: artifact.group, name: artifact.name, version: artifact.version };
+  const resolver = resolverById(output.buildSystem.type);
+  const lookup = opts.resolveJavadocJarFn ?? resolver?.resolveJavadocJar?.bind(resolver);
+  if (!lookup || artifact.origin !== 'external') {
+    return { ok: false, error: { code: 'DOCS_NOT_FOUND', message: 'Javadoc JARs are resolved only for external dependencies.' } };
+  }
+  const javadoc = await lookup(projectRoot, coordinates, moduleName);
+  if (!javadoc.ok) return { ok: false, error: { code: 'DOCS_RESOLVE_FAILED', message: javadoc.message } };
+  if (javadoc.javadocJarPath === null) {
+    return { ok: false, error: { code: 'DOCS_NOT_FOUND', message: `No javadoc JAR published for ${artifact.group}:${artifact.name}:${artifact.version ?? ''}.` } };
+  }
+  const listed = listFqnsFromJarClassEntries(artifact.jarPath, { includeNested: true });
+  if (!listed.ok) {
+    return { ok: false, error: { code: 'ZIP_READ_ERROR', message: listed.message, jarPath: artifact.jarPath } };
+  }
+  const ordered = orderScanFqns(listed.fqns);
+  const found = await searchJavadocJar(javadoc.javadocJarPath, ordered, { ...opts, ...limits });
+  if (!found.ok) return found;
+  return {
+    ok: true,
+    found: true,
+    artifact: artifactInfo(artifact),
+    query: opts.query,
+    regex: false,
+    classesScanned: found.classesScanned,
+    totalMatches: found.totalMatches,
+    hitCount: found.hitCount,
+    truncated: found.truncated || ordered.length > limits.maxClasses,
+    hits: found.hits,
+    docs: true,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Core search logic (accepts pre-resolved output; exported for tests)
 // ---------------------------------------------------------------------------
@@ -307,8 +362,10 @@ export async function searchInArtifactFromOutput(
     includeTest: opts.includeTest,
   });
   let binaryArtifacts: ResolvedArtifact[];
+  const moduleOf = new Map<ResolvedArtifact, string>();
   if (picked.ok) {
     binaryArtifacts = picked.configuration.artifacts.filter(isClasspathBinaryJarArtifact);
+    for (const a of binaryArtifacts) moduleOf.set(a, picked.module.name);
   } else if (picked.error.code === 'MODULE_AMBIGUOUS' && picked.error.className === undefined) {
     const seen = new Set<string>();
     binaryArtifacts = [];
@@ -326,6 +383,7 @@ export async function searchInArtifactFromOutput(
         if (!seen.has(key)) {
           seen.add(key);
           binaryArtifacts.push(a);
+          moduleOf.set(a, each.module.name);
         }
       }
     }
@@ -351,6 +409,12 @@ export async function searchInArtifactFromOutput(
   );
   const contextLines = Math.min(50, Math.max(0, Math.floor(opts.contextLines ?? DEFAULT_FIND_CONTEXT_LINES)));
   const regex = Boolean(opts.regex);
+
+  if (opts.docs) {
+    return searchArtifactDocs(output, opts, artifact, moduleOf.get(artifact) ?? '', {
+      maxHits, contextLines, maxClasses, regex,
+    });
+  }
 
   // 4. Resolve sources JAR once for the artifact
   let sourcesJarPath: string | null = artifact.sourcesJarPath ?? null;

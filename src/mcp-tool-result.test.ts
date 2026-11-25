@@ -10,6 +10,7 @@ import {
   mcpToolResultFromClassStructure,
   mcpToolResultFromPackageDocs,
   mcpToolResultFromHierarchy,
+  mcpToolResultFromSearchInArtifact,
   mcpToolResultFromProjectRootError,
 } from './mcp-tool-result.js';
 
@@ -461,4 +462,18 @@ test('hierarchy ambiguity returns retry choices in text and structured data', ()
   expect(response.structuredContent).toMatchObject({ ok: false, code: error.code, error });
   const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
   for (const expected of [error.code, error.message, ...error.modulePaths]) expect(text).toContain(expected);
+});
+
+test('shouldLabelJavadocSearchWhenDocsHitsReturned', () => {
+  const result = {
+    ok: true as const, found: true as const, artifact: { group: 'g', name: 'a', version: '1', jarPath: '/a.jar' },
+    query: 'needle', regex: false, classesScanned: 1, totalMatches: 1, hitCount: 1, truncated: false, docs: true as const,
+    hits: [{ className: 'p.A', sourceAvailable: false, totalMatches: 1, hits: [{ line: 2, column: 3, matchedText: 'needle', contextBefore: [], contextAfter: [] }] }],
+  };
+  const compact = mcpToolResultFromSearchInArtifact(result, { projectRoot: '/p' });
+  const block = compact.content[0];
+  expect(block?.type === 'text' && block.text).toContain('javadoc-jar prose');
+  expect(block?.type === 'text' && block.text).toContain('[javadoc]');
+  const full = mcpToolResultFromSearchInArtifact(result, { projectRoot: '/p', full: true });
+  expect(full.structuredContent).toMatchObject({ docsSource: 'javadoc-jar' });
 });

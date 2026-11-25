@@ -23,7 +23,7 @@ Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGEL
 
 Released together in 1.19.0: checkpoints 1 and 2.
 
-Checkpoints 3–10 shipped together in `v1.20.0`. Checkpoints 11 and 12 are implemented on `master` but not in that tag. Checkpoint 13 implementation proceeded before release at the maintainer's request.
+Checkpoints 3–10 shipped together in `v1.20.0`. Checkpoints 11 and 12 are implemented on `master` but not in that tag. Checkpoint 13 is implemented. Release checkpoints 11, 12 and 13 in order.
 
 
 | # | Checkpoint | Why at this position | Size |
@@ -234,7 +234,7 @@ Steps:
 - [x] `jvmsrcResolveJavadoc` and the Maven classifier resolver use the consuming module's repositories. Standard doclet package pages fill missing prose, with bounded extraction and a content-keyed `docs/` cache. Verified end to end with real Gradle and Maven consumers and no sources publication.
 - [x] Class and member Javadoc when there are no sources: `get_class_structure` / `get_method_signature` fill it from the Javadoc JAR. Per-row `docsSource` identifies the prose; `sourceAvailable` stays `false`. Real Gradle and Maven scenarios cover equal-arity overloads and the bytecode-only bypass.
 - [x] New codes `DOCS_NOT_FOUND` / `DOCS_RESOLVE_FAILED`: SPEC §7 and a release note. Treat HTML as untrusted: remove scripts and styles, use the size guard, and do not fetch from the network.
-- [ ] Optional: a docs scope for `search_in_artifact`, or package summaries in the class-search index.
+- [x] Optional: `docs: true` scope on `search_in_artifact` (literal search over Javadoc class pages). Package summaries in the class-search index stay out of scope.
 
 **Done when:** a package question on the eval project returns the description and a type list with one-line summaries, and the source of the text is labelled.
 

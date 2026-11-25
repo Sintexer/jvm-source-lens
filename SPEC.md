@@ -829,6 +829,8 @@ The reader ignores scripts and styles, does not fetch linked resources, and caps
 
 `DOCS_NOT_FOUND` means no package owner was found. `DOCS_RESOLVE_FAILED` covers a failed source resolver invocation or package lookup limit; malformed or oversized input archives return `ZIP_READ_ERROR`. Invalid package input returns `INVALID_FQN`. Package reads are limited to 512 KiB per source entry and 8 MiB per owner, with at most 256 types per owner, 16 owners and 64 KiB of serialized owner data.
 
+**Javadoc search (`search_in_artifact` with `docs: true`):** searches the prose of the selected external artifact's Javadoc JAR instead of its source. It is literal only (`regex: true` returns `FIND_QUERY_INVALID`). Only class pages (`<pkg>/<Outer.Inner>.html`, optionally under a module directory) of classes found in the binary JAR are read; package, index and other pages are never expanded. Script and style text is dropped, links are not followed, each page is limited to 2 MiB expanded and one request to 32 MiB expanded. Hit `line` / `column` refer to the extracted page text, not a source file; the result has `docs: true` (full JSON: `docsSource: "javadoc-jar"`) and every hit class has `sourceAvailable: false`. The classifier is resolved from the module that owns the artifact. No published classifier returns `DOCS_NOT_FOUND`; a repository failure returns `DOCS_RESOLVE_FAILED`. Parsed text is not cached.
+
 **Resource limits (no new codes):**
 
 | Setting | Default | Effect |

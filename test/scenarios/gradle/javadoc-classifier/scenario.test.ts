@@ -8,6 +8,7 @@ import { getClassStructure } from '../../../../src/get-class-structure.js';
 import { getMethodSignatures } from '../../../../src/get-method-signatures.js';
 import { getMethodSignaturesBytecode } from '../../../../src/get-method-signatures-bytecode.js';
 import { getPackageDocs } from '../../../../src/get-package-docs.js';
+import { searchInArtifact } from '../../../../src/search-in-artifact.js';
 import { GradleResolver } from '../../../../src/resolvers/gradle/index.js';
 
 const wrapper = path.resolve(import.meta.dir, '../local-maven-publish/consumer');
@@ -125,6 +126,22 @@ describe.skipIf(!fs.existsSync(path.join(wrapper, 'gradle/wrapper/gradle-wrapper
             types: [{ name: 'Greeter', summary: 'Formats a greeting.', docsSource: 'javadoc-jar' }],
           }],
         });
+      } finally {
+        if (previousCache === undefined) delete process.env.JVMSRC_CACHE_ROOT;
+        else process.env.JVMSRC_CACHE_ROOT = previousCache;
+      }
+    }, 120_000);
+
+    test('search_in_artifact docs=true finds class-page prose from the Javadoc sidecar only', async () => {
+      const previousCache = process.env.JVMSRC_CACHE_ROOT;
+      process.env.JVMSRC_CACHE_ROOT = path.join(root, 'test-cache-search');
+      try {
+        const base = { projectRoot: root, modulePath: ':app', selector: { coordinates: { group: 'example', name: 'lib', version: '1' } } };
+        const docsHit = await searchInArtifact({ ...base, query: 'Greets', docs: true });
+        expect(docsHit).toMatchObject({ ok: true, found: true, docs: true,
+          hits: [{ className: 'example.api.Greeter', sourceAvailable: false }] });
+        // Package summary prose is not a class page, so it must not match.
+        expect(await searchInArtifact({ ...base, query: 'Greeting utilities', docs: true })).toMatchObject({ ok: true, hitCount: 0 });
       } finally {
         if (previousCache === undefined) delete process.env.JVMSRC_CACHE_ROOT;
         else process.env.JVMSRC_CACHE_ROOT = previousCache;
