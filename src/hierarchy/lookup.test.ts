@@ -40,7 +40,7 @@ function jar(id: string, entries: Record<string, Uint8Array>): ResolvedArtifact 
   writeFileSync(jarPath, zipSync(Object.fromEntries(Object.entries(entries).map(([n, b]) => [n + '.class', b])), { level: 0 }));
   return { group: 'g', name: id, version: '1', origin: 'external', type: 'jar', direct: true, jarPath };
 }
-const query = { className: 'p.I', kind: 'implementors' as const };
+const query = { typeName: 'p.I' };
 function search(opts: Parameters<typeof lookupHierarchy>[1] = query) {
   const result = lookupHierarchy(output, opts);
   if (!result.ok) throw Error(result.error.message);
@@ -57,17 +57,37 @@ test('walks subinterfaces and inherited implementations; only the first class de
     ['impl', [{ className: 'p.C', direct: false }]],
   ]);
   expect(search({ ...query, directOnly: true }).groups[0]!.classes).toEqual([{ className: 'p.A', direct: true }]);
-  expect(search({ className: 'p.A', kind: 'subclasses' }).groups[0]!.classes).toEqual([{ className: 'p.C', direct: true }]);
+  expect(search({ typeName: 'p.A' }).groups[0]!.classes).toEqual([{ className: 'p.C', direct: true }]);
   artifacts.reverse();
   expect(search().groups.flatMap(g => g.classes)).toEqual([{ className: 'p.B', direct: false }]);
 });
 
-test('does not join edges across module classpaths', () => {
+test('infers reference-only kinds independently on each module classpath', () => {
   output.modules[0]!.configurations[0]!.artifacts.push(jar('one', { 'p/A': binary('p/A', undefined, ['p/I']) }));
   output.modules.push({ name: ':two', path: join(tmp, 'two'), configurations: [{ name: 'compileClasspath', scope: 'compile',
-    artifacts: [jar('two', { 'p/A': binary('p/A'), 'p/C': binary('p/C', 'p/A'), 'p/I': binary('p/I', undefined, [], true) })] }] });
-  expect(lookupHierarchy(output, query)).toMatchObject({ ok: false, error: { code: 'MODULE_AMBIGUOUS' } });
-  expect(search({ ...query, modulePath: ':two' }).groups).toEqual([]);
+    artifacts: [jar('two', { 'p/C': binary('p/C', 'p/I') })] }] });
+  expect(lookupHierarchy(output, query)).toMatchObject({ ok: false, error: { code: 'MODULE_AMBIGUOUS', modulePaths: [':app', ':two'] } });
+  expect(search({ ...query, modulePath: ':app' })).toMatchObject({ kind: 'implementors', groups: [{ classes: [{ className: 'p.A' }] }] });
+  expect(search({ ...query, modulePath: ':two' })).toMatchObject({ kind: 'subclasses', groups: [{ classes: [{ className: 'p.C' }] }] });
+});
+
+test('rejects contradictory references unless the target has a visible definition', () => {
+  const artifacts = output.modules[0]!.configurations[0]!.artifacts;
+  artifacts.push(jar('refs', { 'p/A': binary('p/A', 'p/I'), 'p/B': binary('p/B', undefined, ['p/I']) }));
+  expect(lookupHierarchy(output, query)).toMatchObject({ ok: false, error: {
+    code: 'HIERARCHY_TARGET_AMBIGUOUS', message: expect.stringContaining('modulePath'),
+  } });
+  artifacts.push(jar('iface', { 'p/I': binary('p/I', undefined, [], true) }), jar('cls', { 'p/I': binary('p/I') }));
+  expect(search()).toMatchObject({ kind: 'implementors', totalMatches: 1, groups: [{ classes: [{ className: 'p.B' }] }] });
+  artifacts.reverse();
+  expect(search()).toMatchObject({ kind: 'subclasses', totalMatches: 1, groups: [{ classes: [{ className: 'p.A' }] }] });
+});
+
+test('subinterface-only evidence identifies an interface but does not return the subinterface', () => {
+  output.modules[0]!.configurations[0]!.artifacts.push(jar('sub', { 'p/J': binary('p/J', undefined, ['p/I'], true) }));
+  expect(search()).toMatchObject({ kind: 'implementors', groups: [], limitations: expect.arrayContaining([expect.stringMatching(/subinterfaces/i)]) });
+  expect(search({ typeName: 'p.J' })).toMatchObject({ kind: 'implementors', totalMatches: 0 });
+  expect(lookupHierarchy(output, { typeName: 'p.Unknown' })).toMatchObject({ ok: false, error: { code: 'CLASS_NOT_FOUND' } });
 });
 
 test('reads scoped compiled outputs, not source or dependency test classes; reflects output deletion', () => {
@@ -121,7 +141,7 @@ test('caps results after deterministic ordering and reports how many matched', (
   const entries: Record<string, Uint8Array> = {};
   for (let i = 210; i >= 0; i--) entries[`p/C${i}`] = binary(`p/C${i}`, 'p/Base');
   output.modules[0]!.configurations[0]!.artifacts.push(jar('many', entries));
-  const result = search({ kind: 'subclasses', className: 'p.Base' });
+  const result = search({ typeName: 'p.Base' });
   expect(result).toMatchObject({ truncated: true, totalMatches: 211 });
   const names = result.groups[0]!.classes.map(c => c.className);
   expect(names).toEqual(Object.keys(entries).map(n => n.replace('/', '.')).sort().slice(0, result.limit));
@@ -145,8 +165,8 @@ test('public lookup uses cached resolution, normalizes class paths, and writes n
   writeFileSync(join(root, 'settings.gradle'), '');
   output.modules[0]!.configurations[0]!.artifacts.push(jar('lib', { 'p/Impl': binary('p/Impl', undefined, ['p/I']) }));
   expect(writeCachedResolution(root, output, computeBuildInputsDigest(root)).ok).toBe(true);
-  expect(await getHierarchy({ ...query, projectRoot: root, className: 'p/I.class' })).toMatchObject({
-    ok: true, className: 'p.I', groups: [{ classes: [{ className: 'p.Impl', direct: true }] }],
+  expect(await getHierarchy({ projectRoot: root, typeName: 'p/I.class' })).toMatchObject({
+    ok: true, className: 'p.I', kind: 'implementors', groups: [{ classes: [{ className: 'p.Impl', direct: true }] }],
   });
   expect(await getHierarchy({ ...query, projectRoot: root, modulePath: ':missing' })).toMatchObject({ ok: false, error: { code: 'MODULE_NOT_FOUND' } });
   expect(readdirSync(root)).toEqual(['settings.gradle']);
@@ -159,7 +179,7 @@ test('Maven test scope follows superclass edges across workspace and local JARs,
   writeFileSync(join(classes, 'Leaf.class'), binary('p/Leaf', 'p/Mid'));
   const dep = jar('local', { 'p/Mid': binary('p/Mid', 'p/Base') });
   output.modules[0]!.configurations.push({ name: 'test', scope: 'test-compile', artifacts: [{ ...dep, origin: 'local-file', type: 'local-file' }] });
-  const opts = { kind: 'subclasses' as const, className: 'p.Base', includeTest: true };
+  const opts = { typeName: 'p.Base', includeTest: true };
   expect(search(opts).groups).toMatchObject([
     { origin: 'workspace', classes: [{ className: 'p.Leaf', direct: false }] },
     { origin: 'local-file', jarPath: dep.jarPath, classes: [{ className: 'p.Mid', direct: true }] },

@@ -615,35 +615,29 @@ export function createMcpServer(): McpServer {
     },
   );
 
-  const hierarchyScope = z.object({
-    modulePath: z.string().optional().describe(D.modulePath),
-    includeTest: z.boolean().optional().describe(D.includeTest),
-    directOnly: z.boolean().optional().describe('Exclude indirect matches.'),
-    projectRoot: z.string().optional(),
-    configuration: z.string().optional(),
-    forceRefresh: z.boolean().optional(),
-  });
-  const lookup = async (
-    kind: 'implementors' | 'subclasses', className: string, scope: z.infer<typeof hierarchyScope>,
-  ) => {
-    const root = await locateProjectRoot(scope.projectRoot);
-    if (!root.ok) return mcpToolResultFromProjectRootError(root.message, scope.projectRoot ?? process.cwd());
+  server.registerTool('find_subtypes', {
+    ...MCP_TOOL_COPY.find_subtypes,
+    inputSchema: z.object({
+      typeName: z.string().min(1).describe(D.className),
+      modulePath: z.string().optional().describe(D.modulePath),
+      directOnly: z.boolean().optional().describe('Exclude indirect matches.'),
+      includeTest: z.boolean().optional().describe(D.includeTest),
+      projectRoot: z.string().optional(),
+      configuration: z.string().optional(),
+      forceRefresh: z.boolean().optional(),
+    }),
+    annotations: { readOnlyHint: true, openWorldHint: true },
+  }, async (args) => {
+    const root = await locateProjectRoot(args.projectRoot);
+    if (!root.ok) return mcpToolResultFromProjectRootError(root.message, args.projectRoot ?? process.cwd());
     try {
-      const result = await getHierarchy({ ...scope, projectRoot: root.path, className, kind });
-      return withResolutionNotes(mcpToolResultFromHierarchy(result, kind), [classNameNote(className, result), root.note]);
+      const result = await getHierarchy({ ...args, projectRoot: root.path });
+      return withResolutionNotes(mcpToolResultFromHierarchy(result), [classNameNote(args.typeName, result), root.note]);
     } catch (e) {
       if (e instanceof UnsupportedProjectError) return mcpToolResultFromProjectRootError(e.message, root.path);
       return mcpToolResultFromUnexpectedError(e);
     }
-  };
-  const target = z.string().min(1).describe(D.className);
-  const annotations = { readOnlyHint: true, openWorldHint: true };
-  server.registerTool('get_implementors', {
-    ...MCP_TOOL_COPY.get_implementors, inputSchema: hierarchyScope.extend({ interfaceName: target }), annotations,
-  }, ({ interfaceName, ...scope }) => lookup('implementors', interfaceName, scope));
-  server.registerTool('get_subclasses', {
-    ...MCP_TOOL_COPY.get_subclasses, inputSchema: hierarchyScope.extend({ className: target }), annotations,
-  }, ({ className, ...scope }) => lookup('subclasses', className, scope));
+  });
 
   installCompactToolList(server);
   return server;

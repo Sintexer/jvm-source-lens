@@ -241,11 +241,11 @@ Steps:
 ## Checkpoint 13 — Hierarchy tools
 
 - [x] Cache binary headers in the project resolution bucket. Build reverse edges for the selected classpath only, after resolving duplicate names in order. Source-search cache entries are unchanged.
-- [x] `get_implementors(interfaceName)` and `get_subclasses(className)` support direct and transitive results, grouped by owner. Live `:app` smoke: 9 direct `RetryPolicy` implementations, 11 total (`spring-retry:2.0.4`).
+- [x] `find_subtypes(typeName)` infers the operation and returns direct and transitive classes grouped by owner. Live `:app` smoke: 9 direct `RetryPolicy` implementations, 11 total (`spring-retry:2.0.4`).
 - [x] Build lazily. `bun scripts/bench-hierarchy.ts`: 300 synthetic JARs with 19,200 compiled types, resolution cached; 316 ms cold, 60 ms median across five warm calls. Other tool requests pay no scan cost.
-- [x] Four prompts in `test/evals/hierarchy-prompts.json` passed in one Haiku run (correct first tool, module and depth); three existing routing probes also passed. `measure:tokens`: 1,957/2,000 (`chars / 4`).
+- [x] The split and merged APIs both routed four supported prompts correctly. On the fifth (subinterfaces), only the merged answer explained the limitation. Merging reduced the eager estimate from 1,957 to 1,848 tokens. See `test/evals/README.md` for the A/B protocol.
 
-**Done when:** `get_implementors org.springframework.retry.RetryPolicy` on the eval project lists the implementations from the classpath.
+**Done when:** `find_subtypes org.springframework.retry.RetryPolicy` on the eval project lists the implementations from the classpath.
 
 ## Checkpoint 14 — Exploration (optional, only spikes)
 

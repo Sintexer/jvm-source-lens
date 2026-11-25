@@ -111,8 +111,7 @@ The MCP server runs over stdio (`jvmsrc mcp`). It needs no environment variables
 | Tool | What it does |
 |:---|:---|
 | **`search_classes`** | Find a class by simple name or glob; returns compact FQN + lib name lists |
-| **`get_implementors`** | Find compiled classes that implement an interface on the selected module's classpath, grouped by module or JAR. |
-| **`get_subclasses`** | Find compiled subclasses of a class. Both hierarchy tools include indirect matches by default; set `directOnly: true` for immediate matches. |
+| **`find_subtypes`** | Pass `typeName` to find implementing classes (not subinterfaces) or subclasses on the selected classpath. Set `directOnly: true` for immediate matches. |
 | **`get_class_structure`** | Retrieves class overview (purpose + method names) or declared signatures |
 | **`get_package_docs`** | Reads an exact package's description and type summaries from source, filling gaps from the dependency's matching Javadoc JAR. Lists each contributing module or JAR separately. |
 | **`get_method_signature`**| Fetches real overloads for a method, with parameter names and generics |

@@ -11,26 +11,40 @@ import type { ArtifactCoordinates, ResolutionOutput } from '../resolvers/resolut
 import { binaryHeaders } from './binary-index.js';
 import type { HierarchyNode } from './scan.js';
 
-type Scope = PickClasspathOptions & { className: string; kind: 'implementors' | 'subclasses'; directOnly?: boolean; forceRefresh?: boolean };
+type Scope = PickClasspathOptions & { typeName: string; directOnly?: boolean; forceRefresh?: boolean };
 export type HierarchyInput = Scope & { projectRoot: string };
 type Owner = { origin: 'workspace' | 'interproject' | 'external' | 'local-file'; coordinates: ArtifactCoordinates;
   moduleName?: string; moduleRoot?: string; jarPath?: string };
 export type HierarchyGroup = Owner & { classes: Array<{ className: string; direct: boolean }> };
-type Success = { ok: true; className: string; kind: Scope['kind']; modulePath: string; configuration: string;
+type Kind = 'implementors' | 'subclasses';
+type Success = { ok: true; className: string; kind: Kind; modulePath: string; configuration: string;
   groups: HierarchyGroup[]; totalMatches: number; limit: number; truncated: boolean; limitations: string[] };
-export type HierarchyResult = Success | { ok: false; error: ClassSourceError; diagnosticId?: string; hint?: string };
+type AmbiguousTarget = { code: 'HIERARCHY_TARGET_AMBIGUOUS'; message: string; className: string; modulePath: string };
+export type HierarchyResult = Success | { ok: false; error: ClassSourceError | AmbiguousTarget; diagnosticId?: string; hint?: string };
 const LIMIT = 200;
 const COVERAGE = 'Binary headers only: source-only types, custom output directories, JDK classes and multi-release JAR overlays are not indexed. Missing intermediate binaries can hide indirect matches.';
 
+type Definitions = Map<string, { node: HierarchyNode; owner: Owner }>;
+
+function targetKind(defs: Definitions, name: string): Kind | 'ambiguous' | undefined {
+  const target = defs.get(name);
+  if (target) return target.node.isInterface ? 'implementors' : 'subclasses';
+  let superclass = false, iface = false;
+  for (const { node } of defs.values()) {
+    superclass ||= !node.isInterface && node.superclass === name;
+    iface ||= node.interfaces.includes(name);
+    if (superclass && iface) return 'ambiguous';
+  }
+  return superclass ? 'subclasses' : iface ? 'implementors' : undefined;
+}
+
 /** Build reverse edges only after choosing the first visible definition of each name. */
-function descendants(defs: Map<string, { node: HierarchyNode; owner: Owner }>, opts: Scope) {
+function descendants(defs: Definitions, opts: Scope, kind: Kind) {
   const edges = new Map<string, string[]>();
   const direct = new Set<string>();
-  let known = defs.has(opts.className);
   const edge = (parent: string, child: string, viaInterface: boolean) => {
-    if (parent === opts.className) known = true;
-    if (opts.kind === 'subclasses' && viaInterface) return;
-    if (parent === opts.className && (opts.kind === 'subclasses' || viaInterface)) direct.add(child);
+    if (kind === 'subclasses' && viaInterface) return;
+    if (parent === opts.typeName && (kind === 'subclasses' || viaInterface)) direct.add(child);
     const children = edges.get(parent);
     if (children) children.push(child);
     else edges.set(parent, [child]);
@@ -40,7 +54,7 @@ function descendants(defs: Map<string, { node: HierarchyNode; owner: Owner }>, o
     for (const iface of node.interfaces) edge(iface, node.name, true);
   }
   const queue = [...direct];
-  const visited = new Set([opts.className]);
+  const visited = new Set([opts.typeName]);
   const names: string[] = [];
   for (let i = 0; i < queue.length; i++) {
     const name = queue[i]!;
@@ -56,11 +70,12 @@ function descendants(defs: Map<string, { node: HierarchyNode; owner: Owner }>, o
     group.classes.push({ className, direct: direct.has(className) });
     groups.set(owner, group);
   }
-  return { known, groups: [...groups.values()], totalMatches: names.length };
+  return { groups: [...groups.values()], totalMatches: names.length };
 }
 
 export function lookupHierarchy(output: ResolutionOutput, opts: Scope): HierarchyResult {
-  const valid = fqnToZipRelPaths(opts.className);
+  const className = opts.typeName;
+  const valid = fqnToZipRelPaths(className);
   if (!valid.ok) return valid;
   const includeTest = inferIncludeTest(opts.modulePath, opts.includeTest);
   const pick = (modulePath?: string) => pickResolvedConfiguration(output, { ...opts, modulePath, includeTest });
@@ -73,13 +88,13 @@ export function lookupHierarchy(output: ResolutionOutput, opts: Scope): Hierarch
   const bucket = getProjectResolutionCacheDir(output.projectRoot);
   if (!bucket.ok) return { ok: false, error: { code: 'RESOLUTION_FAILED', message: bucket.message } };
   const memo = new Map<string, HierarchyNode[]>();
-  const candidates: Success[] = [];
+  const candidates: Array<Success | { ok: false; error: AmbiguousTarget }> = [];
   let searchedArtifactCount = 0;
   try {
     for (const scope of scopes) {
       if (!scope.ok) return scope;
       const { module, configuration } = scope;
-      const defs = new Map<string, { node: HierarchyNode; owner: Owner }>();
+      const defs: Definitions = new Map();
       const limitations = [COVERAGE];
       const visit = (path: string, directory: boolean, owner: Owner) => {
         let nodes = memo.get(path);
@@ -117,23 +132,31 @@ export function lookupHierarchy(output: ResolutionOutput, opts: Scope): Hierarch
         }
       }
       for (const error of output.errors) if (error.module === module.name && (!error.configuration || error.configuration === configuration.name)) limitations.push(error.message);
-      const { known, groups, totalMatches } = descendants(defs, opts);
-      if (known) candidates.push({ ok: true, className: opts.className, kind: opts.kind, modulePath: module.name,
+      const kind = targetKind(defs, className);
+      if (!kind) continue;
+      if (kind === 'ambiguous') {
+        candidates.push({ ok: false, error: { code: 'HIERARCHY_TARGET_AMBIGUOUS', className, modulePath: module.name,
+          message: `${module.name} references ${className} as both a superclass and an interface without a visible definition. Retry with a modulePath or configuration that resolves the target.` } });
+        continue;
+      }
+      if (kind === 'implementors') limitations.push('Only implementing classes are returned; subinterfaces are traversed but not listed.');
+      const { groups, totalMatches } = descendants(defs, opts, kind);
+      candidates.push({ ok: true, className, kind, modulePath: module.name,
         configuration: configuration.name, groups, totalMatches, limit: LIMIT, truncated: totalMatches > LIMIT, limitations });
     }
   } catch (e) { return { ok: false, error: { code: 'RESOLUTION_FAILED', message: String(e) } }; }
-  if (candidates.length > 1) return { ok: false, error: { code: 'MODULE_AMBIGUOUS', className: opts.className,
-    modulePaths: candidates.map(c => c.modulePath), message: `${opts.className} occurs on multiple classpaths; retry with modulePath.` } };
-  return candidates[0] ?? { ok: false, error: { code: 'CLASS_NOT_FOUND', className: opts.className, searchedArtifactCount,
-    message: `No definition of or reference to ${opts.className} in the selected binaries. ${COVERAGE}` } };
+  if (candidates.length > 1) return { ok: false, error: { code: 'MODULE_AMBIGUOUS', className,
+    modulePaths: candidates.map(c => c.ok ? c.modulePath : c.error.modulePath), message: `${className} occurs on multiple classpaths; retry with modulePath.` } };
+  return candidates[0] ?? { ok: false, error: { code: 'CLASS_NOT_FOUND', className, searchedArtifactCount,
+    message: `No definition of or reference to ${className} in the selected binaries. ${COVERAGE}` } };
 }
 
 export async function getHierarchy(input: HierarchyInput): Promise<HierarchyResult> {
-  let className = normalizeClassNameSyntax(input.className);
+  let className = normalizeClassNameSyntax(input.typeName);
   const valid = fqnToZipRelPaths(className);
   if (!valid.ok) return valid;
   const result = await resolveWithResolutionCache(input.projectRoot, { forceRefresh: input.forceRefresh,
-    diagnosticOperation: `get_${input.kind}` });
+    diagnosticOperation: 'find_subtypes' });
   if (!result.ok) return { ok: false, diagnosticId: result.diagnosticId, hint: result.hint,
     error: { code: 'RESOLUTION_FAILED', message: result.message, stderr: result.stderr } };
   // A qualified binary name needs no additional classpath probe.
@@ -144,5 +167,5 @@ export async function getHierarchy(input: HierarchyInput): Promise<HierarchyResu
     if (!canonical.ok) return canonical;
     className = canonical.className;
   }
-  return lookupHierarchy(result.output, { ...input, className });
+  return lookupHierarchy(result.output, { ...input, typeName: className });
 }

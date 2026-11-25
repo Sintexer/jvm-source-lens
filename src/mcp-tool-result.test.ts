@@ -435,7 +435,7 @@ test('hierarchy reports truncation separately from indexing limitations', () => 
       origin: 'workspace', moduleName: ':app', moduleRoot: '/app', coordinates: { group: '', name: 'app', version: null },
       classes: [{ className: 'a.Task', direct: true }],
     }] } satisfies Parameters<typeof mcpToolResultFromHierarchy>[0];
-  const response = mcpToolResultFromHierarchy(result, result.kind);
+  const response = mcpToolResultFromHierarchy(result);
   expect(response.structuredContent).toEqual(result);
   const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
   for (const expected of ['1 of 3', 'truncated', 'a.Run', ':app', 'runtimeClasspath', 'a.Task', 'Missing compiled output for :lib.']) {
@@ -443,9 +443,20 @@ test('hierarchy reports truncation separately from indexing limitations', () => 
   }
 });
 
+test('interface coverage is visible even with no matching classes', () => {
+  const coverage = 'Only implementing classes are returned; subinterfaces are traversed but not listed.';
+  const response = mcpToolResultFromHierarchy({ ok: true, kind: 'implementors', className: 'a.Run', modulePath: ':app',
+    configuration: 'compileClasspath', limit: 200, totalMatches: 0, truncated: false, groups: [], limitations: [coverage] });
+  expect(response.isError).toBe(false);
+  expect(response.structuredContent).toMatchObject({ groups: [], limitations: [coverage] });
+  const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
+  expect(text).toContain('0 matches');
+  expect(text).toContain(`Coverage: ${coverage}`);
+});
+
 test('hierarchy ambiguity returns retry choices in text and structured data', () => {
   const error = { code: 'MODULE_AMBIGUOUS' as const, modulePaths: [':one', ':two'], message: 'Select modulePath.' };
-  const response = mcpToolResultFromHierarchy({ ok: false, error }, 'subclasses');
+  const response = mcpToolResultFromHierarchy({ ok: false, error });
   expect(response.isError).toBe(true);
   expect(response.structuredContent).toMatchObject({ ok: false, code: error.code, error });
   const text = response.content[0]?.type === 'text' ? response.content[0].text : '';

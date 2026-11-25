@@ -40,6 +40,7 @@ const { values: args } = parseArgs({
     timeout: { type: 'string', default: '240' },
     concurrency: { type: 'string', default: '1' },
     project: { type: 'string', default: path.join(evalDir, 'project') },
+    'server-root': { type: 'string', default: repoRoot },
     prompts: { type: 'string', default: path.join(evalDir, 'prompts.json') },
     out: { type: 'string' },
     rescore: { type: 'string' },
@@ -61,8 +62,9 @@ if (prompts.length === 0) {
   throw new Error(`No prompts match --filter ${args.filter}`);
 }
 
-const outDir =
-  args.rescore ?? args.out ?? path.join(evalDir, 'results', new Date().toISOString().replace(/[:.]/g, '-'));
+const outDir = path.resolve(
+  args.rescore ?? args.out ?? path.join(evalDir, 'results', new Date().toISOString().replace(/[:.]/g, '-')),
+);
 const logDir = path.join(outDir, 'server-logs');
 
 // Fallback tools are deliberately allowed: we want to see whether the agent prefers jvmsrc, not force it.
@@ -92,7 +94,7 @@ function buildMcpConfig(): string {
     mcpServers: {
       jvmsrc: {
         command: process.execPath,
-        args: [path.join(repoRoot, 'src/cli.ts'), 'mcp'],
+        args: [path.resolve(args['server-root']!, 'src/cli.ts'), 'mcp'],
         env: forwardedEnv,
       },
     },
@@ -171,8 +173,8 @@ type EagerTokens = { total: number; method: 'api' | 'approx' };
 
 async function eagerTokens(): Promise<EagerTokens | null> {
   try {
-    const proc = Bun.spawn([process.execPath, path.join(repoRoot, 'scripts/measure-eager-tokens.ts'), '--json'], {
-      cwd: repoRoot,
+    const proc = Bun.spawn([process.execPath, path.resolve(args['server-root']!, 'scripts/measure-eager-tokens.ts'), '--json'], {
+      cwd: args['server-root'],
       stdout: 'pipe',
       stderr: 'ignore',
     });
@@ -230,7 +232,7 @@ function printReport(scores: PromptScore[], tokens: EagerTokens | null): void {
       const why = s.expectJvmsrc
         ? s.fallbackUsed
           ? 'used shell fallback'
-          : !s.selected ? 'never called jvmsrc' : `hierarchy routing: tool=${s.firstTool}, moduleCorrect=${s.moduleCorrect}, directOnlyCorrect=${s.directOnlyCorrect}, firstCallOk=${s.firstCallOk}`
+          : !s.selected ? 'never called jvmsrc' : `hierarchy routing: tool=${s.firstTool}, targetCorrect=${s.targetCorrect}, moduleCorrect=${s.moduleCorrect}, directOnlyCorrect=${s.directOnlyCorrect}, firstCallOk=${s.firstCallOk}`
         : 'called jvmsrc on a non-dependency question';
       console.log(`${s.id} (${s.category}): ${why}${s.runError ? ` [${s.runError}]` : ''}`);
     }

@@ -63,16 +63,26 @@ describe('isFallbackCommand', () => {
 });
 
 describe('scorePrompt', () => {
-  test('hierarchy routing requires the successful first call to use the expected module, tool and depth', () => {
-    const prompt = { ...positive, expectModule: ':app', expectFirstTools: ['get_implementors'], expectDirectOnly: true };
-    const call = (input: object, tool = 'get_implementors') => parseTranscript([use('a', `mcp__jvmsrc__${tool}`, input), result('a')]);
-    const args = { modulePath: ':app', directOnly: true };
+  test('hierarchy routing requires the expected target argument, module, tool and depth', () => {
+    const prompt = { ...positive, expectModule: ':app', expectFirstTools: ['find_subtypes'], expectDirectOnly: true, expectTarget: { typeName: 'a.Target' } };
+    const call = (input: object, tool = 'find_subtypes') => parseTranscript([use('a', `mcp__jvmsrc__${tool}`, input), result('a')]);
+    const args = { modulePath: ':app', directOnly: true, typeName: 'a.Target' };
     expect(scorePrompt(prompt, call(args)).passed).toBe(true);
     expect(scorePrompt(prompt, call({ ...args, modulePath: ':worker' })).passed).toBe(false);
-    expect(scorePrompt(prompt, call(args, 'get_subclasses')).passed).toBe(false);
-    const defaultDepth = call({ modulePath: ':app' });
+    expect(scorePrompt(prompt, call(args, 'search_classes')).passed).toBe(false);
+    expect(scorePrompt(prompt, call({ ...args, typeName: 'a.Other' })).passed).toBe(false);
+    expect(scorePrompt(prompt, call({ modulePath: ':app', directOnly: true, className: 'a.Target' })).passed).toBe(false);
+    const defaultDepth = call({ modulePath: ':app', typeName: 'a.Target' });
     expect(scorePrompt(prompt, defaultDepth).passed).toBe(false);
     expect(scorePrompt({ ...prompt, expectDirectOnly: false }, defaultDepth).passed).toBe(true);
+  });
+
+  test('keeps the final answer for manual review independently of successful routing', () => {
+    const prompt = { ...positive, reviewFinalAnswer: true };
+    const calls = [use('a', 'mcp__jvmsrc__get_class_structure'), result('a')];
+    expect(scorePrompt(prompt, parseTranscript(calls)).answerToReview).toBeNull();
+    expect(scorePrompt(prompt, parseTranscript([...calls, line({ type: 'result', result: 'No subinterfaces.' })])))
+      .toMatchObject({ passed: true, answerToReview: 'No subinterfaces.' });
   });
 
   test('positive prompt: jvmsrc first, expected tool, no fallback', () => {

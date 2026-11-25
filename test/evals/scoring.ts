@@ -21,6 +21,10 @@ export type EvalPrompt = {
   expectModule?: string;
   /** Hierarchy routing: omitted directOnly requests transitive results. */
   expectDirectOnly?: boolean;
+  /** Exact target argument and FQN for first-call hierarchy routing. */
+  expectTarget?: Record<string, string>;
+  /** Retain final prose for manual review; `passed` is only a routing verdict. */
+  reviewFinalAnswer?: boolean;
 };
 
 export type ToolCall = {
@@ -39,6 +43,7 @@ export type ParsedTranscript = {
   numTurns?: number;
   costUsd?: number;
   durationMs?: number;
+  finalAnswer?: string;
   /** The run itself failed (budget, crash), independent of tool errors. */
   runError?: string;
 };
@@ -123,6 +128,7 @@ export function parseTranscript(lines: string[]): ParsedTranscript {
       out.numTurns = typeof ev.num_turns === 'number' ? ev.num_turns : undefined;
       out.costUsd = typeof ev.total_cost_usd === 'number' ? ev.total_cost_usd : undefined;
       out.durationMs = typeof ev.duration_ms === 'number' ? ev.duration_ms : undefined;
+      if (!ev.is_error && typeof ev.result === 'string') out.finalAnswer = ev.result;
       if (ev.is_error) {
         out.runError = String(ev.subtype ?? ev.result ?? 'error');
       }
@@ -150,6 +156,8 @@ export type PromptScore = {
   /** First jvmsrc call is one of `expectFirstTools`; `null` when not applicable. */
   firstToolExpected: boolean | null;
   directOnlyCorrect?: boolean;
+  targetCorrect?: boolean;
+  answerToReview?: string | null;
   /** Ran javap/unzip/jar/Gradle-cache style shell commands (blocked attempts do not count). */
   fallbackUsed: boolean;
   /** Fallback attempts the PreToolUse hook blocked, with the deny reason visible to the agent. */
@@ -159,6 +167,7 @@ export type PromptScore = {
   passed: boolean;
   numTurns?: number;
   costUsd?: number;
+  durationMs?: number;
   runError?: string;
 };
 
@@ -184,8 +193,10 @@ export function scorePrompt(p: EvalPrompt, t: ParsedTranscript): PromptScore {
     typeof first?.input.modulePath === 'string' && modulePathMatches(first.input.modulePath, p.expectModule);
   const directOnlyCorrect = p.expectDirectOnly === undefined ? undefined :
     first !== undefined && (first.input.directOnly ?? false) === p.expectDirectOnly;
-  const routed = directOnlyCorrect === undefined ||
-    (directOnlyCorrect && firstToolExpected === true && moduleCorrect !== false && first?.isError === false && !t.runError);
+  const targetCorrect = p.expectTarget === undefined ? undefined :
+    Object.entries(p.expectTarget).every(([key, value]) => first?.input[key] === value);
+  const routed = (directOnlyCorrect === undefined && targetCorrect === undefined) ||
+    (directOnlyCorrect !== false && targetCorrect !== false && firstToolExpected === true && moduleCorrect !== false && first?.isError === false && !t.runError);
   return {
     id: p.id,
     category: p.category,
@@ -193,8 +204,8 @@ export function scorePrompt(p: EvalPrompt, t: ParsedTranscript): PromptScore {
     selected,
     jvmsrcCalls: jv.length,
     firstTool: first ? shortToolName(first.name) : null,
-    firstCallOk: first ? first.isError !== true : null,
-    firstCallUsable: first ? first.isError !== true || isRetryReadyError(first) : null,
+    firstCallOk: first ? first.isError === false : null,
+    firstCallUsable: first ? first.isError === false || isRetryReadyError(first) : null,
     modulePassed:
       first && p.expectModule !== undefined
         ? typeof first.input.modulePath === 'string' && first.input.modulePath.trim() !== '' && !/^(\*|all)$/i.test(first.input.modulePath.trim())
@@ -204,12 +215,15 @@ export function scorePrompt(p: EvalPrompt, t: ParsedTranscript): PromptScore {
     moduleCorrect,
     firstToolExpected,
     directOnlyCorrect,
+    targetCorrect,
+    answerToReview: p.reviewFinalAnswer ? t.finalAnswer ?? null : undefined,
     fallbackUsed,
     hookDenials,
     webUsed,
     passed: p.expectJvmsrc ? selected && !fallbackUsed && routed : !selected,
     numTurns: t.numTurns,
     costUsd: t.costUsd,
+    durationMs: t.durationMs,
     runError: t.runError,
   };
 }

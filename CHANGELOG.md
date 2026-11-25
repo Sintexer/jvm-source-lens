@@ -6,7 +6,7 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 
 ## Unreleased
 
-* Add `get_implementors` and `get_subclasses` to find direct and indirect descendants on a module's resolved binary classpath, grouped by owning JAR or module.
+* Add `find_subtypes(typeName)` to find implementing classes or subclasses on a module's resolved binary classpath, grouped by owning JAR or module. Contradictory references to an undefined target return `HIERARCHY_TARGET_AMBIGUOUS`.
 
 * Show class, field and overload documentation from the matching Javadoc JAR when original source is absent. Bytecode remains authoritative, and missing docs do not prevent structure or signature lookup.
 

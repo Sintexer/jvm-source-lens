@@ -317,12 +317,12 @@ describe('pluggable fake resolver end-to-end', () => {
     const [ct, st] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(st), client.connect(ct)]);
     try {
-      const args = { className: 'java.lang.Object', projectRoot: projectDir, directOnly: true, modulePath: 'root' };
-      const call = (options = {}) => client.callTool({ name: 'get_subclasses', arguments: { ...args, ...options } });
+      const args = { typeName: 'java.lang.Object', projectRoot: projectDir, directOnly: true, modulePath: 'root' };
+      const call = (options = {}) => client.callTool({ name: 'find_subtypes', arguments: { ...args, ...options } });
       const result = await call();
       expect(result.isError).toBe(false);
       expect(result.structuredContent).toMatchObject({
-        className: args.className, totalMatches: 1, truncated: false,
+        kind: 'subclasses', className: args.typeName, totalMatches: 1, truncated: false,
         groups: [{ coordinates: { name: 'greeter-lib' }, classes: [{ className: 'com.fake.Greeter', direct: true }] }],
       });
       const text = JSON.stringify(result.content);
@@ -335,14 +335,13 @@ describe('pluggable fake resolver end-to-end', () => {
       const bad = await call({ configuration: 'missing' });
       expect(bad.structuredContent).toMatchObject({ ok: false, error: { code: 'CONFIGURATION_NOT_FOUND' } });
       expect(JSON.stringify(bad.content)).toContain('CONFIGURATION_NOT_FOUND');
-      const implementors = (directOnly: boolean) => client.callTool({
-        name: 'get_implementors', arguments: { interfaceName: 'java.lang.Runnable', projectRoot: projectDir, directOnly },
-      });
+      const implementors = (directOnly: boolean) => call({ typeName: 'java.lang.Runnable', directOnly });
       const all = await implementors(false);
-      expect(all.structuredContent).toMatchObject({ groups: [{ classes: [
+      expect(all.structuredContent).toMatchObject({ kind: 'implementors', groups: [{ classes: [
         { className: 'com.fake.Child', direct: false }, { className: 'com.fake.Greeter', direct: true },
       ] }] });
       expect(JSON.stringify(all.content)).toMatch(/com.fake.Child[^\n]*indirect/);
+      for (const repr of [all.content, all.structuredContent]) expect(JSON.stringify(repr)).toContain('subinterfaces');
       expect((await implementors(true)).structuredContent).toMatchObject({ totalMatches: 1, groups: [{
         classes: [{ className: 'com.fake.Greeter', direct: true }],
       }] });
@@ -351,20 +350,29 @@ describe('pluggable fake resolver end-to-end', () => {
     }
   });
 
-  test('implementor ambiguity recommends the advertised interfaceName input', async () => {
-    const names = ['one/Task', 'two/Task'];
-    fs.writeFileSync(binaryJarPath, zipSync(Object.fromEntries(names.map(n => [`${n}.class`, buildClassFile({ internalName: n })]))));
+  test('ambiguous subtype lookup distinguishes name collisions from conflicting hierarchy edges', async () => {
+    fs.writeFileSync(binaryJarPath, zipSync({
+      'one/Task.class': buildClassFile({ internalName: 'one/Task', superclass: 'api/Missing' }),
+      'two/Task.class': buildClassFile({ internalName: 'two/Task', interfaces: ['api/Missing'] }),
+    }));
     const server = createMcpServer();
     const client = new Client({ name: 'hierarchy-test', version: '1' });
     const [ct, st] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(st), client.connect(ct)]);
     try {
-      const response = await client.callTool({ name: 'get_implementors', arguments: { interfaceName: 'Task', projectRoot: projectDir } });
+      const call = (typeName: string) => client.callTool({ name: 'find_subtypes', arguments: { typeName, projectRoot: projectDir } });
+      const response = await call('Task');
       expect(response.isError).toBe(true);
       for (const repr of [response.content, response.structuredContent]) {
         const text = JSON.stringify(repr);
-        for (const value of ['INVALID_FQN', 'one.Task', 'two.Task', 'interfaceName']) expect(text).toContain(value);
+        for (const value of ['INVALID_FQN', 'one.Task', 'two.Task', 'typeName']) expect(text).toContain(value);
         expect(text).not.toContain('Retry with className');
+      }
+      const conflict = await call('api.Missing');
+      expect(conflict.isError).toBe(true);
+      for (const repr of [conflict.content, conflict.structuredContent]) {
+        const text = JSON.stringify(repr);
+        for (const value of ['HIERARCHY_TARGET_AMBIGUOUS', 'api.Missing', 'modulePath']) expect(text).toContain(value);
       }
     } finally {
       await client.close();

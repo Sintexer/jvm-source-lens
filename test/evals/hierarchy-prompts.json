@@ -4,7 +4,8 @@
     "category": "filecontext",
     "prompt": "I'm editing app/src/main/java/com/acme/app/App.java. Which dependency classes declare org.springframework.retry.RetryPolicy directly in their implements list? Exclude classes that only inherit the contract.",
     "expectJvmsrc": true,
-    "expectFirstTools": ["get_implementors"],
+    "expectFirstTools": ["find_subtypes"],
+    "expectTarget": { "typeName": "org.springframework.retry.RetryPolicy" },
     "expectModule": ":app",
     "expectDirectOnly": true
   },
@@ -13,7 +14,8 @@
     "category": "filecontext",
     "prompt": "For app/src/main/java/com/acme/app/App.java, which classes on its dependency classpath implement org.springframework.retry.RetryPolicy? Include implementations inherited from a parent type as well as the direct ones.",
     "expectJvmsrc": true,
-    "expectFirstTools": ["get_implementors"],
+    "expectFirstTools": ["find_subtypes"],
+    "expectTarget": { "typeName": "org.springframework.retry.RetryPolicy" },
     "expectModule": ":app",
     "expectDirectOnly": false
   },
@@ -22,7 +24,8 @@
     "category": "filecontext",
     "prompt": "I'm editing worker/src/main/java/com/acme/worker/Worker.java. Across this module's dependency JARs, which Jackson types have com.fasterxml.jackson.databind.JsonNode as their immediate superclass? Stop after one level.",
     "expectJvmsrc": true,
-    "expectFirstTools": ["get_subclasses"],
+    "expectFirstTools": ["find_subtypes"],
+    "expectTarget": { "typeName": "com.fasterxml.jackson.databind.JsonNode" },
     "expectModule": ":worker",
     "expectDirectOnly": true
   },
@@ -31,8 +34,20 @@
     "category": "filecontext",
     "prompt": "I'm working on worker/src/main/java/com/acme/worker/Worker.java. List the descendants of com.fasterxml.jackson.databind.JsonNode in this module's dependencies, including grandchildren and deeper subclasses.",
     "expectJvmsrc": true,
-    "expectFirstTools": ["get_subclasses"],
+    "expectFirstTools": ["find_subtypes"],
+    "expectTarget": { "typeName": "com.fasterxml.jackson.databind.JsonNode" },
     "expectModule": ":worker",
     "expectDirectOnly": false
+  },
+  {
+    "id": "h05",
+    "category": "filecontext",
+    "prompt": "I'm editing worker/src/main/java/com/acme/worker/Worker.java. Which dependency interfaces directly extend com.google.common.util.concurrent.ListeningExecutorService? I'm looking for subinterfaces, not implementing classes.",
+    "expectJvmsrc": true,
+    "expectFirstTools": ["find_subtypes"],
+    "expectTarget": { "typeName": "com.google.common.util.concurrent.ListeningExecutorService" },
+    "expectModule": ":worker",
+    "expectDirectOnly": true,
+    "reviewFinalAnswer": true
   }
 ]

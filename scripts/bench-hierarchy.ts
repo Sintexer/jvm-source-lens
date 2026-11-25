@@ -63,13 +63,14 @@ try {
   console.log(JSON.stringify({ jars, typesPerJar, classes: jars * typesPerJar, jarBytes }));
 
   const { getHierarchy } = await import('../src/hierarchy/lookup.js');
-  const query = { projectRoot, className: 'bench.p0.Part0', modulePath: ':', kind: 'implementors', directOnly: false } as const;
+  const query = { projectRoot, typeName: 'bench.p0.Part0', modulePath: ':', directOnly: false };
   const ms: number[] = [];
   for (let i = 0; i < 6; i++) {
     const start = performance.now();
     const result = await getHierarchy(query);
     ms.push(performance.now() - start);
     if (!result.ok) throw new Error(result.error.message);
+    assert.equal(result.kind, 'implementors');
     assert.deepEqual(result.groups.flatMap(g => g.classes), [
       { className: 'bench.p1.Part1', direct: true },
       { className: 'bench.p299.Leaf', direct: false },

@@ -60,6 +60,49 @@ A positive prompt **passes** only if jvmsrc was called and no shell fallback ran
 `results/<timestamp>/` (git-ignored) holds `<id>.jsonl` transcripts, `summary.json`, `mcp-config.json` and `server-logs/`.
 Compare runs by diffing `summary.json`; re-run `--rescore` after changing `scoring.ts`.
 
+## Hierarchy A/B (2026-11-25)
+
+Five fresh sessions per arm on the same `project/`, split first (`eac2e77`), then merged (`find_subtypes(typeName, ...)`, no `kind`). Claude Code 2.1.332, `claude-haiku-5-5`, default mode, no hook, concurrency 2, $0.15 and 75 seconds per prompt. All ten sessions completed; no shell fallback ran.
+
+| First jvmsrc call | Split | Merged |
+|---|---|---|
+| `h01`/`h02`: direct/all `RetryPolicy` implementors, `:app` | 2/2 | 2/2 |
+| `h03`/`h04`: direct/all `JsonNode` subclasses, `:worker` | 2/2 | 2/2 |
+| `h05`: direct subinterfaces of `ListeningExecutorService`, `:worker` | Chose the subclass tool, not the interface-target tool | Chose the interface target with `typeName` and `directOnly: true` |
+
+Routing checks the first tool, exact FQN under the correct argument name, module, depth, and observed non-error result. **Neither hierarchy API can list subinterfaces.** `h05` measures whether the model recognizes that limit, not whether it can obtain the requested list with one hierarchy call. Review `scores[].answerToReview` against the transcript separately; a routing pass is not an answer grade.
+
+| `h05` final-answer review | Split | Merged |
+|---|---|---|
+| Explicitly distinguished unsupported listing from zero matches? | No: “No dependency interface directly extends” the target, citing two empty subclass lookups. False: Guava 32.1.2-jre's `ListeningScheduledExecutorService` directly extends it (verified with `get_class_structure` in `:worker`). | Yes: “Subinterfaces are traversed but not listed.” Identified the returned classes as non-answers; proposed a scan but did not run it or list the subinterface. |
+
+| Five-prompt totals unless noted | Split | Merged |
+|---|---:|---:|
+| Successful first jvmsrc call (regardless of route) | 5/5 | 5/5 |
+| jvmsrc calls | 8 | 9 |
+| Reported cost (USD) | 0.02177609 | 0.02077298 |
+| Mean end-to-end duration per prompt (s) | 8.07 | 7.65 |
+| Input tokens: uncached / cache creation / cache read | 44 / 66,614 / 528,689 | 32 / 67,980 / 362,278 |
+| Output tokens | 6,324 | 7,102 |
+| Eager tool + instructions estimate (`chars / 4`, not billed usage) | 1,957 | 1,848 |
+
+One observation per prompt, shared caches, fixed run order: the cost and latency differences do not establish a performance improvement. The four supported queries show no observed routing regression, not universal prose correctness. For example, on `h02` the split answer headed a nine-item list “(8)” before correcting itself; the merged answer incorrectly said `AlwaysRetryPolicy` extends `SimpleRetryPolicy` (its parent is `NeverRetryPolicy`).
+
+To reproduce from the repository root (Bash, `jq`, dependencies installed), use the same prompt text and project for both arms. Only the split tool names and target argument keys change in the temporary scoring expectations. `--server-root` selects the MCP implementation and eager-token measurement, not the fixture. Select fresh `--out` directories for repeat runs.
+
+```bash
+split=$(mktemp -d)
+git archive eac2e77 | tar -x -C "$split"
+ln -s "$PWD/node_modules" "$split/node_modules"
+prompts=test/evals/hierarchy-prompts.json
+jq 'map((if .id == "h03" or .id == "h04" then ["get_subclasses","className"] else ["get_implementors","interfaceName"] end) as [$tool,$key] | .expectFirstTools=[$tool] | .expectTarget={($key):.expectTarget.typeName})' "$prompts" > "$split/prompts.json"
+flags=(--model claude-haiku-5-5 --concurrency 2 --budget 0.15 --timeout 75)
+bun run eval --server-root "$split" --prompts "$split/prompts.json" "${flags[@]}" --out test/evals/results/split
+bun run eval --prompts "$prompts" "${flags[@]}" --out test/evals/results/merged
+```
+
+The measured transcripts are in ignored directories `results/hierarchy-split-eac2e77-ab/` and `results/hierarchy-merged-ab/`. Token usage, duration and cost are from each JSONL `result` event, not the tool call log.
+
 ## Caveats
 
 - One run per prompt is noisy; repeat (`--filter`, several runs) before concluding anything from a few percentage points.

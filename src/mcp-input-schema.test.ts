@@ -81,19 +81,16 @@ describe('advertised input schemas', () => {
     expect(props('get_class_structure')).not.toContain('packageName');
   });
 
-  test.each([
-    ['get_implementors', 'interfaceName'],
-    ['get_subclasses', 'className'],
-  ])('%s advertises only its target and scope options', (name, target) => {
-    const schema = tools.find((t) => t.name === name)?.inputSchema;
-    expect(schema?.required).toEqual([target]);
-    expect(Object.keys(schema!.properties!).sort()).toEqual([target, 'modulePath', 'includeTest', 'directOnly'].sort());
+  test('find_subtypes advertises only its target and scope options', () => {
+    const schema = tools.find((t) => t.name === 'find_subtypes')?.inputSchema;
+    expect(schema?.required).toEqual(['typeName']);
+    expect(props('find_subtypes')).toEqual(['typeName', 'modulePath', 'directOnly', 'includeTest']);
   });
 
   test('server instructions and tool titles/descriptions match registered Gradle + Maven copy', () => {
     expect(client.getInstructions()).toBe(
       '\nGradle and Maven projects only. Use jvmsrc for dependency classes, methods and versions instead of memory,\n' +
-        'web search or cache digging. Package docs cover workspace and dependency packages; hierarchy tools search compiled types.\n' +
+        'web search or cache digging. Package docs cover workspace and dependency packages; find_subtypes searches compiled types.\n' +
         'For other workspace source, grep/read.\n\n' +
         'Flow: search_classes (only if the name is unknown) → get_class_structure → get_class_source with\n' +
         'methodNames. For version problems start with resolve_dependencies.\n\n' +
@@ -153,8 +150,7 @@ describe('advertised input schemas', () => {
         title: 'Package docs',
         description: 'Package description, types and summaries from source or Javadoc, by owner.',
       },
-      { name: 'get_implementors', title: 'Implementors', description: 'Find classes implementing an interface on the selected classpath, grouped by owner.' },
-      { name: 'get_subclasses', title: 'Subclasses', description: 'Find subclasses on the selected classpath, grouped by owner.' },
+      { name: 'find_subtypes', title: 'Find subtypes', description: 'Find subclasses or implementing classes by owner. For an interface, returns classes only, not subinterfaces.' },
     ]);
   });
 });
@@ -164,11 +160,9 @@ describe('tolerated inputs', () => {
   // The compact text is a one-line summary; guidance lives in structuredContent / message.
   const text = (r: unknown) => JSON.stringify(r);
 
-  test.each([
-    ['get_implementors', 'interfaceName'],
-    ['get_subclasses', 'className'],
-  ])('%s validates and honors hidden resolution inputs', async (name, target) => {
-    const args = { [target]: 'a.B', projectRoot: missingRoot, configuration: 'runtimeClasspath', forceRefresh: true };
+  test('find_subtypes validates and honors hidden resolution inputs', async () => {
+    const name = 'find_subtypes';
+    const args = { typeName: 'a.B', projectRoot: missingRoot, configuration: 'runtimeClasspath', forceRefresh: true };
     expect(text(await client.callTool({ name, arguments: args }))).toContain('does not exist');
     for (const key of ['forceRefresh', 'directOnly', 'includeTest']) {
       const result = await client.callTool({ name, arguments: { ...args, [key]: 'yes' } });

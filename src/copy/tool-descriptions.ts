@@ -4,13 +4,9 @@ export type McpToolCopy = {
 };
 
 export const MCP_TOOL_COPY = {
-  get_implementors: {
-    title: 'Implementors',
-    description: 'Find classes implementing an interface on the selected classpath, grouped by owner.',
-  },
-  get_subclasses: {
-    title: 'Subclasses',
-    description: 'Find subclasses on the selected classpath, grouped by owner.',
+  find_subtypes: {
+    title: 'Find subtypes',
+    description: 'Find subclasses or implementing classes by owner. For an interface, returns classes only, not subinterfaces.',
   },
   get_package_docs: {
     title: 'Package docs',

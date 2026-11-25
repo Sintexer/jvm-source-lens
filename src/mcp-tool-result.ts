@@ -80,10 +80,10 @@ import type { GuidedEnvelopeFields, McpErrorCategory } from './guided-response/t
 
 export type { McpErrorCategory };
 
-export function mcpToolResultFromHierarchy(result: HierarchyResult, kind: 'implementors' | 'subclasses'): CallToolResult {
+export function mcpToolResultFromHierarchy(result: HierarchyResult): CallToolResult {
   if (!result.ok) {
-    const error = kind === 'implementors' && result.error.code === 'INVALID_FQN'
-      ? { ...result.error, message: result.error.message.replace('Retry with className', 'Retry with interfaceName') }
+    const error = result.error.code === 'INVALID_FQN'
+      ? { ...result.error, message: result.error.message.replace('Retry with className', 'Retry with typeName') }
       : result.error;
     const choices = error.code === 'MODULE_AMBIGUOUS' ? error.modulePaths :
       'availableModules' in error ? error.availableModules : undefined;
