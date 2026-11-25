@@ -5,6 +5,7 @@ import type {
   BuildCacheInputs,
   DependencyResolver,
   ResolutionResult,
+  ResolveJavadocJarResult,
   ResolveOptions,
   ResolveSourcesJarResult,
   ResolvedArtifact,
@@ -158,5 +159,56 @@ export class GradleResolver implements DependencyResolver {
     hooks?: SubprocessHooks,
   ): Promise<ResolveSourcesJarResult> {
     return resolveSourcesJar(projectRoot, coordinates, hooks);
+  }
+
+  async resolveJavadocJar(
+    projectRoot: string,
+    coordinates: ArtifactCoordinates,
+    moduleName: string,
+    hooks?: SubprocessHooks,
+  ): Promise<ResolveJavadocJarResult> {
+    if (!coordinates.version) return { ok: true, javadocJarPath: null };
+    let spawned: GradleSpawnResult;
+    try {
+      hooks?.onBeforeResolve?.({ resolverId: this.id, displayName: this.displayName });
+      spawned = await runGradleTask(
+        projectRoot,
+        'jvmsrcResolveJavadoc',
+        {
+          jvmsrcModule: moduleName,
+          jvmsrcGroup: coordinates.group,
+          jvmsrcName: coordinates.name,
+          jvmsrcVersion: coordinates.version,
+        },
+        { inheritStderr: hooks?.inheritStderr },
+      );
+    } finally {
+      hooks?.onAfterResolve?.();
+    }
+    if (!spawned.ok) {
+      return {
+        ok: false,
+        message: spawned.message,
+        stderr: spawned.stderr,
+        subprocess: captureFromSpawn(spawned),
+      };
+    }
+    try {
+      const raw = parseResolutionJson(spawned.stdout);
+      if (
+        raw && typeof raw === 'object' && 'javadocJarPath' in raw &&
+        (raw.javadocJarPath === null || typeof raw.javadocJarPath === 'string')
+      ) {
+        return { ok: true, javadocJarPath: raw.javadocJarPath };
+      }
+      throw new Error('Invalid javadocJarPath in Gradle output');
+    } catch (e) {
+      return {
+        ok: false,
+        message: e instanceof Error ? e.message : String(e),
+        stderr: spawned.stderr || undefined,
+        subprocess: captureFromSpawn({ ...spawned, exitCode: 0 }),
+      };
+    }
   }
 }

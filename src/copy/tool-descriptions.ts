@@ -6,7 +6,7 @@ export type McpToolCopy = {
 export const MCP_TOOL_COPY = {
   get_package_docs: {
     title: 'Package docs',
-    description: 'Source-backed package description, types and summaries by owner.',
+    description: 'Package description, types and summaries from source or Javadoc, by owner.',
   },
 
   search_classes: {

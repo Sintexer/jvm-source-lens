@@ -71,6 +71,10 @@ export type ResolveSourcesJarResult =
       subprocess?: SubprocessCapture;
     };
 
+export type ResolveJavadocJarResult =
+  | { ok: true; javadocJarPath: string | null }
+  | Extract<ResolveSourcesJarResult, { ok: false }>;
+
 export type ResolutionResult =
   | { ok: true; output: ResolutionOutput }
   | {
@@ -106,4 +110,10 @@ export interface DependencyResolver {
     coordinates: ArtifactCoordinates,
     hooks?: SubprocessHooks,
   ): Promise<ResolveSourcesJarResult>;
+  resolveJavadocJar?(
+    projectRoot: string,
+    coordinates: ArtifactCoordinates,
+    moduleName: string,
+    hooks?: SubprocessHooks,
+  ): Promise<ResolveJavadocJarResult>;
 }

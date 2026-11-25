@@ -37,6 +37,28 @@ function output(...modules: ResolvedModule[]): ResolutionOutput {
 }
 const opts = { packageName: 'a.b' };
 
+test('Javadoc fills missing prose for the selected owner without replacing source summaries', async () => {
+  const lib = external('lib', { 'a/b/A.class': '', 'a/b/B.class': '' });
+  lib.sourcesJarPath = jar('sources', { 'a/b/A.java': 'package a.b; /** From source. */ class A {}' });
+  const docs = jar('docs', { 'a/b/package-summary.html': '<section id="package-description"><div class="block">From classifier.</div></section><table class="typeSummary"><tr><td class="colFirst"><a href="B.html">B</a></td><td class="colLast">From page.</td></tr></table>' });
+  const hit = await lookupPackageDocs(output(mod('app', [lib])), opts, undefined, async (c, moduleName) => {
+    expect(c).toEqual({ group: 'g', name: 'lib', version: '1' });
+    expect(moduleName).toBe('app');
+    return { ok: true, javadocJarPath: docs };
+  });
+  expect(hit).toMatchObject({ owners: [{ description: 'From classifier.', docsPath: 'a/b/package-summary.html',
+    provenance: { javadocJarPath: docs }, types: [{ name: 'A', summary: 'From source.' }, { name: 'B', summary: 'From page.', docsSource: 'javadoc-jar' }] }] });
+});
+
+test('complete sources skip classifier lookup; absent classifier preserves binary results, resolver failure does not', async () => {
+  const lib = external('lib', { 'a/b/A.class': '' });
+  const out = output(mod('app', [lib]));
+  expect(await lookupPackageDocs(out, opts, undefined, async () => ({ ok: true, javadocJarPath: null }))).toMatchObject({ ok: true, owners: [{ types: [{ name: 'A' }] }] });
+  expect(await lookupPackageDocs(out, opts, undefined, async () => ({ ok: false, message: 'Unavailable' }))).toMatchObject({ error: { code: 'DOCS_RESOLVE_FAILED' } });
+  lib.sourcesJarPath = jar('sources', { 'a/b/package.html': 'Package.', 'a/b/A.java': 'package a.b; /** A. */ class A {}' });
+  expect(await lookupPackageDocs(out, opts, undefined, async () => { throw Error('unexpected lookup'); })).toMatchObject({ ok: true, owners: [{ description: 'Package.' }] });
+});
+
 test('split package keeps module and sibling docs and types separate, with exact package and declaration matching', async () => {
   const lib = mod('lib');
   const edge: ResolvedArtifact = { group: 'g', name: 'lib', version: null, type: 'project', origin: 'interproject',

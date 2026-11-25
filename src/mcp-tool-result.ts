@@ -90,16 +90,17 @@ export function mcpToolResultFromPackageDocs(result: GetPackageDocsResult): Call
     };
   }
 
-  const sections = result.owners.map(({ provenance, description, docsPath, types }) => {
+  const sections = result.owners.map(({ provenance, description, docsPath, docsSource, types }) => {
     const { group, name, version } = provenance.coordinates;
     const owner = provenance.kind === 'interproject'
       ? `module ${provenance.moduleName} (${provenance.moduleRoot})`
-      : `${[group, name, version].filter(Boolean).join(':')} (${provenance.sourcesJarPath ?? `binary only: ${provenance.jarPath}`})`;
+      : `${[group, name, version].filter(Boolean).join(':')} (${provenance.sourcesJarPath ?? provenance.jarPath})`;
     return [
       `Owner: ${owner}`,
-      ...(docsPath ? [`Package docs: ${docsPath}`] : []),
+      ...(provenance.kind === 'external' && provenance.javadocJarPath ? [`Javadoc JAR: ${provenance.javadocJarPath}`] : []),
+      ...(docsPath ? [`Package docs: ${docsPath}${docsSource ? ` (${docsSource})` : ''}`] : []),
       description ?? 'No package description.',
-      ...types.map(({ name, summary }) => summary ? `${name}: ${summary}` : name),
+      ...types.map(({ name, summary, docsSource }) => summary ? `${name}: ${summary}${docsSource ? ` (${docsSource})` : ''}` : name),
     ].join('\n');
   });
   return {

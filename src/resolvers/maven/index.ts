@@ -18,7 +18,7 @@ import {
   mavenCacheInputs,
   resolveMavenLocalRepository,
 } from './cache-inputs.js';
-import { resolveMavenSourcesJar } from './resolve-sources-jar.js';
+import { resolveMavenJavadocJar, resolveMavenSourcesJar } from './resolve-sources-jar.js';
 import { captureFromSpawn, runMavenAnalyzer, type MavenSpawnResult } from './spawn-maven.js';
 
 export {
@@ -111,6 +111,7 @@ export class MavenResolver implements DependencyResolver {
   readonly id = 'maven';
   readonly displayName = 'Maven';
   readonly rootHint = 'pom.xml';
+  readonly resolveJavadocJar = resolveMavenJavadocJar;
   readonly configurationNames = {
     compile: ['compile'],
     'test-compile': ['test'],

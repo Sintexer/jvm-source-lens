@@ -1,4 +1,4 @@
-import type { ArtifactCoordinates, ResolveSourcesJarResult, SubprocessHooks } from '../base.js';
+import type { ArtifactCoordinates, ResolveJavadocJarResult, ResolveSourcesJarResult, SubprocessHooks } from '../base.js';
 import { parseResolutionJson } from '../resolution-output.js';
 import { captureFromSpawn, runMavenAnalyzer, type MavenSpawnResult } from './spawn-maven.js';
 
@@ -31,30 +31,22 @@ export function parseMavenSourcesJson(
   };
 }
 
-/**
- * Resolves (and downloads if needed) the `-sources.jar` for one Maven coordinate
- * using the bundled `maven-analyzer.jar` extension (`jvmsrc.mode=sources`).
- */
-export async function resolveMavenSourcesJar(
+async function runClassifierLookup(
   projectRoot: string,
   coordinates: ArtifactCoordinates,
+  modeArgs: string[],
   hooks?: SubprocessHooks,
-): Promise<ResolveSourcesJarResult> {
-  const version = coordinates.version;
-  if (version === null || version.length === 0) {
-    return { ok: true, sourcesJarPath: null };
-  }
-
+) {
   let spawned: MavenSpawnResult;
   try {
     hooks?.onBeforeResolve?.({ resolverId: 'maven', displayName: 'Maven' });
     spawned = await runMavenAnalyzer(
       projectRoot,
       [
-        '-Djvmsrc.mode=sources',
+        ...modeArgs,
         `-Djvmsrc.group=${coordinates.group}`,
         `-Djvmsrc.artifact=${coordinates.name}`,
-        `-Djvmsrc.version=${version}`,
+        `-Djvmsrc.version=${coordinates.version ?? ''}`,
       ],
       { inheritStderr: Boolean(hooks?.inheritStderr) },
     );
@@ -64,13 +56,23 @@ export async function resolveMavenSourcesJar(
 
   if (!spawned.ok) {
     return {
-      ok: false,
+      ok: false as const,
       message: spawned.message,
       stderr: spawned.stderr,
       subprocess: captureFromSpawn(spawned),
     };
   }
+  return spawned;
+}
 
+export async function resolveMavenSourcesJar(
+  projectRoot: string,
+  coordinates: ArtifactCoordinates,
+  hooks?: SubprocessHooks,
+): Promise<ResolveSourcesJarResult> {
+  if (!coordinates.version) return { ok: true, sourcesJarPath: null };
+  const spawned = await runClassifierLookup(projectRoot, coordinates, ['-Djvmsrc.mode=sources'], hooks);
+  if (!spawned.ok) return spawned;
   const parsed = parseMavenSourcesJson(spawned.outputText);
   if (!parsed.ok) {
     return {
@@ -86,4 +88,34 @@ export async function resolveMavenSourcesJar(
     sourcesJarPath: parsed.sourcesJarPath,
     ...(parsed.reason !== undefined ? { reason: parsed.reason } : {}),
   };
+}
+
+export async function resolveMavenJavadocJar(
+  projectRoot: string,
+  coordinates: ArtifactCoordinates,
+  moduleName: string,
+  hooks?: SubprocessHooks,
+): Promise<ResolveJavadocJarResult> {
+  if (!coordinates.version) return { ok: true, javadocJarPath: null };
+  const spawned = await runClassifierLookup(
+    projectRoot, coordinates, ['-Djvmsrc.mode=javadoc', `-Djvmsrc.module=${moduleName}`], hooks,
+  );
+  if (!spawned.ok) return spawned;
+  const failure = (message: string) => ({
+    ok: false as const, message, stderr: spawned.stderr || undefined,
+    subprocess: captureFromSpawn({ ...spawned, exitCode: 0 }),
+  });
+  try {
+    const raw: unknown = parseResolutionJson(spawned.outputText);
+    if (raw && typeof raw === 'object') {
+      if ('error' in raw && typeof raw.error === 'string') return failure(raw.error);
+      if ('javadocJarPath' in raw && (raw.javadocJarPath === null ||
+          (typeof raw.javadocJarPath === 'string' && raw.javadocJarPath.length > 0))) {
+        return { ok: true, javadocJarPath: raw.javadocJarPath };
+      }
+    }
+    return failure('Invalid or missing javadocJarPath in Maven output');
+  } catch (e) {
+    return failure(`Invalid Maven Javadoc output: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }

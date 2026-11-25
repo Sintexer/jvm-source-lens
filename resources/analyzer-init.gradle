@@ -4,10 +4,12 @@ import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.ResolvedArtifact
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+import org.gradle.api.artifacts.result.UnresolvedComponentResult
 import org.gradle.api.artifacts.result.ResolvedArtifactResult
 import org.gradle.api.artifacts.result.ResolvedComponentResult
 import org.gradle.api.artifacts.result.ResolvedDependencyResult
 import org.gradle.jvm.JvmLibrary
+import org.gradle.language.java.artifact.JavadocArtifact
 import org.gradle.language.base.artifact.SourcesArtifact
 
 gradle.projectsLoaded { g ->
@@ -101,6 +103,32 @@ gradle.projectsLoaded { g ->
             }
 
             println new JsonBuilder(result).toPrettyString()
+        }
+    }
+
+    g.rootProject.tasks.register("jvmsrcResolveJavadoc") {
+        group = "jvmsrc"
+        description = "Resolve the javadoc JAR using the selected module's repositories."
+        doLast {
+            def props = project.gradle.startParameter.projectProperties
+            def owner = project.project(props.jvmsrcModule == 'root' ? ':' : props.jvmsrcModule)
+            def result = owner.dependencies.createArtifactResolutionQuery()
+                .forModule(props.jvmsrcGroup, props.jvmsrcName, props.jvmsrcVersion)
+                .withArtifacts(JvmLibrary, JavadocArtifact)
+                .execute()
+            def javadocPath = null
+            result.components.each { component ->
+                if (component instanceof UnresolvedComponentResult) {
+                    throw component.failure
+                }
+                component.getArtifacts(JavadocArtifact).each { artifact ->
+                    if (!(artifact instanceof ResolvedArtifactResult)) {
+                        throw artifact.failure
+                    }
+                    javadocPath = artifact.file.absolutePath
+                }
+            }
+            println new JsonBuilder([javadocJarPath: javadocPath]).toString()
         }
     }
 

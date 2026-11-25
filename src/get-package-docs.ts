@@ -10,7 +10,8 @@ import { checkJarSize } from './extractor/jar-size-guard.js';
 import { inferIncludeTest } from './extractor/match-module.js';
 import { pickResolvedConfiguration, type PickClasspathOptions } from './extractor/pick-classpath.js';
 import { resolveWithResolutionCache } from './resolve-with-cache.js';
-import type { ArtifactCoordinates, ResolutionOutput, ResolveSourcesJarResult } from './resolvers/base.js';
+import type { ArtifactCoordinates, ResolutionOutput, ResolveJavadocJarResult, ResolveSourcesJarResult } from './resolvers/base.js';
+import { readPackageJavadoc } from './package-javadoc.js';
 import { resolverById } from './resolvers/index.js';
 import { truncatePlainText } from './text-format/truncate.js';
 
@@ -18,11 +19,12 @@ type Scope = PickClasspathOptions & { packageName: string };
 export type GetPackageDocsInput = Scope & { projectRoot: string; forceRefresh?: boolean };
 export type PackageOwner = {
   provenance: { kind: 'interproject'; moduleName: string; moduleRoot: string; coordinates: ArtifactCoordinates }
-    | { kind: 'external' | 'local-file'; jarPath: string; sourcesJarPath: string | null; coordinates: ArtifactCoordinates };
+    | { kind: 'external' | 'local-file'; jarPath: string; sourcesJarPath: string | null; javadocJarPath?: string; coordinates: ArtifactCoordinates };
   description: string | null;
-  /** Relative to moduleRoot on disk, or an entry in sourcesJarPath. */
+  /** Path of the description relative to the module or inside its source/Javadoc archive. */
   docsPath: string | null;
-  types: { name: string; summary: string | null }[];
+  docsSource?: 'javadoc-jar';
+  types: { name: string; summary: string | null; docsSource?: 'javadoc-jar' }[];
 };
 type ErrorDetail = ClassSourceError | { code: 'DOCS_NOT_FOUND' | 'DOCS_RESOLVE_FAILED'; message: string };
 export type GetPackageDocsResult = { ok: true; packageName: string; owners: PackageOwner[] } | { ok: false; error: ErrorDetail };
@@ -158,7 +160,8 @@ async function readArchive(owner: PackageOwner, packageName: string, path: strin
 
 /** Resolution-independent entry point; probing never fetches source or merges module versions. */
 export async function lookupPackageDocs(output: ResolutionOutput, opts: Scope,
-  fetchSources?: (c: ArtifactCoordinates) => Promise<ResolveSourcesJarResult>): Promise<GetPackageDocsResult> {
+  fetchSources?: (c: ArtifactCoordinates) => Promise<ResolveSourcesJarResult>,
+  fetchJavadoc?: (c: ArtifactCoordinates, moduleName: string) => Promise<ResolveJavadocJarResult>): Promise<GetPackageDocsResult> {
   const { packageName } = opts;
   if (!valid(packageName)) return invalid;
   const includeTest = inferIncludeTest(opts.modulePath, opts.includeTest);
@@ -232,6 +235,31 @@ export async function lookupPackageDocs(output: ResolutionOutput, opts: Scope,
             return { ok: false, error: { code: 'ZIP_READ_ERROR', jarPath: p.sourcesJarPath, message: String(e) } };
           }
         }
+        if (p.kind === 'external' && fetchJavadoc && (!owner.description || owner.types.some(t => !t.summary))) {
+          const resolved = await fetchJavadoc(p.coordinates, modules[0]!);
+          if (!resolved.ok) return { ok: false, error: { code: 'DOCS_RESOLVE_FAILED', message: truncatePlainText(resolved.message, 2048) } };
+          if (resolved.javadocJarPath) {
+            let page;
+            try { page = await readPackageJavadoc(resolved.javadocJarPath, packageName); } catch (e) {
+              return { ok: false, error: { code: 'ZIP_READ_ERROR', jarPath: resolved.javadocJarPath, message: String(e) } };
+            }
+            if (page) {
+              if (!owner.description && page.description) {
+                owner.description = page.description;
+                owner.docsPath = page.entryPath;
+                owner.docsSource = 'javadoc-jar';
+                p.javadocJarPath = resolved.javadocJarPath;
+              }
+              for (const type of owner.types) {
+                if (!type.summary && Object.hasOwn(page.summaries, type.name)) {
+                  type.summary = page.summaries[type.name]!;
+                  type.docsSource = 'javadoc-jar';
+                  p.javadocJarPath = resolved.javadocJarPath;
+                }
+              }
+            }
+          }
+        }
       }
       owner.types.sort((a, b) => a.name.localeCompare(b.name));
     }
@@ -247,5 +275,7 @@ export async function getPackageDocs(input: GetPackageDocsInput): Promise<GetPac
   const resolved = await resolveWithResolutionCache(input.projectRoot, { forceRefresh: input.forceRefresh, diagnosticOperation: 'get_package_docs' });
   if (!resolved.ok) return { ok: false, error: { code: 'RESOLUTION_FAILED', message: truncatePlainText(resolved.message, 2048) } };
   const resolver = resolverById(resolved.output.buildSystem.type);
-  return lookupPackageDocs(resolved.output, input, resolver && (c => resolver.resolveSourcesJar(resolved.output.projectRoot, c)));
+  const root = resolved.output.projectRoot;
+  return lookupPackageDocs(resolved.output, input, resolver && (c => resolver.resolveSourcesJar(root, c)),
+    resolver?.resolveJavadocJar?.bind(resolver, root));
 }

@@ -38,8 +38,10 @@ import org.eclipse.aether.collection.DependencySelector;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.resolution.ArtifactRequest;
+import org.eclipse.aether.resolution.ArtifactResolutionException;
 import org.eclipse.aether.resolution.ArtifactResult;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.transfer.ArtifactNotFoundException;
 import org.eclipse.aether.util.graph.selector.AndDependencySelector;
 import org.eclipse.aether.util.graph.selector.ExclusionDependencySelector;
 import org.eclipse.aether.util.graph.selector.OptionalDependencySelector;
@@ -47,7 +49,7 @@ import org.eclipse.aether.util.graph.selector.ScopeDependencySelector;
 
 /**
  * Maven lifecycle participant invoked via {@code -Dmaven.ext.class.path=...} that emits
- * {@code ResolutionOutput} JSON (schema 1.2) or resolves a single {@code -sources.jar} on demand,
+ * {@code ResolutionOutput} JSON (schema 1.2) or resolves a sources or Javadoc JAR on demand,
  * then strips all in-memory build plugins so {@code validate} runs zero goals and writes nothing
  * under the scanned project tree.
  */
@@ -146,8 +148,8 @@ public final class JvmsrcMavenAnalyzer extends AbstractMavenLifecycleParticipant
 
     try {
       String json;
-      if ("sources".equals(mode)) {
-        json = runSourcesMode(session);
+      if ("sources".equals(mode) || "javadoc".equals(mode)) {
+        json = runClassifierMode(session, mode);
       } else if ("resolve".equals(mode)) {
         json = runResolveMode(session, toolchainMajor);
       } else {
@@ -198,39 +200,71 @@ public final class JvmsrcMavenAnalyzer extends AbstractMavenLifecycleParticipant
     return name != null ? name : p.getArtifactId();
   }
 
-  private String runSourcesMode(MavenSession session) throws MavenExecutionException {
+  private String runClassifierMode(MavenSession session, String classifier) throws Exception {
     String group = System.getProperty("jvmsrc.group", "").trim();
     String artifactId = System.getProperty("jvmsrc.artifact", "").trim();
     String version = System.getProperty("jvmsrc.version", "").trim();
     if (group.isEmpty() || artifactId.isEmpty() || version.isEmpty()) {
       throw new MavenExecutionException(
-          "jvmsrc sources mode requires -Djvmsrc.group, -Djvmsrc.artifact, -Djvmsrc.version",
+          "jvmsrc " + classifier + " mode requires -Djvmsrc.group, -Djvmsrc.artifact, -Djvmsrc.version",
           (Throwable) null);
     }
 
-    List<RemoteRepository> repos = collectRemoteRepositories(session.getProjects());
-    DefaultArtifact sourcesArtifact =
-        new DefaultArtifact(group, artifactId, "sources", "jar", version);
-    ArtifactRequest req = new ArtifactRequest(sourcesArtifact, repos, null);
+    boolean javadoc = "javadoc".equals(classifier);
+    List<RemoteRepository> repos;
+    if (javadoc) {
+      String module = System.getProperty("jvmsrc.module", "");
+      moduleNames = computeModuleNames(session.getProjects());
+      MavenProject consumer = null;
+      for (MavenProject project : session.getProjects()) {
+        if (module.equals(moduleNameOf(project))) {
+          consumer = project;
+          break;
+        }
+      }
+      if (consumer == null) {
+        return "{\"error\":" + jsonString("Unknown Maven module: " + module) + "}";
+      }
+      repos = consumer.getRemoteProjectRepositories();
+    } else {
+      repos = collectRemoteRepositories(session.getProjects());
+    }
+    ArtifactRequest req = new ArtifactRequest(
+        new DefaultArtifact(group, artifactId, classifier, "jar", version), repos, null);
 
-    String sourcesPath = null;
+    String jarPath = null;
     String reason = null;
     try {
       ArtifactResult res = repositorySystem.resolveArtifact(session.getRepositorySession(), req);
       if (res.getArtifact() != null && res.getArtifact().getFile() != null) {
-        sourcesPath = res.getArtifact().getFile().getAbsolutePath();
+        jarPath = res.getArtifact().getFile().getAbsolutePath();
+      } else if (javadoc) {
+        throw new IOException("Maven resolved Javadoc but returned no file");
       } else {
         reason = "the repository returned no sources file";
       }
     } catch (Exception e) {
-      // Artifact has no published -sources.jar (or unavailable); caller falls back to CFR.
-      reason = sanitizeMessage(e.getMessage() != null ? e.getMessage() : e.toString());
+      String message = sanitizeMessage(e.getMessage() != null ? e.getMessage() : e.toString());
+      if (javadoc) {
+        if (e instanceof ArtifactResolutionException && !session.isOffline()) {
+          List<Exception> failures = ((ArtifactResolutionException) e).getResult().getExceptions();
+          boolean missing = !failures.isEmpty();
+          for (Exception failure : failures) {
+            missing &= failure instanceof ArtifactNotFoundException
+                && ((ArtifactNotFoundException) failure).getRepository() != null;
+          }
+          if (missing) return "{\"javadocJarPath\":null}";
+        }
+        return "{\"error\":" + jsonString("Javadoc lookup failed: " + message) + "}";
+      }
+      // Sources lookup historically falls back to CFR even for unavailable repositories.
+      reason = message;
     }
 
-    if (sourcesPath == null && reason != null) {
+    if (jarPath == null && reason != null) {
       return "{\"sourcesJarPath\":null,\"reason\":" + jsonString(reason) + "}";
     }
-    return "{\"sourcesJarPath\":" + jsonStringOrNull(sourcesPath) + "}";
+    return "{\"" + classifier + "JarPath\":" + jsonStringOrNull(jarPath) + "}";
   }
 
   private List<RemoteRepository> collectRemoteRepositories(List<MavenProject> projects) {
