@@ -79,6 +79,14 @@ test('cache separates entries and detects same-size same-mtime archive replaceme
   expect(readdirSync(cache, { recursive: true }).filter(f => f.toString().endsWith('.json'))).toHaveLength(4);
 });
 
+test('package pages retain the 1 MiB limit', async () => {
+  const html = '<section id="package-description"><div class="block">Package.</div></section>';
+  writeFileSync(jar, archive({ [page]: html.padEnd(1024 * 1024) }));
+  expect((await read())?.description).toBe('Package.');
+  writeFileSync(jar, archive({ [page]: html.padEnd(1024 * 1024 + 1) }));
+  await expect(read()).rejects.toThrow(/page exceeds size limit/);
+});
+
 test('invalid ZIP and falsely small deflated page fail without caching', async () => {
   writeFileSync(jar, 'not a zip');
   await expect(read()).rejects.toThrow();

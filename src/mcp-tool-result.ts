@@ -315,6 +315,8 @@ export type McpMethodSignatureSuccessPayload = {
   sourceAvailable: boolean;
   overloads: Array<{
     declarationLine: string;
+    javadoc?: string | null;
+    docsSource?: 'javadoc-jar';
     visibility: 'public' | 'protected' | 'package' | 'private';
     /** Omitted on IDE-minimal (source-parse) rows. */
     jvmDescriptor?: string;
@@ -351,6 +353,8 @@ export type McpClassStructureSuccessPayload = {
   found: true;
   querySucceeded: true;
   className: string;
+  classPurpose?: string | null;
+  docsSource?: 'javadoc-jar';
   kind: 'class' | 'interface' | 'enum' | 'annotation' | 'record';
   superclass: string | null;
   interfaces: string[];
@@ -364,6 +368,7 @@ export type McpClassStructureSuccessPayload = {
     final: boolean;
     enumConstant: boolean;
     javadoc: string | null;
+    docsSource?: 'javadoc-jar';
     annotations?: Array<{ summary: string }>;
   }>;
   methods: Array<{
@@ -375,6 +380,7 @@ export type McpClassStructureSuccessPayload = {
     parameters: Array<{ name: string | null; type: string }>;
     typeParameters: string[];
     javadoc: string | null;
+    docsSource?: 'javadoc-jar';
     abstract: boolean;
     static: boolean;
     throws: string[];
@@ -686,6 +692,8 @@ export function mcpToolResultFromMethodSignature(
         ? result.overloads.map((o) => {
             const row: McpMethodSignatureSuccessPayload['overloads'][number] = {
               declarationLine: o.declarationLine,
+              javadoc: o.javadoc,
+              docsSource: o.docsSource,
               visibility: o.visibility,
               returnTypeDisplay: o.returnTypeDisplay,
               parameters: o.parameters,

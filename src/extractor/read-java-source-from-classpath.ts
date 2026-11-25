@@ -9,6 +9,7 @@ import {
 import { findKotlinTypeDeclaration } from '../class-structure/kotlin/locate-kotlin-declaration.js';
 import { locateTypeDeclaration } from '../class-structure/locate-type-declaration.js';
 import { nestedTypeNames } from './nested-class-source.js';
+import type { FindClasspathOwningClassResult } from './find-external-class-jar.js';
 import type { ResolutionOutput } from '../resolvers/resolution-output.js';
 import { walkSourceCandidates, type RawSourceHit } from './walk-source-candidates.js';
 
@@ -101,8 +102,10 @@ export async function tryReadSourceFromClasspath(
   output: ResolutionOutput,
   opts: ClassSourceLookupOptions,
   languages: readonly SourceLanguage[],
+  findBinaryOwner?: () => FindClasspathOwningClassResult,
 ): Promise<TryReadSourceFromClasspathResult> {
   const walked = await walkSourceCandidates<Extract<TryReadSourceFromClasspathResult, { hit: true }>>(output, opts, {
+    findBinaryOwner,
     allowsFile: (name) => languages.includes(sourceLanguageFromPath(name)),
     accept: acceptFullCompilationUnit,
   });

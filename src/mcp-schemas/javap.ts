@@ -9,6 +9,8 @@ export const javapParameterSchema = z.object({
 /** Full javap row or IDE-minimal row (source-first path omits bytecode-only fields). */
 export const javapOverloadSchema = z.object({
   declarationLine: z.string(),
+  javadoc: z.string().optional(),
+  docsSource: z.literal('javadoc-jar').optional(),
   visibility: z.enum(['public', 'protected', 'package', 'private']),
   jvmDescriptor: z.string().optional(),
   genericSignature: z.string().nullable().optional(),

@@ -5,6 +5,9 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { strToU8, zipSync } from 'fflate';
+import { getClassStructure } from '../../../../src/get-class-structure.js';
+import { getMethodSignatures } from '../../../../src/get-method-signatures.js';
+import { getMethodSignaturesBytecode } from '../../../../src/get-method-signatures-bytecode.js';
 import { getPackageDocs } from '../../../../src/get-package-docs.js';
 import { MavenResolver } from '../../../../src/resolvers/maven/index.js';
 import { createTempLocalRepo, type TempLocalRepo } from '../_helpers.js';
@@ -15,9 +18,10 @@ const gav = { group: 'example', name: 'library', version: '1' };
 describe.skipIf(!fs.existsSync(path.join(wrapper, '.mvn/wrapper/maven-wrapper.jar')))('Maven Javadoc classifier', () => {
   const resolver = new MavenResolver();
   const page = 'example/package-summary.html';
-  const jar = zipSync({ [page]: strToU8(`<section id="package-description"><div class="block">Example package docs.</div></section>
+  const packageHtml = strToU8(`<section id="package-description"><div class="block">Example package docs.</div></section>
     <table class="typeSummary"><tr><td class="colFirst"><a href="Widget.html">Widget</a></td>
-    <td class="colLast"><div class="block">A documented widget.</div></td></tr></table>`) });
+    <td class="colLast"><div class="block">A documented widget.</div></td></tr></table>`);
+  let jar: Uint8Array;
   let root: string;
   let local: TempLocalRepo;
   let server: ReturnType<typeof Bun.serve>;
@@ -47,8 +51,18 @@ describe.skipIf(!fs.existsSync(path.join(wrapper, '.mvn/wrapper/maven-wrapper.ja
         const dest = path.join(repo, 'example/library/1');
         fs.mkdirSync(dest, { recursive: true });
         const java = path.join(root, 'Widget.java');
-        fs.writeFileSync(java, 'package example; public class Widget {}');
+        fs.writeFileSync(java, `package example;
+          /** Selects a widget by key or index. */
+          public class Widget {
+            /** Selects the widget at the given index. */
+            public void select(int index) {}
+            /** Selects the widget with the given key. */
+            public void select(String key) {}
+          }`);
         execFileSync('javac', ['-d', root, java]);
+        execFileSync('javadoc', ['-quiet', '-notimestamp', '-Xdoclint:none', '-d', path.join(root, 'html'), java]);
+        const classPage = 'example/Widget.html';
+        jar = zipSync({ [page]: packageHtml, [classPage]: fs.readFileSync(path.join(root, 'html', classPage)) });
         fs.writeFileSync(path.join(dest, 'library-1.jar'), zipSync({ 'example/Widget.class': fs.readFileSync(path.join(root, 'example/Widget.class')) }));
         fs.writeFileSync(path.join(dest, 'library-1.pom'), pom('example', 'library', ''));
         fs.writeFileSync(path.join(dest, 'library-1-javadoc.jar'), jar);
@@ -88,6 +102,42 @@ describe.skipIf(!fs.existsSync(path.join(wrapper, '.mvn/wrapper/maven-wrapper.ja
         provenance: expect.objectContaining({ kind: 'external', coordinates: gav, sourcesJarPath: null,
           javadocJarPath: path.join(local.dir, 'example/library/1/library-1-javadoc.jar') }),
       })]);
+    } finally {
+      if (previousCache === undefined) delete process.env.JVMSRC_CACHE_ROOT;
+      else process.env.JVMSRC_CACHE_ROOT = previousCache;
+    }
+  }, 120_000);
+
+  test('class and signature lookups attach classifier prose to the exact bytecode overload', async () => {
+    local.clearGroup('example');
+    const previousCache = process.env.JVMSRC_CACHE_ROOT;
+    process.env.JVMSRC_CACHE_ROOT = path.join(local.dir, 'class-docs-cache');
+    try {
+      const opts = { projectRoot: root, modulePath: 'docs:consumer' };
+      const type = 'example.Widget';
+      const structure = await getClassStructure(type, opts);
+      if (!structure.ok) throw new Error(structure.error.message);
+      const signatures = await getMethodSignatures(type, 'select', opts);
+      if (!signatures.ok) throw new Error(signatures.error.message);
+      const raw = await getMethodSignaturesBytecode(type, 'select', opts);
+      if (!raw.ok) throw new Error(raw.error.message);
+
+      expect(raw.sourceAvailable).toBe(false);
+      expect(raw).not.toHaveProperty('docsSource');
+      expect(raw.overloads.map(o => o.jvmDescriptor).sort()).toEqual(['(I)V', '(Ljava/lang/String;)V']);
+      for (const overload of raw.overloads) {
+        expect(overload).not.toHaveProperty('javadoc');
+        expect(overload).not.toHaveProperty('docsSource');
+      }
+      expect(structure).toMatchObject({ sourceAvailable: false, docsSource: 'javadoc-jar', classPurpose: 'Selects a widget by key or index.' });
+      expect(signatures.sourceAvailable).toBe(false);
+      for (const rows of [structure.methods.filter(m => m.name === 'select'), signatures.overloads]) {
+        expect(rows).toHaveLength(2);
+        expect(rows).toEqual(expect.arrayContaining([
+          expect.objectContaining({ jvmDescriptor: '(I)V', javadoc: 'Selects the widget at the given index.', docsSource: 'javadoc-jar' }),
+          expect.objectContaining({ jvmDescriptor: '(Ljava/lang/String;)V', javadoc: 'Selects the widget with the given key.', docsSource: 'javadoc-jar' }),
+        ]));
+      }
     } finally {
       if (previousCache === undefined) delete process.env.JVMSRC_CACHE_ROOT;
       else process.env.JVMSRC_CACHE_ROOT = previousCache;

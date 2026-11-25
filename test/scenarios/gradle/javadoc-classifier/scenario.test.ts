@@ -4,27 +4,41 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { strToU8, zipSync } from 'fflate';
+import { getClassStructure } from '../../../../src/get-class-structure.js';
+import { getMethodSignatures } from '../../../../src/get-method-signatures.js';
+import { getMethodSignaturesBytecode } from '../../../../src/get-method-signatures-bytecode.js';
 import { getPackageDocs } from '../../../../src/get-package-docs.js';
 import { GradleResolver } from '../../../../src/resolvers/gradle/index.js';
 
 const wrapper = path.resolve(import.meta.dir, '../local-maven-publish/consumer');
 const resolver = new GradleResolver();
 const page = 'example/api/package-summary.html';
-const docs = zipSync({ [page]: strToU8(`
+const packageHtml = strToU8(`
   <section id="package-description"><div class="block">Greeting utilities.</div></section>
   <table class="typeSummary"><tr><td class="colFirst"><a href="Greeter.html">Greeter</a></td>
-  <td class="colLast">Formats a greeting.</td></tr></table>`) });
+  <td class="colLast">Formats a greeting.</td></tr></table>`);
 
 describe.skipIf(!fs.existsSync(path.join(wrapper, 'gradle/wrapper/gradle-wrapper.jar')))(
   'gradle/javadoc-classifier (real Gradle)', () => {
     let root: string;
+    let docs: Uint8Array<ArrayBuffer>;
     let server: ReturnType<typeof Bun.serve>;
 
     beforeAll(() => {
       root = fs.mkdtempSync(path.join(os.tmpdir(), 'jvmsrc-javadoc-'));
       const source = path.join(root, 'Greeter.java');
-      fs.writeFileSync(source, 'package example.api; public class Greeter {}');
+      fs.writeFileSync(source, `package example.api;
+        /** Greets callers by name or number. */
+        public class Greeter {
+          /** Greets the named caller. */
+          public void greet(String name) {}
+          /** Greets the numbered caller. */
+          public void greet(int number) {}
+        }`);
       execFileSync('javac', ['-d', root, source]);
+      execFileSync('javadoc', ['-quiet', '-notimestamp', '-Xdoclint:none', '-d', path.join(root, 'html'), source]);
+      const classPage = 'example/api/Greeter.html';
+      docs = zipSync({ [page]: packageHtml, [classPage]: fs.readFileSync(path.join(root, 'html', classPage)) });
       const entry = 'example/api/Greeter.class';
       const binary = zipSync({ [entry]: fs.readFileSync(path.join(root, entry)) });
       server = Bun.serve({
@@ -57,6 +71,41 @@ describe.skipIf(!fs.existsSync(path.join(wrapper, 'gradle/wrapper/gradle-wrapper
     });
 
     const lookup = (version: string) => resolver.resolveJavadocJar(root, { group: 'example', name: 'lib', version }, ':app');
+
+    test('class and signature lookups attach classifier prose to the exact bytecode overload', async () => {
+      const previousCache = process.env.JVMSRC_CACHE_ROOT;
+      process.env.JVMSRC_CACHE_ROOT = path.join(root, 'test-cache');
+      try {
+        const opts = { projectRoot: root, modulePath: ':app' };
+        const type = 'example.api.Greeter';
+        const structure = await getClassStructure(type, opts);
+        if (!structure.ok) throw new Error(structure.error.message);
+        const signatures = await getMethodSignatures(type, 'greet', opts);
+        if (!signatures.ok) throw new Error(signatures.error.message);
+        const raw = await getMethodSignaturesBytecode(type, 'greet', opts);
+        if (!raw.ok) throw new Error(raw.error.message);
+
+        expect(raw.sourceAvailable).toBe(false);
+        expect(raw).not.toHaveProperty('docsSource');
+        expect(raw.overloads.map(o => o.jvmDescriptor).sort()).toEqual(['(I)V', '(Ljava/lang/String;)V']);
+        for (const overload of raw.overloads) {
+          expect(overload).not.toHaveProperty('javadoc');
+          expect(overload).not.toHaveProperty('docsSource');
+        }
+        expect(structure).toMatchObject({ sourceAvailable: false, docsSource: 'javadoc-jar', classPurpose: 'Greets callers by name or number.' });
+        expect(signatures.sourceAvailable).toBe(false);
+        for (const rows of [structure.methods.filter(m => m.name === 'greet'), signatures.overloads]) {
+          expect(rows).toHaveLength(2);
+          expect(rows).toEqual(expect.arrayContaining([
+            expect.objectContaining({ jvmDescriptor: '(I)V', javadoc: 'Greets the numbered caller.', docsSource: 'javadoc-jar' }),
+            expect.objectContaining({ jvmDescriptor: '(Ljava/lang/String;)V', javadoc: 'Greets the named caller.', docsSource: 'javadoc-jar' }),
+          ]));
+        }
+      } finally {
+        if (previousCache === undefined) delete process.env.JVMSRC_CACHE_ROOT;
+        else process.env.JVMSRC_CACHE_ROOT = previousCache;
+      }
+    }, 120_000);
 
     test('getPackageDocs returns the dependency type with prose from its javadoc sidecar', async () => {
       const previousCache = process.env.JVMSRC_CACHE_ROOT;

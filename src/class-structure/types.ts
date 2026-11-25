@@ -2,6 +2,8 @@ import type { ArtifactCoordinates, ClassSourceError, SourceLanguage } from '../e
 
 /** javap-derived overload (structured view over bytecode metadata). */
 export type JavapMethodOverload = {
+  javadoc?: string;
+  docsSource?: 'javadoc-jar';
   /** javap declaration line (human-readable erasure form when present). */
   declarationLine: string;
   visibility: 'public' | 'protected' | 'package' | 'private';
@@ -103,6 +105,7 @@ export type ClassStructureMethod = {
   parameters: ClassStructureParameter[];
   typeParameters: string[];
   javadoc: string | null;
+  docsSource?: 'javadoc-jar';
   abstract: boolean;
   static: boolean;
   throws: string[];
@@ -123,6 +126,7 @@ export type ClassStructureField = {
   final: boolean;
   enumConstant: boolean;
   javadoc: string | null;
+  docsSource?: 'javadoc-jar';
   /** Present when `include` lists `annotations` and javap supplied metadata for this declared field. */
   annotations?: ClassStructureDeclaredAnnotation[];
 };
@@ -144,8 +148,9 @@ export type GetClassStructureSuccess = {
   /** Language of the source behind `sourceAvailable`. Omitted when there is no source. */
   sourceLanguage?: SourceLanguage;
   provenance: ClassStructureProvenance;
-  /** Raw class-level Javadoc when parsed from `.java` (for compact text `Purpose:`). */
+  /** Class-level documentation, when available (for compact text `Purpose:`). */
   classPurpose?: string | null;
+  docsSource?: 'javadoc-jar';
   /** Present when `include` lists `hierarchy`. */
   typeHierarchy?: ClassStructureTypeHierarchy;
   /** Declared runtime-visible type annotations from javap when `include` lists `annotations`. */

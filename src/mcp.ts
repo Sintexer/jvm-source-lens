@@ -185,15 +185,19 @@ const searchInArtifactInputSchema = z
     message: 'At least one of coordinates or jarPath must be provided.',
   });
 
-/** One result per requested method: a single result passes through; several are joined as text (errors win `isError`). */
-function combineToolResults(results: CallToolResult[]): CallToolResult {
+/** Preserve request order in both the compact text and the optional full projection. */
+function combineToolResults(results: CallToolResult[], full?: boolean): CallToolResult {
   if (results.length === 1) {
     return results[0]!;
   }
   const text = results
     .map((r) => r.content.map((c) => (c.type === 'text' ? c.text : '')).join('\n'))
     .join('\n\n');
-  return { isError: results.some((r) => r.isError), content: [{ type: 'text', text }] };
+  return {
+    isError: results.some((r) => r.isError),
+    content: [{ type: 'text', text }],
+    ...(full ? { structuredContent: { results: results.map((r) => r.structuredContent) } } : {}),
+  };
 }
 
 function withInferredIncludeTest(args: Record<string, unknown>): Record<string, unknown> {
@@ -450,6 +454,9 @@ export function createMcpServer(): McpServer {
           forceRefresh: Boolean(args.forceRefresh),
         };
         const results: CallToolResult[] = [];
+        const signatureOpts = !args.bytecodeOnly && methodNames.length > 1
+          ? { ...opts, javadocCache: new Map() }
+          : opts;
         let resolvedClassName: string | undefined;
         for (const methodName of methodNames) {
           const query: MethodSignatureQueryContext = {
@@ -463,11 +470,11 @@ export function createMcpServer(): McpServer {
           };
           const result = Boolean(args.bytecodeOnly)
             ? await getMethodSignaturesBytecode(args.className, methodName, opts)
-            : await getMethodSignatures(args.className, methodName, opts);
+            : await getMethodSignatures(args.className, methodName, signatureOpts);
           resolvedClassName ??= classNameNote(args.className, result);
           results.push(mcpToolResultFromMethodSignature(result, query));
         }
-        return withResolutionNotes(combineToolResults(results), [resolvedClassName, root.note]);
+        return withResolutionNotes(combineToolResults(results, hidden.full), [resolvedClassName, root.note]);
       } catch (e) {
         return mcpToolResultFromUnexpectedError(e);
       }

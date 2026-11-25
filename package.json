@@ -56,7 +56,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "check": "bun run typecheck && bun test",
     "test": "bun test",
-    "build": "esbuild ./src/cli.ts ./src/mcp.ts ./src/public-api.ts --bundle --platform=node --outdir=./dist --target=node20 --format=esm --packages=external",
+    "build": "esbuild ./src/cli.ts ./src/mcp.ts ./src/public-api.ts --bundle --platform=node --outdir=./dist --target=node20 --format=esm --packages=external --minify-syntax",
     "setup:cfr": "tsx scripts/fetch-cfr.ts",
     "setup:maven-analyzer": "tsx scripts/build-maven-analyzer.ts",
     "validate:resources": "tsx scripts/validate-bundled-resources.ts",

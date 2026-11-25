@@ -119,6 +119,8 @@ The MCP server runs over stdio (`jvmsrc mcp`). It needs no environment variables
 | **`search_in_artifact`** | Greps text across all classes in one resolved dependency JAR |
 | **`resolve_dependencies`**| Analyzes the actual dependency graph this project uses |
 
+If a dependency publishes Javadoc but no usable source file, `get_class_structure` and `get_method_signature` can still show its class description and documented overloads. Prose from the Javadoc JAR is labelled `docsSource: "javadoc-jar"`. Signatures still come from bytecode (`sourceAvailable: false`); use `bytecodeOnly: true` on a signature lookup to skip docs entirely.
+
 > [!TIP]
 > Every source response includes `sourceAvailable`: `true` for real sources (Javadoc, parameter names, generics), `false` for CFR decompilation (structure reliable, names may be synthetic). Nested types (`Outer$Inner`, including `ImmutableList.Builder`) return structure, signatures, method excerpts, and decompiled source from the enclosing type.
 

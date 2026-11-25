@@ -1,6 +1,6 @@
 import type { ClassStructureKind, ClassStructureMethod, GetClassStructureSuccess } from '../class-structure/types.js';
 import { CONSTRUCTOR_METHOD_NAME } from '../copy/hints.js';
-import { firstJavadocParagraph } from './truncate.js';
+import { compactJavadoc, firstJavadocParagraph } from './truncate.js';
 import { formatCompactModifiers } from './format-compact-modifiers.js';
 import { formatClassStructureMethodLine } from './format-method-line.js';
 import { formatProvenanceLine } from './format-provenance.js';
@@ -40,7 +40,7 @@ function headerLines(result: GetClassStructureSuccess, purpose: string | null): 
   }
   if (purpose) {
     lines.push('');
-    lines.push(`Purpose: ${purpose}`);
+    lines.push(`Purpose: ${purpose}${result.docsSource ? ` (${result.docsSource})` : ''}`);
   }
   return lines;
 }
@@ -126,18 +126,19 @@ export function formatClassStructureText(
   }
 
   if (scope === 'declared' || scope === 'effective') {
-    if (result.fields.length > 0 && scope === 'declared') {
+    const fields = scope === 'declared' ? result.fields : result.fields.filter((f) => f.docsSource);
+    if (fields.length > 0) {
       lines.push('');
-      lines.push(`Fields (${result.fields.length}):`);
-      for (const f of result.fields) {
-        lines.push(formatFieldLine(f));
+      lines.push(`${scope === 'declared' ? 'Fields' : 'Documented fields'} (${fields.length}):`);
+      for (const f of fields) {
+        lines.push(formatFieldLine(f) + compactJavadoc(f));
       }
     }
 
     lines.push('');
     lines.push(`Methods — declared (${declared.length}):`);
     for (const m of declared) {
-      lines.push(formatClassStructureMethodLine(m));
+      lines.push(formatClassStructureMethodLine(m) + compactJavadoc(m));
     }
 
     if (scope === 'effective' && inherited.length > 0) {
@@ -146,7 +147,7 @@ export function formatClassStructureText(
       lines.push('');
       lines.push(`Methods — inherited (${shown.length} of ${inherited.length}):`);
       for (const m of shown) {
-        lines.push(formatClassStructureMethodLine(m));
+        lines.push(formatClassStructureMethodLine(m) + compactJavadoc(m));
       }
       if (inherited.length > cap) {
         lines.push(

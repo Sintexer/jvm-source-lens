@@ -5,6 +5,7 @@ import {
   parseJavapVerboseAllMethods,
 } from './class-structure/javap-parse.js';
 import { mergeDeclaredWithInheritedLayers } from './class-structure/inherited-methods.js';
+import { enrichMethodDocs, readOwnerJavadoc } from './class-docs-enrichment.js';
 import { parseJavaClassSkeleton, pickMethodJavadoc, type JavaClassSkeleton } from './class-structure/parse-java-class-skeleton.js';
 import type { ParsedJavaTypeHeader, ParsedJavaTypeMetadata } from './class-structure/parse-java-type-metadata.js';
 import { parseJavaTypeMetadata } from './class-structure/parse-java-type-metadata.js';
@@ -310,17 +311,21 @@ export async function getClassStructure(
     includeTest: opts.includeTest,
   };
 
+  let sourcesLookupFailed = false;
   const resolveSourcesJarFn = createSourcesJarResolver({
     projectRoot: opts.projectRoot,
     buildSystem,
     operation: 'get_class_structure',
+    onLookupFailure: () => { sourcesLookupFailed = true; },
     input: { className, modulePath: opts.modulePath, includeTest: opts.includeTest },
   });
 
+  const ownerHit = findClasspathOwningClass(resolved.output, lookupOpts);
   const sourceRead = await tryReadSourceFromClasspath(
     resolved.output,
     { ...lookupOpts, resolveSourcesJar: resolveSourcesJarFn },
     ['java', 'kotlin'],
+    () => ownerHit,
   );
 
   if (!sourceRead.ok) {
@@ -335,13 +340,6 @@ export async function getClassStructure(
   const javaSourceHit = sourceRead.hit && sourceRead.sourceLanguage === 'java';
   const effectiveRead: TryReadSourceFromClasspathResult =
     sourceRead.hit && !javaSourceHit && kotlinOverlay === null ? { ok: true, hit: false } : sourceRead;
-
-  const ownerHit = findClasspathOwningClass(resolved.output, {
-    className,
-    modulePath: effectiveModulePath,
-    configuration: opts.configuration,
-    includeTest: opts.includeTest,
-  });
 
   if (!ownerHit.ok && !effectiveRead.hit) {
     return classStructureFail(opts, className, buildSystem, enrichClassStructureError(opts, resolved.output, ownerHit.error));
@@ -381,6 +379,9 @@ export async function getClassStructure(
   }
 
   const sourceAvailable = effectiveRead.hit === true;
+  const page = !sourceRead.hit && !sourcesLookupFailed && ownerHit.ok
+    ? await readOwnerJavadoc(opts.projectRoot, buildSystem, effectiveModulePath, ownerHit.hit, className)
+    : null;
   const skeleton =
     javaSourceHit && sourceRead.hit ? parseJavaClassSkeleton(sourceRead.sourceText, className) : null;
 
@@ -562,14 +563,18 @@ export async function getClassStructure(
     inheritedLayers.push(methodsForInheritedLayer(fqn));
   }
 
-  const methods = mergeDeclaredWithInheritedLayers(declared, inheritedLayers);
+  const methods = mergeDeclaredWithInheritedLayers(page ? enrichMethodDocs(page, declared, m => m.jvmMethodName) : declared, inheritedLayers);
 
   const rawFields: JavapFieldInfo[] = parsedPrimary
     ? parsedPrimary.fields
     : primaryJavapStdout
       ? parseJavapFields(primaryJavapStdout)
       : [];
-  let fields: ClassStructureField[] = rawFields.map((f) => javapFieldToStructure(f, className, skeleton, sourceAvailable));
+  let fields: ClassStructureField[] = rawFields.map((f) => {
+    const row = javapFieldToStructure(f, className, skeleton, sourceAvailable);
+    const javadoc = wantFields && !f.flagsLine?.includes('ACC_SYNTHETIC') && page?.fieldDoc(row.name);
+    return javadoc ? { ...row, javadoc, docsSource: 'javadoc-jar' } : row;
+  });
   if (kotlinOverlay) {
     fields = fields.map((f) => (f.javadoc === null ? { ...f, javadoc: kotlinOverlay.fieldKdoc(f.name) } : f));
   }
@@ -613,7 +618,8 @@ export async function getClassStructure(
     methods,
     sourceAvailable,
     provenance,
-    classPurpose: skeleton?.typeJavadoc ?? kotlinOverlay?.typeKdoc ?? null,
+    classPurpose: skeleton?.typeJavadoc ?? kotlinOverlay?.typeKdoc ?? page?.description ?? null,
+    ...(page?.description ? { docsSource: 'javadoc-jar' } : {}),
     ...(sourceLanguage ? { sourceLanguage } : {}),
     ...(typeHierarchy ? { typeHierarchy } : {}),
     ...(classAnnotations ? { classAnnotations } : {}),

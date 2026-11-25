@@ -6,6 +6,8 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 
 ## Unreleased
 
+* Show class, field and overload documentation from the matching Javadoc JAR when original source is absent. Bytecode remains authoritative, and missing docs do not prevent structure or signature lookup.
+
 * Add the MCP tool `get_package_docs` for source-backed package descriptions and type summaries. It reports `DOCS_NOT_FOUND` when no package owner is found and `DOCS_RESOLVE_FAILED` when documentation lookup fails.
 * Fill missing package descriptions and type summaries from Gradle or Maven Javadoc JARs. Text from a Javadoc JAR is labelled `docsSource: "javadoc-jar"`; original source text takes precedence.
 

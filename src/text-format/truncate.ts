@@ -12,3 +12,9 @@ export function firstJavadocParagraph(javadoc: string | null | undefined): strin
   const para = javadoc.split(/\n\s*\n/)[0]?.trim() ?? javadoc.trim();
   return truncatePlainText(para.replace(/\s+/g, ' '), 400);
 }
+
+export function compactJavadoc(row: { javadoc?: string | null; docsSource?: 'javadoc-jar' }): string {
+  if (!row.docsSource) return '';
+  const summary = firstJavadocParagraph(row.javadoc);
+  return summary ? `\n    ${summary} (${row.docsSource})` : '';
+}

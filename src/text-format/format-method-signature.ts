@@ -2,6 +2,7 @@ import type { GetMethodSignatureResult } from '../get-method-signatures.js';
 import { METHOD_NOT_FOUND_ON_CLASS_LINES } from '../copy/hints.js';
 import { formatJavapOverloadLine } from './format-method-line.js';
 import { formatProvenanceLine } from './format-provenance.js';
+import { compactJavadoc } from './truncate.js';
 
 export function formatMethodSignatureText(result: Extract<GetMethodSignatureResult, { ok: true }>): string {
   const lines: string[] = [
@@ -14,7 +15,7 @@ export function formatMethodSignatureText(result: Extract<GetMethodSignatureResu
   }
   for (const o of result.overloads) {
     lines.push(
-      formatJavapOverloadLine(o, { methodName: result.methodName, className: result.className }),
+      formatJavapOverloadLine(o, { methodName: result.methodName, className: result.className }) + compactJavadoc(o),
     );
   }
   lines.push('');

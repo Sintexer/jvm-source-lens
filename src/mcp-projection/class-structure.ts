@@ -55,6 +55,7 @@ export type ProjectedMethodEntry = {
   abstract: boolean;
   static: boolean;
   javadoc?: string | null;
+  docsSource?: 'javadoc-jar';
   jvmDescriptor?: string | null;
   genericSignature?: string | null;
   annotations?: Array<{ summary: string }>;
@@ -65,6 +66,8 @@ export type ProjectedFieldEntry = GetClassStructureSuccess['fields'][number];
 export type ProjectedClassStructure = {
   ok: true;
   className: string;
+  classPurpose?: string;
+  docsSource?: 'javadoc-jar';
   kind: 'class' | 'interface' | 'enum' | 'annotation' | 'record';
   superclass: string | null;
   interfaces: string[];
@@ -98,6 +101,7 @@ function projectMethod(m: ClassStructureMethod, sourceAvailable: boolean): Proje
   };
   if (m.javadoc != null) {
     row.javadoc = m.javadoc;
+    if (m.docsSource) row.docsSource = m.docsSource;
   }
   if (m.annotations) {
     row.annotations = m.annotations;
@@ -132,6 +136,8 @@ export function projectClassStructure(
   const projected: ProjectedClassStructure = {
     ok: true,
     className: result.className,
+    ...(result.classPurpose ? { classPurpose: result.classPurpose } : {}),
+    ...(result.docsSource ? { docsSource: result.docsSource } : {}),
     kind: result.kind,
     superclass: result.superclass,
     interfaces: result.interfaces,
@@ -161,7 +167,8 @@ export function projectClassStructure(
       !wantsSection(include, 'fields') &&
       isFieldHeavyOverview(result);
     projected.fields = fieldHeavyOverview
-      ? result.fields.slice(0, OVERVIEW_FIELD_LIST_CAP)
+      ? result.fields.slice(0, OVERVIEW_FIELD_LIST_CAP).map(({ docsSource, ...field }) =>
+          docsSource ? { ...field, javadoc: null } : field)
       : result.fields;
   }
   if (wantsInherited) {

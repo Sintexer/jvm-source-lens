@@ -17,6 +17,8 @@ export type SourcesJarResolverParams = {
   /** Raw tool input; sanitized by the diagnostics layer. */
   input: Record<string, unknown>;
   hooks?: SubprocessHooks;
+  /** Distinguish a failed transfer from a genuine miss without breaking bytecode fallback. */
+  onLookupFailure?: () => void;
   /** Optional explicit resolver override (otherwise looked up via `resolverById(buildSystem)`). */
   resolver?: DependencyResolver;
   /** Injection point for tests. */
@@ -61,6 +63,7 @@ export function createSourcesJarResolver(
     }
 
     if (!result.ok) {
+      params.onLookupFailure?.();
       recordFailureDiagnostic({
         operation: params.operation,
         publicCode: 'SOURCES_RESOLVE_FAILED',

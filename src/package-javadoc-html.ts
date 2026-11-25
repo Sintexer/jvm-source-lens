@@ -1,11 +1,11 @@
 import { posix } from 'node:path';
 
-type Element = { tag: string; classes: string[]; marker: string; href?: string; children: (Element | string)[] };
+export type Element = { tag: string; classes: string[]; marker: string; href?: string; children: (Element | string)[] };
 const voidTags = new Set('area base br col embed hr img input link meta param source track wbr'.split(' '));
 const blockTags = new Set('br div p li ul ol pre h1 h2 h3 h4 table tr dl dt dd'.split(' '));
 const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
-function plainText(node: Element, limit: number) {
+export function plainText(node: Element, limit: number) {
   const parts: string[] = [];
   function visit(el: Element) {
     if (blockTags.has(el.tag)) parts.push(' ');
@@ -25,7 +25,7 @@ function plainText(node: Element, limit: number) {
 
 // A bounded tree of inert text and the four attributes the standard doclet uses.
 // Sticky scans consume each token once; raw script/style bodies are never tokenized.
-function parseElements(html: string) {
+export function parseElements(html: string) {
   const root: Element = { tag: '', classes: [], marker: '', children: [] };
   const stack = [root];
   const tag = /<(\/?)([a-z][\w:-]*)\b(?:[^'"<>]|"[^"]*"|'[^']*')*>/iy;

@@ -1,7 +1,8 @@
 import { inflateRawSync } from 'node:zlib';
 import { isPackageName } from './class-search/source-package.js';
 
-const PAGE_BYTES = 1024 * 1024;
+const PAGE_BYTES = { package: 1024 * 1024, class: 2 * 1024 * 1024 };
+export type JavadocPageKind = keyof typeof PAGE_BYTES;
 const invalid = () => Error('Invalid or unsupported Javadoc ZIP');
 
 // ZIP CRC-32 (node:zlib.crc32 is not available on all supported Node 20 releases).
@@ -11,7 +12,8 @@ const crcTable = Uint32Array.from({ length: 256 }, (_, i) => {
 });
 
 /** Walk the classic single-disk ZIP directory without expanding unrelated entries. */
-export function locatePackagePage(zip: Buffer, target: string) {
+export function locateJavadocPage(zip: Buffer, target: string, kind: JavadocPageKind) {
+  const limit = PAGE_BYTES[kind];
   let end = zip.length - 22;
   const first = Math.max(0, end - 65535);
   for (; end >= first; end--) {
@@ -40,15 +42,16 @@ export function locatePackagePage(zip: Buffer, target: string) {
     pos = next;
     const entryPath = name.toString('utf8');
     if (entryPath !== target) {
+      if (!target.includes('/')) continue; // The unnamed package cannot belong to a named module.
       const prefix = entryPath.indexOf('/');
       if (prefix <= 0 || prefix > 512 || entryPath.slice(prefix + 1) !== target || !isPackageName(entryPath.slice(0, prefix))) continue;
     }
-    if (page) throw Error('Ambiguous Javadoc package page');
+    if (page) throw Error('Ambiguous Javadoc page');
     if (flags & 1 || (method !== 0 && method !== 8)) throw invalid();
-    if (size > PAGE_BYTES || (method === 0 && compressed > PAGE_BYTES)) throw Error('Javadoc page exceeds size limit');
+    if (size > limit || (method === 0 && compressed > limit)) throw Error('Javadoc page exceeds size limit');
     page = { entryPath, expand() {
       const data = zip.subarray(start, start + compressed);
-      const bytes = method === 0 ? data : inflateRawSync(data, { maxOutputLength: PAGE_BYTES });
+      const bytes = method === 0 ? data : inflateRawSync(data, { maxOutputLength: limit });
       if (bytes.length !== size) throw invalid();
       let sum = -1;
       for (const b of bytes) sum = (sum >>> 8) ^ crcTable[(sum ^ b) & 255]!;

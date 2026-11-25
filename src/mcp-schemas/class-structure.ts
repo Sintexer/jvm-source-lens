@@ -22,6 +22,7 @@ export const classStructureMethodSchema = z.object({
   parameters: z.array(classStructureParameterSchema),
   typeParameters: z.array(z.string()),
   javadoc: z.string().nullable(),
+  docsSource: z.literal('javadoc-jar').optional(),
   abstract: z.boolean(),
   static: z.boolean(),
   throws: z.array(z.string()),
@@ -40,6 +41,7 @@ export const classStructureFieldSchema = z.object({
   final: z.boolean(),
   enumConstant: z.boolean(),
   javadoc: z.string().nullable(),
+  docsSource: z.literal('javadoc-jar').optional(),
   annotations: z.array(classStructureDeclaredAnnotationSchema).optional(),
 });
 
@@ -73,6 +75,8 @@ export const mcpGetClassStructurePayloadSchema = z.union([
     className: z.string(),
     kind: classStructureKindSchema,
     superclass: z.string().nullable(),
+    classPurpose: z.string().nullable().optional(),
+    docsSource: z.literal('javadoc-jar').optional(),
     interfaces: z.array(z.string()),
     typeParameters: z.array(z.string()),
     fields: z.array(classStructureFieldSchema),

@@ -25,6 +25,8 @@ export function wantsMethodSigInclude(
 
 export type ProjectedOverload = {
   declarationLine: string;
+  javadoc?: string;
+  docsSource?: 'javadoc-jar';
   visibility?: 'public' | 'protected' | 'package' | 'private';
   returnTypeDisplay?: string | null;
   parameters?: Array<{ name: string | null; typeDisplay: string }>;
@@ -40,6 +42,8 @@ export function projectOverload(
 ): ProjectedOverload {
   const projected: ProjectedOverload = {
     declarationLine: o.declarationLine,
+    ...(o.javadoc ? { javadoc: o.javadoc } : {}),
+    ...(o.docsSource ? { docsSource: o.docsSource } : {}),
   };
 
   if (wantsMethodSigInclude(include, 'parameters')) {

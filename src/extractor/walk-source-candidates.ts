@@ -7,7 +7,7 @@ import {
   type InterprojectProvenance,
   type SourcesJarProvenance,
 } from './class-source-types.js';
-import { findExternalJarAmongArtifacts, type ClasspathOwningClassHit } from './find-external-class-jar.js';
+import { findExternalJarAmongArtifacts, type ClasspathOwningClassHit, type FindClasspathOwningClassResult } from './find-external-class-jar.js';
 import { packageOfClassName, readJarClassSourceFile } from './class-file-source-file.js';
 import { fqnToSourceCandidates, withSourceFileCandidate } from './fqn-paths.js';
 import { anonymousOrLocalClassError } from './nested-class-source.js';
@@ -27,6 +27,8 @@ export type RawSourceHit = {
 };
 
 export type SourceWalkStrategy<T> = {
+  /** Only needed after source trees and cached source JARs miss. */
+  findBinaryOwner?: () => FindClasspathOwningClassResult;
   /** `get` opens the enclosing file for `Outer$1`; the structure tools reject it with `CLASS_NOT_FOUND`. */
   allowAnonymous?: boolean;
   /** Whether a source file of this name may be opened (language filter). */
@@ -182,12 +184,13 @@ export async function walkSourceCandidates<T>(
     }
   }
 
-  const artifacts = picked.configuration.artifacts.filter(isClasspathBinaryJarArtifact);
-  const jarHit = findExternalJarAmongArtifacts(artifacts, paths.classRelPath, className);
+  const jarHit = strategy.findBinaryOwner?.() ??
+    findExternalJarAmongArtifacts(picked.configuration.artifacts.filter(isClasspathBinaryJarArtifact), paths.classRelPath, className);
   if (!jarHit.ok) {
     return { kind: 'error', error: jarHit.error };
   }
   const { hit } = jarHit;
+  if (hit.kind === 'interprojectBytecode') return { kind: 'miss', jar: hit };
   const a = hit.artifact;
   const coordinates = hit.coordinates;
 

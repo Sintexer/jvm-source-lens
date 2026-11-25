@@ -1,4 +1,5 @@
 import { parseJavaTypeMetadata } from './class-structure/parse-java-type-metadata.js';
+import { enrichMethodDocs, readOwnerJavadoc, type JavadocCache } from './class-docs-enrichment.js';
 import { loadMethodOverloadsViaJavap } from './method-signature-from-javap.js';
 import type {
   JavapMethodOverload,
@@ -29,6 +30,8 @@ export type GetMethodSignatureOptions = {
   configuration?: string;
   includeTest?: boolean;
   forceRefresh?: boolean;
+  /** Share only within one multi-method request (includes in-flight and missed lookups). */
+  javadocCache?: JavadocCache;
 };
 
 export type GetMethodSignatureSuccess = {
@@ -180,17 +183,22 @@ export async function getMethodSignatures(
     includeTest: opts.includeTest,
   };
 
+  let sourcesLookupFailed = false;
   const resolveSourcesJarFn = createSourcesJarResolver({
     projectRoot: opts.projectRoot,
     buildSystem,
     operation: 'get_method_signature',
+    onLookupFailure: () => { sourcesLookupFailed = true; },
     input: { className, modulePath: opts.modulePath, includeTest: opts.includeTest },
   });
 
+  let owner: ReturnType<typeof findClasspathOwningClass> | undefined;
+  const findOwner = () => owner ??= findClasspathOwningClass(resolved.output, lookupOpts);
   const sourceRead = await tryReadSourceFromClasspath(
     resolved.output,
     { ...lookupOpts, resolveSourcesJar: resolveSourcesJarFn },
     ['java', 'kotlin'],
+    findOwner,
   );
 
   if (!sourceRead.ok) {
@@ -216,12 +224,7 @@ export async function getMethodSignatures(
     }
   }
 
-  const ownerHit = findClasspathOwningClass(resolved.output, {
-    className,
-    modulePath: effectiveModulePath,
-    configuration: opts.configuration,
-    includeTest: opts.includeTest,
-  });
+  const ownerHit = findOwner();
   if (!ownerHit.ok) {
     return methodSignatureFail(opts, className, mn, buildSystem, enrichScopeError(opts, resolved.output, ownerHit.error));
   }
@@ -258,12 +261,15 @@ export async function getMethodSignatures(
     sourceRead.hit && sourceRead.sourceLanguage === 'kotlin'
       ? buildKotlinOverlay(sourceRead.sourceText, className)
       : null;
+  const page = !sourceRead.hit && !sourcesLookupFailed && javap.overloads.length > 0
+    ? await readOwnerJavadoc(opts.projectRoot, buildSystem, effectiveModulePath, hit, className, opts.javadocCache)
+    : null;
   const overloads = kotlinOverlay
     ? javap.overloads.map((o) => {
         const named = overlayMethodParameters(kotlinOverlay, mn, o.parameters, (p) => p.typeDisplay);
         return named ? { ...o, parameters: named.params } : o;
       })
-    : javap.overloads;
+    : page ? enrichMethodDocs(page, javap.overloads, () => mn) : javap.overloads;
 
   return {
     ok: true,
