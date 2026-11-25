@@ -4,6 +4,29 @@ All notable changes to **jvmsrc** are documented in this file.
 
 This file is updated by **[Release Please](https://github.com/googleapis/release-please)** when a release PR merges to `master`. Contributors use **Conventional Commits** on PRs to `master` — see [RELEASING.md](RELEASING.md).
 
+## [1.20.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.19.0...v1.20.0) (2026-11-25)
+
+
+### Features
+
+* add nested classes support ([58e7028](https://github.com/Sintexer/jvm-source-lens/commit/58e7028bea276229d4a7137b35cee7095cc520cb))
+* build-tool-neutral core ([c2d9687](https://github.com/Sintexer/jvm-source-lens/commit/c2d9687ee1468028410b045779d63a928ec1e00b))
+* bundle maven resolver logic ([e94a2b8](https://github.com/Sintexer/jvm-source-lens/commit/e94a2b8852b9426ad7aa00a112ecd65ec7ba7681))
+* finish eval harness ([df6b908](https://github.com/Sintexer/jvm-source-lens/commit/df6b9083305381bf283d677565847b8faae33521))
+* Kotlin KDoc, parameter names and method excerpts ([f59e346](https://github.com/Sintexer/jvm-source-lens/commit/f59e346e9779d9959bf9be9154650decaed6dedf))
+* Kotlin, Scala and Groovy source lookup with scenario and evals ([d6bfa95](https://github.com/Sintexer/jvm-source-lens/commit/d6bfa950a6e7f682738ac58ec32b642ac11b7e7a))
+* maven reactor modules and polish ([e9d199e](https://github.com/Sintexer/jvm-source-lens/commit/e9d199e124f4ea8a47ad6fad9936676fc5888c82))
+* optional CLI --project, includeTest from src/test paths, leaner MCP schemas ([cf72aa7](https://github.com/Sintexer/jvm-source-lens/commit/cf72aa7340c008ce8c7214e86e007f9d52c35cf2))
+* return original source for Kotlin, Scala and Groovy ([d3216b2](https://github.com/Sintexer/jvm-source-lens/commit/d3216b29a69c6508fa95a505d943a8e6a0e3536c))
+* unify source lookup flow ([ce84669](https://github.com/Sintexer/jvm-source-lens/commit/ce84669bc1c181f1cfad47ff741624e67c785425))
+
+
+### Bug Fixes
+
+* **ci:** add a retry for mcp publication action ([d9be686](https://github.com/Sintexer/jvm-source-lens/commit/d9be68616d22e1ebd7cc7b49562a9f9dc2353d24))
+* fix gaps in kotlin, maven jdk, local repo, shorten output ([b4bd658](https://github.com/Sintexer/jvm-source-lens/commit/b4bd658cbc30d675735b96ee0e6ab083c598023b))
+* fix java parser ([f3060d5](https://github.com/Sintexer/jvm-source-lens/commit/f3060d5cb9d4ac306625700c6c6530bcd088c59d))
+
 ## [1.19.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.18.1...v1.19.0) (2026-11-10)
 
 
