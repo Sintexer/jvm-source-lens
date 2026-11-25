@@ -17,7 +17,8 @@ export function buildJvmsrcInstructions(
   const names = resolvers.map((r) => r.displayName);
   return `
 ${joinNatural(names)} projects only. Use jvmsrc for dependency classes, methods and versions instead of memory,
-web search or cache digging. Package docs cover workspace and dependency packages; for other workspace source, grep/read.
+web search or cache digging. Package docs cover workspace and dependency packages; hierarchy tools search compiled types.
+For other workspace source, grep/read.
 
 Flow: search_classes (only if the name is unknown) → get_class_structure → get_class_source with
 methodNames. For version problems start with resolve_dependencies.

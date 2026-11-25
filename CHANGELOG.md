@@ -6,6 +6,8 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 
 ## Unreleased
 
+* Add `get_implementors` and `get_subclasses` to find direct and indirect descendants on a module's resolved binary classpath, grouped by owning JAR or module.
+
 * Show class, field and overload documentation from the matching Javadoc JAR when original source is absent. Bytecode remains authoritative, and missing docs do not prevent structure or signature lookup.
 
 * Add the MCP tool `get_package_docs` for source-backed package descriptions and type summaries. It reports `DOCS_NOT_FOUND` when no package owner is found and `DOCS_RESOLVE_FAILED` when documentation lookup fails.

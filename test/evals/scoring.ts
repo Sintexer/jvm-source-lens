@@ -19,6 +19,8 @@ export type EvalPrompt = {
    * (Gradle path) and pass `modulePath` on its first jvmsrc call.
    */
   expectModule?: string;
+  /** Hierarchy routing: omitted directOnly requests transitive results. */
+  expectDirectOnly?: boolean;
 };
 
 export type ToolCall = {
@@ -147,12 +149,13 @@ export type PromptScore = {
   moduleCorrect: boolean | null;
   /** First jvmsrc call is one of `expectFirstTools`; `null` when not applicable. */
   firstToolExpected: boolean | null;
+  directOnlyCorrect?: boolean;
   /** Ran javap/unzip/jar/Gradle-cache style shell commands (blocked attempts do not count). */
   fallbackUsed: boolean;
   /** Fallback attempts the PreToolUse hook blocked, with the deny reason visible to the agent. */
   hookDenials: number;
   webUsed: boolean;
-  /** Positive prompt: used jvmsrc and no shell fallback. Negative prompt: did not use jvmsrc. */
+  /** Positive: used jvmsrc without shell fallback; hierarchy also requires correct first-call routing. */
   passed: boolean;
   numTurns?: number;
   costUsd?: number;
@@ -176,6 +179,13 @@ export function scorePrompt(p: EvalPrompt, t: ParsedTranscript): PromptScore {
   const fallbackUsed = fallbackAttempts.length > hookDenials;
   const webUsed = t.calls.some((c) => c.name === 'WebSearch' || c.name === 'WebFetch');
   const selected = jv.length > 0;
+  const firstToolExpected = first && p.expectJvmsrc ? p.expectFirstTools.includes(shortToolName(first.name)) : null;
+  const moduleCorrect = p.expectModule === undefined ? null :
+    typeof first?.input.modulePath === 'string' && modulePathMatches(first.input.modulePath, p.expectModule);
+  const directOnlyCorrect = p.expectDirectOnly === undefined ? undefined :
+    first !== undefined && (first.input.directOnly ?? false) === p.expectDirectOnly;
+  const routed = directOnlyCorrect === undefined ||
+    (directOnlyCorrect && firstToolExpected === true && moduleCorrect !== false && first?.isError === false && !t.runError);
   return {
     id: p.id,
     category: p.category,
@@ -191,17 +201,13 @@ export function scorePrompt(p: EvalPrompt, t: ParsedTranscript): PromptScore {
         : p.expectModule !== undefined
           ? false
           : null,
-    moduleCorrect:
-      p.expectModule === undefined
-        ? null
-        : first !== undefined &&
-          typeof first.input.modulePath === 'string' &&
-          modulePathMatches(first.input.modulePath, p.expectModule),
-    firstToolExpected: first && p.expectJvmsrc ? p.expectFirstTools.includes(shortToolName(first.name)) : null,
+    moduleCorrect,
+    firstToolExpected,
+    directOnlyCorrect,
     fallbackUsed,
     hookDenials,
     webUsed,
-    passed: p.expectJvmsrc ? selected && !fallbackUsed : !selected,
+    passed: p.expectJvmsrc ? selected && !fallbackUsed && routed : !selected,
     numTurns: t.numTurns,
     costUsd: t.costUsd,
     runError: t.runError,

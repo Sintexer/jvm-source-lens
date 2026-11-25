@@ -63,6 +63,18 @@ describe('isFallbackCommand', () => {
 });
 
 describe('scorePrompt', () => {
+  test('hierarchy routing requires the successful first call to use the expected module, tool and depth', () => {
+    const prompt = { ...positive, expectModule: ':app', expectFirstTools: ['get_implementors'], expectDirectOnly: true };
+    const call = (input: object, tool = 'get_implementors') => parseTranscript([use('a', `mcp__jvmsrc__${tool}`, input), result('a')]);
+    const args = { modulePath: ':app', directOnly: true };
+    expect(scorePrompt(prompt, call(args)).passed).toBe(true);
+    expect(scorePrompt(prompt, call({ ...args, modulePath: ':worker' })).passed).toBe(false);
+    expect(scorePrompt(prompt, call(args, 'get_subclasses')).passed).toBe(false);
+    const defaultDepth = call({ modulePath: ':app' });
+    expect(scorePrompt(prompt, defaultDepth).passed).toBe(false);
+    expect(scorePrompt({ ...prompt, expectDirectOnly: false }, defaultDepth).passed).toBe(true);
+  });
+
   test('positive prompt: jvmsrc first, expected tool, no fallback', () => {
     const s = scorePrompt(
       positive,

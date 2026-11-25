@@ -9,6 +9,7 @@ import {
   mcpToolResultFromClassSource,
   mcpToolResultFromClassStructure,
   mcpToolResultFromPackageDocs,
+  mcpToolResultFromHierarchy,
   mcpToolResultFromProjectRootError,
 } from './mcp-tool-result.js';
 
@@ -425,5 +426,28 @@ test('get_package_docs exposes retry module paths even to text-only clients', ()
   expect(result.isError).toBe(true);
   expect(result.structuredContent).toMatchObject({ ok: false, code: error.code, error });
   const text = result.content[0]?.type === 'text' ? result.content[0].text : '';
+  for (const expected of [error.code, error.message, ...error.modulePaths]) expect(text).toContain(expected);
+});
+
+test('hierarchy reports truncation separately from indexing limitations', () => {
+  const result = { ok: true, kind: 'implementors', className: 'a.Run', modulePath: ':app', configuration: 'runtimeClasspath',
+    limit: 1, totalMatches: 3, truncated: true, limitations: ['Missing compiled output for :lib.'], groups: [{
+      origin: 'workspace', moduleName: ':app', moduleRoot: '/app', coordinates: { group: '', name: 'app', version: null },
+      classes: [{ className: 'a.Task', direct: true }],
+    }] } satisfies Parameters<typeof mcpToolResultFromHierarchy>[0];
+  const response = mcpToolResultFromHierarchy(result, result.kind);
+  expect(response.structuredContent).toEqual(result);
+  const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
+  for (const expected of ['1 of 3', 'truncated', 'a.Run', ':app', 'runtimeClasspath', 'a.Task', 'Missing compiled output for :lib.']) {
+    expect(text).toContain(expected);
+  }
+});
+
+test('hierarchy ambiguity returns retry choices in text and structured data', () => {
+  const error = { code: 'MODULE_AMBIGUOUS' as const, modulePaths: [':one', ':two'], message: 'Select modulePath.' };
+  const response = mcpToolResultFromHierarchy({ ok: false, error }, 'subclasses');
+  expect(response.isError).toBe(true);
+  expect(response.structuredContent).toMatchObject({ ok: false, code: error.code, error });
+  const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
   for (const expected of [error.code, error.message, ...error.modulePaths]) expect(text).toContain(expected);
 });

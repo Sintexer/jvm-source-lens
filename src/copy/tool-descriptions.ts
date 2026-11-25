@@ -4,6 +4,14 @@ export type McpToolCopy = {
 };
 
 export const MCP_TOOL_COPY = {
+  get_implementors: {
+    title: 'Implementors',
+    description: 'Find classes implementing an interface on the selected classpath, grouped by owner.',
+  },
+  get_subclasses: {
+    title: 'Subclasses',
+    description: 'Find subclasses on the selected classpath, grouped by owner.',
+  },
   get_package_docs: {
     title: 'Package docs',
     description: 'Package description, types and summaries from source or Javadoc, by owner.',
@@ -11,17 +19,17 @@ export const MCP_TOOL_COPY = {
 
   search_classes: {
     title: 'Search classes on the resolved classpath',
-    description: `Find which dependency JAR provides a class when you only have a simple name, partial name, or keyword (e.g. ObjectMapper, retry). Use for unknown types in stack traces or imports, instead of unzip/jar searches. Returns FQN + library per hit; next call get_class_structure.`,
+    description: 'Unknown class or JAR? Search names/keywords from imports or stack traces. Returns FQN + library; next get_class_structure.',
   },
 
   get_class_structure: {
     title: 'Get structured JVM class API',
-    description: `Show what a third-party library (JAR) class is and does: purpose and method names; scope=declared adds all signatures and fields, scope=effective adds inherited members. First call for any dependency class you can name; use instead of reading source or javap. One method's overloads: get_method_signature.`,
+    description: `Show what a third-party library (JAR) class is and does: purpose and method names; scope=declared adds all signatures and fields, scope=effective adds inherited members. First call for a dependency class overview; use instead of reading source or javap. One method's overloads: get_method_signature.`,
   },
 
   get_method_signature: {
     title: 'Get JVM method overload signatures',
-    description: `List every overload (parameters, generics, return type) of one or more methods or constructors ("<init>") of a dependency class. Use to verify a call or pick an overload. Not for bodies: use get_class_source.`,
+    description: 'Verify calls: all overloads with parameters, generics and return types. For bodies use get_class_source.',
   },
 
   find_in_class_source: {
@@ -36,12 +44,12 @@ export const MCP_TOOL_COPY = {
 
   resolve_dependencies: {
     title: 'Resolve project dependencies',
-    description: `List modules and, with query, exact dependency versions on the classpath with module counts (conflicts flagged); add modules to name them (path filter or "all"). Start here for NoSuchMethodError, AbstractMethodError, ClassCastException, or "which version of X is used?"; use instead of build files or local caches.`,
+    description: 'List modules or query actual classpath versions, counts and conflicts. Start here for version questions, NoSuchMethodError, AbstractMethodError or ClassCastException.',
   },
 
   search_in_artifact: {
     title: 'Search text across all classes in one resolved dependency JAR',
-    description: `Grep every class in one dependency JAR for a string (log message, exception text, constant). Use when you know the library but not the class. Pass coordinates {group, name, version} (see resolve_dependencies with query) or jarPath.`,
+    description: 'Grep one known JAR, unknown class, for logs, exceptions or constants. Get coordinates from resolve_dependencies.',
   },
 } as const satisfies Record<string, McpToolCopy>;
 

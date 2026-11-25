@@ -23,7 +23,7 @@ Shipped: P0 MVP, P1 polish, P2 features, agent-UX checkpoints 0–6 (see CHANGEL
 
 Released together in 1.19.0: checkpoints 1 and 2.
 
-Checkpoints 3–10 shipped together in `v1.20.0`. Checkpoint 11 is implemented on `master` (`fab1443`) but not in that tag. Checkpoint 12 is in progress at the maintainer's request; neither checkpoint is part of `v1.20.0`.
+Checkpoints 3–10 shipped together in `v1.20.0`. Checkpoints 11 and 12 are implemented on `master` but not in that tag. Checkpoint 13 implementation proceeded before release at the maintainer's request.
 
 
 | # | Checkpoint | Why at this position | Size |
@@ -240,10 +240,10 @@ Steps:
 
 ## Checkpoint 13 — Hierarchy tools
 
-- [ ] Design an inverted index (supertype → subtypes / implementors) that shares the class-search index infrastructure and its invalidation.
-- [ ] `get_implementors(interfaceName)` and `get_subclasses(className)`, with the same scoping as the other tools, direct and transitive results, grouped by artifact.
-- [ ] Use the index build cost on a 300-JAR classpath to decide eager build or lazy build.
-- [ ] Add 4 eval prompts. Make sure that eager tokens stay within the checkpoint 3 budget.
+- [x] Cache binary headers in the project resolution bucket. Build reverse edges for the selected classpath only, after resolving duplicate names in order. Source-search cache entries are unchanged.
+- [x] `get_implementors(interfaceName)` and `get_subclasses(className)` support direct and transitive results, grouped by owner. Live `:app` smoke: 9 direct `RetryPolicy` implementations, 11 total (`spring-retry:2.0.4`).
+- [x] Build lazily. `bun scripts/bench-hierarchy.ts`: 300 synthetic JARs with 19,200 compiled types, resolution cached; 316 ms cold, 60 ms median across five warm calls. Other tool requests pay no scan cost.
+- [x] Four prompts in `test/evals/hierarchy-prompts.json` passed in one Haiku run (correct first tool, module and depth); three existing routing probes also passed. `measure:tokens`: 1,957/2,000 (`chars / 4`).
 
 **Done when:** `get_implementors org.springframework.retry.RetryPolicy` on the eval project lists the implementations from the classpath.
 

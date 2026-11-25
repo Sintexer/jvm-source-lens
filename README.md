@@ -111,6 +111,8 @@ The MCP server runs over stdio (`jvmsrc mcp`). It needs no environment variables
 | Tool | What it does |
 |:---|:---|
 | **`search_classes`** | Find a class by simple name or glob; returns compact FQN + lib name lists |
+| **`get_implementors`** | Find compiled classes that implement an interface on the selected module's classpath, grouped by module or JAR. |
+| **`get_subclasses`** | Find compiled subclasses of a class. Both hierarchy tools include indirect matches by default; set `directOnly: true` for immediate matches. |
 | **`get_class_structure`** | Retrieves class overview (purpose + method names) or declared signatures |
 | **`get_package_docs`** | Reads an exact package's description and type summaries from source, filling gaps from the dependency's matching Javadoc JAR. Lists each contributing module or JAR separately. |
 | **`get_method_signature`**| Fetches real overloads for a method, with parameter names and generics |
@@ -120,6 +122,8 @@ The MCP server runs over stdio (`jvmsrc mcp`). It needs no environment variables
 | **`resolve_dependencies`**| Analyzes the actual dependency graph this project uses |
 
 If a dependency publishes Javadoc but no usable source file, `get_class_structure` and `get_method_signature` can still show its class description and documented overloads. Prose from the Javadoc JAR is labelled `docsSource: "javadoc-jar"`. Signatures still come from bytecode (`sourceAvailable: false`); use `bytecodeOnly: true` on a signature lookup to skip docs entirely.
+
+For example, ask: *Which classes on `:app`'s classpath implement `org.springframework.retry.RetryPolicy`?* Hierarchy lookup reads dependency JARs and existing compiled module output. It does not compile your project or search uncompiled source files.
 
 > [!TIP]
 > Every source response includes `sourceAvailable`: `true` for real sources (Javadoc, parameter names, generics), `false` for CFR decompilation (structure reliable, names may be synthetic). Nested types (`Outer$Inner`, including `ImmutableList.Builder`) return structure, signatures, method excerpts, and decompiled source from the enclosing type.

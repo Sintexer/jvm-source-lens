@@ -307,6 +307,70 @@ describe('pluggable fake resolver end-to-end', () => {
     }
   });
 
+  test('hierarchy MCP scopes the lookup and preserves matches, owner and coverage in both representations', async () => {
+    fs.writeFileSync(binaryJarPath, zipSync({
+      'com/fake/Greeter.class': buildClassFile({ internalName: 'com/fake/Greeter', interfaces: ['java/lang/Runnable'] }),
+      'com/fake/Child.class': buildClassFile({ internalName: 'com/fake/Child', superclass: 'com/fake/Greeter' }),
+    }));
+    const server = createMcpServer();
+    const client = new Client({ name: 'hierarchy-test', version: '1' });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    try {
+      const args = { className: 'java.lang.Object', projectRoot: projectDir, directOnly: true, modulePath: 'root' };
+      const call = (options = {}) => client.callTool({ name: 'get_subclasses', arguments: { ...args, ...options } });
+      const result = await call();
+      expect(result.isError).toBe(false);
+      expect(result.structuredContent).toMatchObject({
+        className: args.className, totalMatches: 1, truncated: false,
+        groups: [{ coordinates: { name: 'greeter-lib' }, classes: [{ className: 'com.fake.Greeter', direct: true }] }],
+      });
+      const text = JSON.stringify(result.content);
+      for (const expected of ['com.fake:greeter-lib:1.0.0', 'com.fake.Greeter', 'direct', 'source-only']) {
+        expect(text.toLowerCase()).toContain(expected.toLowerCase());
+      }
+      const before = resolveCalls;
+      await call({ forceRefresh: true });
+      expect(resolveCalls).toBe(before + 1);
+      const bad = await call({ configuration: 'missing' });
+      expect(bad.structuredContent).toMatchObject({ ok: false, error: { code: 'CONFIGURATION_NOT_FOUND' } });
+      expect(JSON.stringify(bad.content)).toContain('CONFIGURATION_NOT_FOUND');
+      const implementors = (directOnly: boolean) => client.callTool({
+        name: 'get_implementors', arguments: { interfaceName: 'java.lang.Runnable', projectRoot: projectDir, directOnly },
+      });
+      const all = await implementors(false);
+      expect(all.structuredContent).toMatchObject({ groups: [{ classes: [
+        { className: 'com.fake.Child', direct: false }, { className: 'com.fake.Greeter', direct: true },
+      ] }] });
+      expect(JSON.stringify(all.content)).toMatch(/com.fake.Child[^\n]*indirect/);
+      expect((await implementors(true)).structuredContent).toMatchObject({ totalMatches: 1, groups: [{
+        classes: [{ className: 'com.fake.Greeter', direct: true }],
+      }] });
+    } finally {
+      await client.close();
+    }
+  });
+
+  test('implementor ambiguity recommends the advertised interfaceName input', async () => {
+    const names = ['one/Task', 'two/Task'];
+    fs.writeFileSync(binaryJarPath, zipSync(Object.fromEntries(names.map(n => [`${n}.class`, buildClassFile({ internalName: n })]))));
+    const server = createMcpServer();
+    const client = new Client({ name: 'hierarchy-test', version: '1' });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    try {
+      const response = await client.callTool({ name: 'get_implementors', arguments: { interfaceName: 'Task', projectRoot: projectDir } });
+      expect(response.isError).toBe(true);
+      for (const repr of [response.content, response.structuredContent]) {
+        const text = JSON.stringify(repr);
+        for (const value of ['INVALID_FQN', 'one.Task', 'two.Task', 'interfaceName']) expect(text).toContain(value);
+        expect(text).not.toContain('Retry with className');
+      }
+    } finally {
+      await client.close();
+    }
+  });
+
   test('emits dynamic CLI progress labels using resolver.displayName', async () => {
     const origIsTTY = process.stderr.isTTY;
     const origConsoleError = console.error;

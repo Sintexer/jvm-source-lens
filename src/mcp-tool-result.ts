@@ -14,6 +14,7 @@ import type { ResolutionResult } from './resolvers/base.js';
 import type { ResolutionOutput } from './resolvers/resolution-output.js';
 import type { GetMethodSignatureResult } from './get-method-signatures.js';
 import type { GetPackageDocsResult } from './get-package-docs.js';
+import type { HierarchyResult } from './hierarchy/lookup.js';
 import { isSyntheticJvmDescriptor } from './class-structure/parse-java-type-metadata.js';
 import { normalizeClassNameSyntax } from './extractor/canonicalize-class-name.js';
 import type {
@@ -78,6 +79,28 @@ import {
 import type { GuidedEnvelopeFields, McpErrorCategory } from './guided-response/types.js';
 
 export type { McpErrorCategory };
+
+export function mcpToolResultFromHierarchy(result: HierarchyResult, kind: 'implementors' | 'subclasses'): CallToolResult {
+  if (!result.ok) {
+    const error = kind === 'implementors' && result.error.code === 'INVALID_FQN'
+      ? { ...result.error, message: result.error.message.replace('Retry with className', 'Retry with interfaceName') }
+      : result.error;
+    const choices = error.code === 'MODULE_AMBIGUOUS' ? error.modulePaths :
+      'availableModules' in error ? error.availableModules : undefined;
+    const lines = [`${error.code}: ${error.message}`, choices?.length ? `Module choices: ${choices.join(', ')}` : undefined, result.hint];
+    return { isError: true, structuredContent: { ...result, error, code: error.code }, content: [{ type: 'text', text: lines.filter(Boolean).join('\n') }] };
+  }
+  const shown = result.groups.reduce((n, g) => n + g.classes.length, 0);
+  const count = result.truncated ? `${shown} of ${result.totalMatches} matches (truncated)` : `${shown} ${shown === 1 ? 'match' : 'matches'}`;
+  const lines = [`${result.kind} of ${result.className} in ${result.modulePath} (${result.configuration}): ${count}`];
+  for (const group of result.groups) {
+    const coords = [group.coordinates.group, group.coordinates.name, group.coordinates.version].filter(Boolean).join(':');
+    const owner = group.moduleName ?? (group.origin === 'local-file' ? group.jarPath : coords);
+    lines.push(`${group.origin}: ${owner}`, ...group.classes.map(c => `  ${c.className} (${c.direct ? 'direct' : 'indirect'})`));
+  }
+  lines.push(...result.limitations.map(note => `Coverage: ${note}`));
+  return { isError: false, structuredContent: result, content: [{ type: 'text', text: lines.join('\n') }] };
+}
 
 export function mcpToolResultFromPackageDocs(result: GetPackageDocsResult): CallToolResult {
   if (!result.ok) {

@@ -8,6 +8,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import * as z from 'zod';
 import { getClassSource } from './get-class-source.js';
 import { getPackageDocs } from './get-package-docs.js';
+import { getHierarchy } from './hierarchy/lookup.js';
 import { mergeSourceExcerptInputs } from './source-excerpt.js';
 import {
   classNameNote,
@@ -16,6 +17,7 @@ import {
   mcpToolResultFromFindInClassSource,
   mcpToolResultFromMethodSignature,
   mcpToolResultFromPackageDocs,
+  mcpToolResultFromHierarchy,
   mcpToolResultFromProjectRootError,
   mcpToolResultFromResolutionResult,
   mcpToolResultFromSearchClasses,
@@ -47,8 +49,8 @@ import { classStructureScopeSchema } from './mcp-schemas/class-structure.js';
 /** Agent-facing parameter docs. Keep each to one short sentence: they are sent to the model on every turn. */
 const D = {
   projectRoot: 'Project root. Omit to use the workspace.',
-  modulePath: "Module name (':app', 'app') or a file/dir inside it. Omit (or \"*\") for all.",
-  className: 'FQN, e.g. com.fasterxml.jackson.databind.ObjectMapper; a unique simple name works.',
+  modulePath: 'Module name, file or dir; omit or * for all.',
+  className: 'FQN or unique simple name.',
   configuration: 'Classpath configuration (default compile).',
   includeTest: 'Use the test classpath.',
   forceRefresh: 'Bypass the resolution cache.',
@@ -118,12 +120,12 @@ const resolveDependenciesInputSchema = z.looseObject({
   query: z
     .string()
     .optional()
-    .describe('Library filter, e.g. "jackson": lists matching artifact versions with module counts.'),
+    .describe('Library filter, e.g. jackson.'),
   modules: z
     .string()
     .optional()
     .describe(
-      'With query: omit for counts only. Module path/prefix list (e.g. ":services,:app") to name modules in scope, or "all" for every module (can be very large).',
+      'With query: omit for counts, pass path prefixes (":services,:app") or "all" for names.',
     ),
   projectRoot: z.string().optional().describe(D.projectRoot),
   forceRefresh: z.boolean().optional().describe(D.forceRefresh),
@@ -612,6 +614,36 @@ export function createMcpServer(): McpServer {
       }
     },
   );
+
+  const hierarchyScope = z.object({
+    modulePath: z.string().optional().describe(D.modulePath),
+    includeTest: z.boolean().optional().describe(D.includeTest),
+    directOnly: z.boolean().optional().describe('Exclude indirect matches.'),
+    projectRoot: z.string().optional(),
+    configuration: z.string().optional(),
+    forceRefresh: z.boolean().optional(),
+  });
+  const lookup = async (
+    kind: 'implementors' | 'subclasses', className: string, scope: z.infer<typeof hierarchyScope>,
+  ) => {
+    const root = await locateProjectRoot(scope.projectRoot);
+    if (!root.ok) return mcpToolResultFromProjectRootError(root.message, scope.projectRoot ?? process.cwd());
+    try {
+      const result = await getHierarchy({ ...scope, projectRoot: root.path, className, kind });
+      return withResolutionNotes(mcpToolResultFromHierarchy(result, kind), [classNameNote(className, result), root.note]);
+    } catch (e) {
+      if (e instanceof UnsupportedProjectError) return mcpToolResultFromProjectRootError(e.message, root.path);
+      return mcpToolResultFromUnexpectedError(e);
+    }
+  };
+  const target = z.string().min(1).describe(D.className);
+  const annotations = { readOnlyHint: true, openWorldHint: true };
+  server.registerTool('get_implementors', {
+    ...MCP_TOOL_COPY.get_implementors, inputSchema: hierarchyScope.extend({ interfaceName: target }), annotations,
+  }, ({ interfaceName, ...scope }) => lookup('implementors', interfaceName, scope));
+  server.registerTool('get_subclasses', {
+    ...MCP_TOOL_COPY.get_subclasses, inputSchema: hierarchyScope.extend({ className: target }), annotations,
+  }, ({ className, ...scope }) => lookup('subclasses', className, scope));
 
   installCompactToolList(server);
   return server;

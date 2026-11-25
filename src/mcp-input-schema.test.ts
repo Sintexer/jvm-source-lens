@@ -81,10 +81,20 @@ describe('advertised input schemas', () => {
     expect(props('get_class_structure')).not.toContain('packageName');
   });
 
+  test.each([
+    ['get_implementors', 'interfaceName'],
+    ['get_subclasses', 'className'],
+  ])('%s advertises only its target and scope options', (name, target) => {
+    const schema = tools.find((t) => t.name === name)?.inputSchema;
+    expect(schema?.required).toEqual([target]);
+    expect(Object.keys(schema!.properties!).sort()).toEqual([target, 'modulePath', 'includeTest', 'directOnly'].sort());
+  });
+
   test('server instructions and tool titles/descriptions match registered Gradle + Maven copy', () => {
     expect(client.getInstructions()).toBe(
       '\nGradle and Maven projects only. Use jvmsrc for dependency classes, methods and versions instead of memory,\n' +
-        'web search or cache digging. Package docs cover workspace and dependency packages; for other workspace source, grep/read.\n\n' +
+        'web search or cache digging. Package docs cover workspace and dependency packages; hierarchy tools search compiled types.\n' +
+        'For other workspace source, grep/read.\n\n' +
         'Flow: search_classes (only if the name is unknown) → get_class_structure → get_class_source with\n' +
         'methodNames. For version problems start with resolve_dependencies.\n\n' +
         "In a module, pass modulePath (':app' or current file); otherwise omit for all modules.\n" +
@@ -112,37 +122,39 @@ describe('advertised input schemas', () => {
         name: 'resolve_dependencies',
         title: 'Resolve project dependencies',
         description:
-          'List modules and, with query, exact dependency versions on the classpath with module counts (conflicts flagged); add modules to name them (path filter or "all"). Start here for NoSuchMethodError, AbstractMethodError, ClassCastException, or "which version of X is used?"; use instead of build files or local caches.',
+          'List modules or query actual classpath versions, counts and conflicts. Start here for version questions, NoSuchMethodError, AbstractMethodError or ClassCastException.',
       },
       {
         name: 'search_classes',
         title: 'Search classes on the resolved classpath',
         description:
-          'Find which dependency JAR provides a class when you only have a simple name, partial name, or keyword (e.g. ObjectMapper, retry). Use for unknown types in stack traces or imports, instead of unzip/jar searches. Returns FQN + library per hit; next call get_class_structure.',
+          'Unknown class or JAR? Search names/keywords from imports or stack traces. Returns FQN + library; next get_class_structure.',
       },
       {
         name: 'get_method_signature',
         title: 'Get JVM method overload signatures',
         description:
-          'List every overload (parameters, generics, return type) of one or more methods or constructors ("<init>") of a dependency class. Use to verify a call or pick an overload. Not for bodies: use get_class_source.',
+          'Verify calls: all overloads with parameters, generics and return types. For bodies use get_class_source.',
       },
       {
         name: 'get_class_structure',
         title: 'Get structured JVM class API',
         description:
-          "Show what a third-party library (JAR) class is and does: purpose and method names; scope=declared adds all signatures and fields, scope=effective adds inherited members. First call for any dependency class you can name; use instead of reading source or javap. One method's overloads: get_method_signature.",
+          "Show what a third-party library (JAR) class is and does: purpose and method names; scope=declared adds all signatures and fields, scope=effective adds inherited members. First call for a dependency class overview; use instead of reading source or javap. One method's overloads: get_method_signature.",
       },
       {
         name: 'search_in_artifact',
         title: 'Search text across all classes in one resolved dependency JAR',
         description:
-          'Grep every class in one dependency JAR for a string (log message, exception text, constant). Use when you know the library but not the class. Pass coordinates {group, name, version} (see resolve_dependencies with query) or jarPath.',
+          'Grep one known JAR, unknown class, for logs, exceptions or constants. Get coordinates from resolve_dependencies.',
       },
       {
         name: 'get_package_docs',
         title: 'Package docs',
         description: 'Package description, types and summaries from source or Javadoc, by owner.',
       },
+      { name: 'get_implementors', title: 'Implementors', description: 'Find classes implementing an interface on the selected classpath, grouped by owner.' },
+      { name: 'get_subclasses', title: 'Subclasses', description: 'Find subclasses on the selected classpath, grouped by owner.' },
     ]);
   });
 });
@@ -151,6 +163,19 @@ describe('tolerated inputs', () => {
   const missingRoot = '/nonexistent-jvmsrc-project';
   // The compact text is a one-line summary; guidance lives in structuredContent / message.
   const text = (r: unknown) => JSON.stringify(r);
+
+  test.each([
+    ['get_implementors', 'interfaceName'],
+    ['get_subclasses', 'className'],
+  ])('%s validates and honors hidden resolution inputs', async (name, target) => {
+    const args = { [target]: 'a.B', projectRoot: missingRoot, configuration: 'runtimeClasspath', forceRefresh: true };
+    expect(text(await client.callTool({ name, arguments: args }))).toContain('does not exist');
+    for (const key of ['forceRefresh', 'directOnly', 'includeTest']) {
+      const result = await client.callTool({ name, arguments: { ...args, [key]: 'yes' } });
+      expect(result.isError).toBe(true);
+      expect(text(result)).toContain(key);
+    }
+  });
 
   test.each([
     ['string methodNames', { methodNames: 'foo' }],

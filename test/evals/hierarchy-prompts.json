@@ -1,0 +1,38 @@
+[
+  {
+    "id": "h01",
+    "category": "filecontext",
+    "prompt": "I'm editing app/src/main/java/com/acme/app/App.java. Which dependency classes declare org.springframework.retry.RetryPolicy directly in their implements list? Exclude classes that only inherit the contract.",
+    "expectJvmsrc": true,
+    "expectFirstTools": ["get_implementors"],
+    "expectModule": ":app",
+    "expectDirectOnly": true
+  },
+  {
+    "id": "h02",
+    "category": "filecontext",
+    "prompt": "For app/src/main/java/com/acme/app/App.java, which classes on its dependency classpath implement org.springframework.retry.RetryPolicy? Include implementations inherited from a parent type as well as the direct ones.",
+    "expectJvmsrc": true,
+    "expectFirstTools": ["get_implementors"],
+    "expectModule": ":app",
+    "expectDirectOnly": false
+  },
+  {
+    "id": "h03",
+    "category": "filecontext",
+    "prompt": "I'm editing worker/src/main/java/com/acme/worker/Worker.java. Across this module's dependency JARs, which Jackson types have com.fasterxml.jackson.databind.JsonNode as their immediate superclass? Stop after one level.",
+    "expectJvmsrc": true,
+    "expectFirstTools": ["get_subclasses"],
+    "expectModule": ":worker",
+    "expectDirectOnly": true
+  },
+  {
+    "id": "h04",
+    "category": "filecontext",
+    "prompt": "I'm working on worker/src/main/java/com/acme/worker/Worker.java. List the descendants of com.fasterxml.jackson.databind.JsonNode in this module's dependencies, including grandchildren and deeper subclasses.",
+    "expectJvmsrc": true,
+    "expectFirstTools": ["get_subclasses"],
+    "expectModule": ":worker",
+    "expectDirectOnly": false
+  }
+]

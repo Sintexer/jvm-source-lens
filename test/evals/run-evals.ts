@@ -230,7 +230,7 @@ function printReport(scores: PromptScore[], tokens: EagerTokens | null): void {
       const why = s.expectJvmsrc
         ? s.fallbackUsed
           ? 'used shell fallback'
-          : 'never called jvmsrc'
+          : !s.selected ? 'never called jvmsrc' : `hierarchy routing: tool=${s.firstTool}, moduleCorrect=${s.moduleCorrect}, directOnlyCorrect=${s.directOnlyCorrect}, firstCallOk=${s.firstCallOk}`
         : 'called jvmsrc on a non-dependency question';
       console.log(`${s.id} (${s.category}): ${why}${s.runError ? ` [${s.runError}]` : ''}`);
     }
