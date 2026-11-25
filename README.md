@@ -20,6 +20,8 @@ Your IDE knows which library version your build uses. Your coding agent does not
 
 Requires **Node ≥ 20** and **Java on `PATH`** (for the CFR decompiler and `javap`).
 
+**Only step 1 is required.** When your client connects, `jvmsrc` sends MCP instructions that tell your agent when and how to use its tools. No project rule or hook is needed.
+
 ### 1. Add the MCP server — run in your terminal
 
 ```bash
@@ -49,15 +51,15 @@ To install the CLI globally, run `npm install -g jvmsrc`. Then use `"command": "
 
 </details>
 
-### 2. Check it works — type in your agent chat, not in the terminal
+### 2. Optional: check the connection in your agent chat
 
 > *"Use jvmsrc: which methods does `<a library class from your project>` declare?"*
 
 The first call runs Gradle (about 5–10 s). Later calls use the cache.
 
-### 3. Make your agent use it
+### 3. Optional: add a project rule
 
-Agents often prefer `Bash` and `javap` out of habit. Add this rule to `CLAUDE.md`, `AGENTS.md` or your Cursor rules:
+Skip this step if your agent uses `jvmsrc` for dependency questions. If it keeps reaching for `javap` instead, you can add this reminder to `CLAUDE.md`, `AGENTS.md` or your Cursor rules:
 
 ```markdown
 ## Dependencies (jvmsrc)
@@ -152,9 +154,9 @@ Omit the `env` block when the project does not need it.
 
 ## Make your agent use it
 
-Tool descriptions help, but a built-in `Bash` tool the agent already trusts often wins. Two small additions make `jvmsrc` the default for dependency questions.
+If your client does not pass MCP server instructions to the agent, or you want to enforce a project policy, either option below can help. Both are optional.
 
-**1. Rule in the agent instructions.** Use the block from [Quick Start](#3-make-your-agent-use-it). Many clients do not show MCP server `instructions` at all.
+**1. Rule in the agent instructions.** Use the [optional project rule](#3-optional-add-a-project-rule) as a reminder.
 
 **2. (Claude Code) Hook that blocks shell fallbacks.** [`docs/hooks/block-jvm-fallbacks.mjs`](docs/hooks/block-jvm-fallbacks.mjs) denies `javap`, `unzip`/`jar` on JARs, and `~/.gradle/caches` / `~/.m2` access. It tells the agent to use `jvmsrc` instead. Save the script in a stable place. Add this to `.claude/settings.json` (project) or `~/.claude/settings.json` (all projects):
 
@@ -173,7 +175,7 @@ Tool descriptions help, but a built-in `Bash` tool the agent already trusts ofte
 
 Set `JVMSRC_HOOK_DISABLE=1` to switch it off for a while. Other clients have their own hook systems; read their current docs before you port it.
 
-**Check that your client shows the server instructions:** ask the agent *"What instructions does the jvmsrc MCP server give?"*. If it cannot answer, rely on the rule in step 1.
+To check whether your client passes along the server instructions, ask the agent *"What instructions does the jvmsrc MCP server give?"*
 
 ---
 
