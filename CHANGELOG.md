@@ -14,6 +14,18 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 * Add the MCP tool `get_package_docs` for source-backed package descriptions and type summaries. It reports `DOCS_NOT_FOUND` when no package owner is found and `DOCS_RESOLVE_FAILED` when documentation lookup fails.
 * Fill missing package descriptions and type summaries from Gradle or Maven Javadoc JARs. Text from a Javadoc JAR is labelled `docsSource: "javadoc-jar"`; original source text takes precedence.
 
+## [1.21.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.20.0...v1.21.0) (2026-11-25)
+
+
+### Features
+
+* add source-backed package documentation lookup ([80ecbec](https://github.com/Sintexer/jvm-source-lens/commit/80ecbecf11f8d33888b094a731d5a686064a5fcd))
+* enrich class and overload signatures with Javadoc ([aafa5be](https://github.com/Sintexer/jvm-source-lens/commit/aafa5be3e4a6caefe68d9216106b496a85ef0cef))
+* find implementors and subclasses on the resolved classpath ([eac2e77](https://github.com/Sintexer/jvm-source-lens/commit/eac2e77ccfa215d7d14f818665f988009ec6ff8c))
+* include buildSrc, build-logic and included builds in gradle cache digest ([fab1443](https://github.com/Sintexer/jvm-source-lens/commit/fab1443710b7dad25f2dfba19bbb9d7f4f4e2ba9))
+* resolve package documentation from Javadoc jars ([48bee96](https://github.com/Sintexer/jvm-source-lens/commit/48bee961e344db224041b52c570a67039fcf0179))
+* search Javadoc prose in a dependency with search_in_artifact docs ([116b9bf](https://github.com/Sintexer/jvm-source-lens/commit/116b9bf99d7186b3b3ed4c6dd860ed6446c4cfe9))
+
 ## [1.20.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.19.0...v1.20.0) (2026-11-25)
 
 
