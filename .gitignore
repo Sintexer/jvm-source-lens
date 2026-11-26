@@ -227,3 +227,9 @@ test/evals/maven-project/**/target/
 
 # Local review notes, plans and repro scripts (not shared)
 .local/
+
+# Tour demo: generated internal jar and Gradle output
+test/evals/tour/project/app/libs/
+test/evals/tour/project/**/build/
+test/evals/tour/project/.gradle/
+test/evals/tour/.repo/

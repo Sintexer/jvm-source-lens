@@ -1,0 +1,113 @@
+[
+  {
+    "id": "t01",
+    "kind": "conflict",
+    "prompt": "In module :app, what is the value of acme.ledger.Ledger.MAX_ENTRIES_PER_BATCH, and which overloads of post exist? State which acme ledger version the build really uses.",
+    "expect": [
+      "\\b187\\b",
+      "2\\.0\\.0",
+      "Instant"
+    ]
+  },
+  {
+    "id": "t02",
+    "kind": "nosources",
+    "prompt": "In :app, acme.geo.GeoHasher.encode(lat, lon): which latitude range is accepted, and what is the default precision?",
+    "expect": [
+      "85\\.05",
+      "\\b9\\b"
+    ]
+  },
+  {
+    "id": "t03",
+    "kind": "recent",
+    "prompt": "In :app, in which order does acme.flags.FlagResolver.resolve look up a key, and how long are values cached?",
+    "expect": [
+      "system propert[\\s\\S]*env[\\s\\S]*flags\\.properties",
+      "\\b45\\b"
+    ]
+  },
+  {
+    "id": "t04",
+    "kind": "recent",
+    "prompt": "In :app, what are the default capacity and refill rate of acme.ratelimit.TokenBucket, and what does tryAcquire do for permits larger than the capacity?",
+    "expect": [
+      "\\b25\\b",
+      "\\b7\\b",
+      "false"
+    ]
+  },
+  {
+    "id": "t05",
+    "kind": "obscure",
+    "prompt": "In :app, the uuid-creator library's TimeOrderedEpochFactory: how much clock drift does it tolerate (give the unit) and what is its default increment strategy when the timestamp repeats?",
+    "expect": [
+      "10[_,.]?000",
+      "2\\^48|rand_b"
+    ]
+  },
+  {
+    "id": "t06",
+    "kind": "obscure",
+    "prompt": "In :app, what happens when JCTools' MpscUnboundedArrayQueue is created with chunkSize 100, and what happens with chunkSize 1?",
+    "expect": [
+      "128",
+      "IllegalArgument|must be 2|2 or more|exception"
+    ]
+  },
+  {
+    "id": "t07",
+    "kind": "interproject",
+    "prompt": "In module :domain, what does Money.allocate do right now, and which rounding mode does Money use?",
+    "expect": [
+      "UnsupportedOperationException|not implemented",
+      "HALF_EVEN"
+    ]
+  },
+  {
+    "id": "t08",
+    "kind": "nosources",
+    "prompt": "Internal class acme.pricing.PricingEngine in :app: what is MAX_DISCOUNT, and what discount does tier SILVER get?",
+    "expect": [
+      "0\\.37",
+      "0\\.08|8 ?%"
+    ]
+  },
+  {
+    "id": "t09",
+    "kind": "conflict",
+    "prompt": "Which acme ledger version does acme-reports in :app need, what is ReportBuilder.MAX_ROWS, and is Ledger.post(String, long) callable in :app?",
+    "expect": [
+      "2\\.0\\.0",
+      "5000|5,000",
+      "(not|no longer|removed|isn't|cannot)"
+    ]
+  },
+  {
+    "id": "t10",
+    "kind": "bump-before",
+    "prompt": "In :app, what is acme.tax.TaxCalculator.DEFAULT_RATE, which acme-tax version is in use, and is there a forRegion method?",
+    "expect": [
+      "0\\.19",
+      "1\\.0\\.0",
+      "(no|not|doesn't|does not)"
+    ]
+  },
+  {
+    "action": "bump",
+    "file": "app/build.gradle",
+    "from": "acme:tax:1.0.0",
+    "to": "acme:tax:1.1.0"
+  },
+  {
+    "id": "t11",
+    "kind": "bump-after",
+    "prompt": "I just bumped acme-tax in app/build.gradle. Same question again: DEFAULT_RATE, version in use, and does forRegion exist? Give the regional rates if it does.",
+    "expect": [
+      "0\\.21",
+      "1\\.1\\.0",
+      "forRegion",
+      "0\\.25"
+    ]
+  }
+]

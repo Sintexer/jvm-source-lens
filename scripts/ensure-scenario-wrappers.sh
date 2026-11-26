@@ -56,6 +56,7 @@ gradle_projects=(
   "included-build-change/app"
   "kotlin-library/producer"
   "kotlin-library/consumer"
+  "subproject-repos/app"
 )
 
 maven_projects=(

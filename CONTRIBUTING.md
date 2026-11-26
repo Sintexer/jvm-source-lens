@@ -12,8 +12,8 @@ End users install the published package with **npm** (`npm install -g jvmsrc`); 
 ## Setup
 
 ```bash
-git clone https://github.com/Sintexer/jvm-source-lens.git
-cd jvm-source-lens
+git clone https://github.com/Sintexer/jvmsrc.git
+cd jvmsrc
 
 bun install
 bun run setup:cfr             # once — downloads CFR into resources/cfr.jar

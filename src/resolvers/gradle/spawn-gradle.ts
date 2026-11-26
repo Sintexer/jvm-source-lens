@@ -4,6 +4,7 @@ import { readCachedJavaToolchainVersion } from '../../cache/cached-toolchain.js'
 import { buildCfrSpawnEnv } from '../../decompiler/cfr-spawn-env.js';
 import { resolveJdkForProject } from '../../jdk/resolve-jdk-for-project.js';
 import { awaitChildExit, readProcessStreamToText, spawnChild } from '../../spawn-child.js';
+import { getProjectResolutionCacheDir } from '../../cache/paths.js';
 import { formatGradleUserMessage } from './gradle-failure-message.js';
 import { resolveGradleWrapperCommand } from './gradle-wrapper-command.js';
 
@@ -26,6 +27,22 @@ function parsePositiveIntEnv(name: string, fallback: number): number {
 
 export function gradleTimeoutMs(): number {
   return parsePositiveIntEnv('JVMSRC_GRADLE_TIMEOUT_MS', DEFAULT_GRADLE_TIMEOUT_MS);
+}
+
+/**
+ * Gradle writes `.gradle/` and `build/reports/problems/` into the project root by default.
+ * Move the project cache dir into the jvmsrc cache bucket and turn the problems report off,
+ * so a resolution never touches the scanned project tree.
+ */
+export function gradleIsolationArgs(projectRoot: string): { ok: true; args: string[] } | { ok: false; message: string } {
+  const bucket = getProjectResolutionCacheDir(projectRoot);
+  if (!bucket.ok) {
+    return { ok: false, message: bucket.message };
+  }
+  return {
+    ok: true,
+    args: ['--project-cache-dir', path.join(bucket.dir, 'gradle-project-cache'), '-Dorg.gradle.problems.report=false'],
+  };
 }
 
 export type GradleSpawnResult =
@@ -108,7 +125,11 @@ export async function runGradleTask(
     argv.push(`-P${key}=${value}`);
   }
 
-  argv.push('--no-configuration-cache', '--init-script', initScript, '--quiet', task);
+  const isolation = gradleIsolationArgs(root);
+  if (!isolation.ok) {
+    return { ok: false, message: isolation.message, command: [], exitCode: null };
+  }
+  argv.push('--no-configuration-cache', ...isolation.args, '--init-script', initScript, '--quiet', task);
 
   let proc: ReturnType<typeof spawnChild>;
   try {

@@ -4,9 +4,9 @@
   "title": "JVM Source Lens",
   "description": "Gradle-accurate JVM classpath; fetch Java source, signatures, and class structure for agents.",
   "version": "1.21.0",
-  "websiteUrl": "https://github.com/Sintexer/jvm-source-lens#readme",
+  "websiteUrl": "https://github.com/Sintexer/jvmsrc#readme",
   "repository": {
-    "url": "https://github.com/Sintexer/jvm-source-lens",
+    "url": "https://github.com/Sintexer/jvmsrc",
     "source": "github"
   },
   "packages": [

@@ -256,6 +256,8 @@ The Node implementation prefers **`./gradlew`** when present (correct Gradle ver
 
 **Wrapper trust:** `./gradlew` and `gradle/wrapper/gradle-wrapper.jar` come from the scanned project and run with the user's rights. **`JVMSRC_USE_SYSTEM_GRADLE=1`** (exact value `1`) skips the wrapper and always runs **`gradle`** on `PATH` (`buildSystem.wrapper: false`). The project's build scripts still run in both modes. See [SECURITY.md](SECURITY.md#gradle-wrapper-trust).
 
+**Zero project writes:** `--project-cache-dir` moves Gradle's `.gradle/` state into the jvmsrc cache bucket (`projects/<id>/gradle-project-cache`), and `-Dorg.gradle.problems.report=false` stops `build/reports/problems/`. A resolution leaves the project tree unchanged.
+
 **Configuration cache:** v1 always passes **`--no-configuration-cache`**. The bundled task resolves every submodule in one root task that walks `allprojects` at execution time; that pattern is incompatible with Gradle’s configuration cache until a future redesign (e.g. per-project tasks). Real-world projects with configuration cache enabled in `gradle.properties` still work because this flag disables CC for this invocation only.
 
 **Wall-clock limits:** Each Gradle subprocess for **`jvmsrcResolve`** (resolution cache refresh) and **`jvmsrcResolveSources`** (on-demand sources JAR) is capped by a timeout (default **600000** ms = **10** minutes). Override with **`JVMSRC_GRADLE_TIMEOUT_MS`** (positive integer, milliseconds). On timeout the child is killed; callers see the usual structured failure path with a message containing **`timed out`** (MCP treats this as retryable where applicable).
@@ -270,6 +272,8 @@ const argv = [
   ...(useWrapper ? [path.join(projectRoot, 'gradlew')] : ['gradle']),
   `-PjvmsrcWrapper=${useWrapper}`,
   '--no-configuration-cache',
+  '--project-cache-dir', path.join(projectBucketDir, 'gradle-project-cache'),
+  '-Dorg.gradle.problems.report=false',
   '--init-script',
   initScript,
   '--quiet',

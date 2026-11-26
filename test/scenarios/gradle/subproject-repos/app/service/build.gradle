@@ -1,0 +1,11 @@
+plugins {
+    id 'java'
+}
+
+repositories {
+    maven { url uri("${rootDir}/../repo") }
+}
+
+dependencies {
+    implementation 'acme:greeter:1.0.0'
+}

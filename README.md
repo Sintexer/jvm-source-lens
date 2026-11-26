@@ -2,9 +2,9 @@
 
 <div align="center">
 
-[![CI](https://github.com/Sintexer/jvm-source-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/Sintexer/jvm-source-lens/actions/workflows/ci.yml)
+[![CI](https://github.com/Sintexer/jvmsrc/actions/workflows/ci.yml/badge.svg)](https://github.com/Sintexer/jvmsrc/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/jvmsrc)](https://www.npmjs.com/package/jvmsrc)
-[![License: MIT](https://img.shields.io/github/license/Sintexer/jvm-source-lens)](https://github.com/Sintexer/jvm-source-lens/blob/master/LICENSE)
+[![License: MIT](https://img.shields.io/github/license/Sintexer/jvmsrc)](https://github.com/Sintexer/jvmsrc/blob/master/LICENSE)
 [![Node](https://img.shields.io/node/v/jvmsrc)](https://www.npmjs.com/package/jvmsrc)
 
 **An MCP server and CLI** that gives your coding agent the one thing it is missing on JVM codebases: **the actual classpath**.
@@ -347,8 +347,8 @@ When `JVMSRC_JAVA_HOME` is not set, jvmsrc auto-discovers local JDKs from common
 ## Building from Source
 
 ```bash
-git clone https://github.com/Sintexer/jvm-source-lens.git
-cd jvm-source-lens
+git clone https://github.com/Sintexer/jvmsrc.git
+cd jvmsrc
 bun install && bun run setup:cfr && bun run setup:maven-analyzer && bun run build
 node dist/cli.js --version
 ```

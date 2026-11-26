@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
 import { computeBuildInputsDigest, writeCachedResolution } from '../../cache/index.js';
 import { canonicalProjectRoot } from '../../cache/paths.js';
-import { DEFAULT_GRADLE_TIMEOUT_MS, gradleTimeoutMs, runGradleTask } from './spawn-gradle.js';
+import { DEFAULT_GRADLE_TIMEOUT_MS, gradleIsolationArgs, gradleTimeoutMs, runGradleTask } from './spawn-gradle.js';
 
 describe('gradleTimeoutMs', () => {
   let saved: string | undefined;
@@ -82,6 +82,36 @@ describe('runGradleTask cached toolchain wiring', () => {
         process.env.JVMSRC_JAVA_HOME = prevJavaHome;
       }
       fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('gradleIsolationArgs', () => {
+  test('shouldKeepGradleProjectStateOutsideProjectTreeWhenCacheRootIsSet', () => {
+    const prev = process.env.JVMSRC_CACHE_ROOT;
+    process.env.JVMSRC_CACHE_ROOT = '/tmp/jvmsrc-iso-cache';
+    try {
+      const result = gradleIsolationArgs('/work/proj');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const dir = result.args[result.args.indexOf('--project-cache-dir') + 1]!;
+      expect(dir.startsWith('/tmp/jvmsrc-iso-cache/projects/')).toBe(true);
+      expect(dir.endsWith('gradle-project-cache')).toBe(true);
+      expect(result.args).toContain('-Dorg.gradle.problems.report=false');
+    } finally {
+      if (prev === undefined) delete process.env.JVMSRC_CACHE_ROOT;
+      else process.env.JVMSRC_CACHE_ROOT = prev;
+    }
+  });
+
+  test('shouldFailWhenCacheRootIsRelative', () => {
+    const prev = process.env.JVMSRC_CACHE_ROOT;
+    process.env.JVMSRC_CACHE_ROOT = 'relative/cache';
+    try {
+      expect(gradleIsolationArgs('/work/proj').ok).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.JVMSRC_CACHE_ROOT;
+      else process.env.JVMSRC_CACHE_ROOT = prev;
     }
   });
 });

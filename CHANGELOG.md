@@ -31,72 +31,72 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 
 ### Features
 
-* add nested classes support ([58e7028](https://github.com/Sintexer/jvm-source-lens/commit/58e7028bea276229d4a7137b35cee7095cc520cb))
-* build-tool-neutral core ([c2d9687](https://github.com/Sintexer/jvm-source-lens/commit/c2d9687ee1468028410b045779d63a928ec1e00b))
-* bundle maven resolver logic ([e94a2b8](https://github.com/Sintexer/jvm-source-lens/commit/e94a2b8852b9426ad7aa00a112ecd65ec7ba7681))
-* finish eval harness ([df6b908](https://github.com/Sintexer/jvm-source-lens/commit/df6b9083305381bf283d677565847b8faae33521))
-* Kotlin KDoc, parameter names and method excerpts ([f59e346](https://github.com/Sintexer/jvm-source-lens/commit/f59e346e9779d9959bf9be9154650decaed6dedf))
-* Kotlin, Scala and Groovy source lookup with scenario and evals ([d6bfa95](https://github.com/Sintexer/jvm-source-lens/commit/d6bfa950a6e7f682738ac58ec32b642ac11b7e7a))
-* maven reactor modules and polish ([e9d199e](https://github.com/Sintexer/jvm-source-lens/commit/e9d199e124f4ea8a47ad6fad9936676fc5888c82))
-* optional CLI --project, includeTest from src/test paths, leaner MCP schemas ([cf72aa7](https://github.com/Sintexer/jvm-source-lens/commit/cf72aa7340c008ce8c7214e86e007f9d52c35cf2))
-* return original source for Kotlin, Scala and Groovy ([d3216b2](https://github.com/Sintexer/jvm-source-lens/commit/d3216b29a69c6508fa95a505d943a8e6a0e3536c))
-* unify source lookup flow ([ce84669](https://github.com/Sintexer/jvm-source-lens/commit/ce84669bc1c181f1cfad47ff741624e67c785425))
+* add nested classes support ([58e7028](https://github.com/Sintexer/jvmsrc/commit/58e7028bea276229d4a7137b35cee7095cc520cb))
+* build-tool-neutral core ([c2d9687](https://github.com/Sintexer/jvmsrc/commit/c2d9687ee1468028410b045779d63a928ec1e00b))
+* bundle maven resolver logic ([e94a2b8](https://github.com/Sintexer/jvmsrc/commit/e94a2b8852b9426ad7aa00a112ecd65ec7ba7681))
+* finish eval harness ([df6b908](https://github.com/Sintexer/jvmsrc/commit/df6b9083305381bf283d677565847b8faae33521))
+* Kotlin KDoc, parameter names and method excerpts ([f59e346](https://github.com/Sintexer/jvmsrc/commit/f59e346e9779d9959bf9be9154650decaed6dedf))
+* Kotlin, Scala and Groovy source lookup with scenario and evals ([d6bfa95](https://github.com/Sintexer/jvmsrc/commit/d6bfa950a6e7f682738ac58ec32b642ac11b7e7a))
+* maven reactor modules and polish ([e9d199e](https://github.com/Sintexer/jvmsrc/commit/e9d199e124f4ea8a47ad6fad9936676fc5888c82))
+* optional CLI --project, includeTest from src/test paths, leaner MCP schemas ([cf72aa7](https://github.com/Sintexer/jvmsrc/commit/cf72aa7340c008ce8c7214e86e007f9d52c35cf2))
+* return original source for Kotlin, Scala and Groovy ([d3216b2](https://github.com/Sintexer/jvmsrc/commit/d3216b29a69c6508fa95a505d943a8e6a0e3536c))
+* unify source lookup flow ([ce84669](https://github.com/Sintexer/jvmsrc/commit/ce84669bc1c181f1cfad47ff741624e67c785425))
 
 
 ### Bug Fixes
 
-* **ci:** add a retry for mcp publication action ([d9be686](https://github.com/Sintexer/jvm-source-lens/commit/d9be68616d22e1ebd7cc7b49562a9f9dc2353d24))
-* fix gaps in kotlin, maven jdk, local repo, shorten output ([b4bd658](https://github.com/Sintexer/jvm-source-lens/commit/b4bd658cbc30d675735b96ee0e6ab083c598023b))
-* fix java parser ([f3060d5](https://github.com/Sintexer/jvm-source-lens/commit/f3060d5cb9d4ac306625700c6c6530bcd088c59d))
+* **ci:** add a retry for mcp publication action ([d9be686](https://github.com/Sintexer/jvmsrc/commit/d9be68616d22e1ebd7cc7b49562a9f9dc2353d24))
+* fix gaps in kotlin, maven jdk, local repo, shorten output ([b4bd658](https://github.com/Sintexer/jvmsrc/commit/b4bd658cbc30d675735b96ee0e6ab083c598023b))
+* fix java parser ([f3060d5](https://github.com/Sintexer/jvmsrc/commit/f3060d5cb9d4ac306625700c6c6530bcd088c59d))
 
-## [1.19.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.18.1...v1.19.0) (2026-11-10)
+## [1.19.0](https://github.com/Sintexer/jvmsrc/compare/v1.18.1...v1.19.0) (2026-11-10)
 
 
 ### Features
 
-* show resolution notes for simple-name and lifted projectRoot inputs ([cfcff72](https://github.com/Sintexer/jvm-source-lens/commit/cfcff7290bc15472dd7e90ac8171e7448fc465cc))
+* show resolution notes for simple-name and lifted projectRoot inputs ([cfcff72](https://github.com/Sintexer/jvmsrc/commit/cfcff7290bc15472dd7e90ac8171e7448fc465cc))
 
 
 ### Bug Fixes
 
-* **security:** block large jar unzip and regex injection ([e858ec9](https://github.com/Sintexer/jvm-source-lens/commit/e858ec9a2ebd9ce6e6beac1ad3e83200eee3e023))
+* **security:** block large jar unzip and regex injection ([e858ec9](https://github.com/Sintexer/jvmsrc/commit/e858ec9a2ebd9ce6e6beac1ad3e83200eee3e023))
 
-## [1.18.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.18.0...v1.18.1) (2026-11-09)
+## [1.18.1](https://github.com/Sintexer/jvmsrc/compare/v1.18.0...v1.18.1) (2026-11-09)
 
 
 ### Bug Fixes
 
-* cut-out redundant legend from tool output ([5853176](https://github.com/Sintexer/jvm-source-lens/commit/58531763a8450667e58e850e43f9ce3832485691))
-* enhance error messages based on diagnostic ([eae5b0c](https://github.com/Sintexer/jvm-source-lens/commit/eae5b0cda229f6540ee05edeb078700dd186efdd))
+* cut-out redundant legend from tool output ([5853176](https://github.com/Sintexer/jvmsrc/commit/58531763a8450667e58e850e43f9ce3832485691))
+* enhance error messages based on diagnostic ([eae5b0c](https://github.com/Sintexer/jvmsrc/commit/eae5b0cda229f6540ee05edeb078700dd186efdd))
 
-## [1.18.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.17.1...v1.18.0) (2026-10-02)
+## [1.18.0](https://github.com/Sintexer/jvmsrc/compare/v1.17.1...v1.18.0) (2026-10-02)
 
 
 ### Features
 
-* keep resolve_dependencies query output minimal by default ([0c819bd](https://github.com/Sintexer/jvm-source-lens/commit/0c819bdb9ed7c73b53ca2c1d45e110042bf91dc3))
+* keep resolve_dependencies query output minimal by default ([0c819bd](https://github.com/Sintexer/jvmsrc/commit/0c819bdb9ed7c73b53ca2c1d45e110042bf91dc3))
 
 
 ### Bug Fixes
 
-* decompile classes from local-file jars without Maven coordinates ([e061189](https://github.com/Sintexer/jvm-source-lens/commit/e0611895c7fc7adb0c04a264b436aedffa13730f))
-* stop inferring Java 17 as the minimum for Gradle 8.8+ ([995565b](https://github.com/Sintexer/jvm-source-lens/commit/995565beef8f5e23bb99be79d7c16a49d0746d95))
+* decompile classes from local-file jars without Maven coordinates ([e061189](https://github.com/Sintexer/jvmsrc/commit/e0611895c7fc7adb0c04a264b436aedffa13730f))
+* stop inferring Java 17 as the minimum for Gradle 8.8+ ([995565b](https://github.com/Sintexer/jvmsrc/commit/995565beef8f5e23bb99be79d7c16a49d0746d95))
 
-## [1.17.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.17.0...v1.17.1) (2026-10-02)
+## [1.17.1](https://github.com/Sintexer/jvmsrc/compare/v1.17.0...v1.17.1) (2026-10-02)
 
 
 ### Bug Fixes
 
-* fix class resolution without passing the module ([7b9c175](https://github.com/Sintexer/jvm-source-lens/commit/7b9c175b17b1d8b356953fbcd724422b8393331f))
+* fix class resolution without passing the module ([7b9c175](https://github.com/Sintexer/jvmsrc/commit/7b9c175b17b1d8b356953fbcd724422b8393331f))
 
-## [1.17.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.16.0...v1.17.0) (2026-10-01)
+## [1.17.0](https://github.com/Sintexer/jvmsrc/compare/v1.16.0...v1.17.0) (2026-10-01)
 
 
 ### Features
 
-* bump versions ([d312683](https://github.com/Sintexer/jvm-source-lens/commit/d31268343fcfaeaf1ead835a4287d3ac34c09f2c))
-* implement better descriptions for mcp and work with falky input ([0fc2088](https://github.com/Sintexer/jvm-source-lens/commit/0fc2088d7c7f91ad97ee75fa2d0bf4e593c99914))
-* update installation readme ([9e759e4](https://github.com/Sintexer/jvm-source-lens/commit/9e759e4e173b33a0a1f59bf01939eb2085c8fc04))
+* bump versions ([d312683](https://github.com/Sintexer/jvmsrc/commit/d31268343fcfaeaf1ead835a4287d3ac34c09f2c))
+* implement better descriptions for mcp and work with falky input ([0fc2088](https://github.com/Sintexer/jvmsrc/commit/0fc2088d7c7f91ad97ee75fa2d0bf4e593c99914))
+* update installation readme ([9e759e4](https://github.com/Sintexer/jvmsrc/commit/9e759e4e173b33a0a1f59bf01939eb2085c8fc04))
 
 ### Breaking changes (documented after release)
 
@@ -104,133 +104,133 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 - **`projectRoot`:** a subdirectory of a Gradle project now resolves to the build root (nearest `gradlew` / `settings.gradle(.kts)`), not the given directory. `projectRoot` is optional on all MCP tools.
 - **`INVALID_FQN`:** also returned for a simple `className` that matches several classes. The `message` lists the candidates (`Retry with className set to one of these`).
 
-## [1.16.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.15.0...v1.16.0) (2026-09-08)
+## [1.16.0](https://github.com/Sintexer/jvmsrc/compare/v1.15.0...v1.16.0) (2026-09-08)
 
 
 ### Features
 
-* add compact fields and methods modifiers for compact out ([8a6b809](https://github.com/Sintexer/jvm-source-lens/commit/8a6b8093ca660d5a3a52be80b2ad4398d30e0b14))
-* improve mcp tools UX ([0d3683e](https://github.com/Sintexer/jvm-source-lens/commit/0d3683e8fa67368b4a18f7f4509f8bc844ca30f2))
+* add compact fields and methods modifiers for compact out ([8a6b809](https://github.com/Sintexer/jvmsrc/commit/8a6b8093ca660d5a3a52be80b2ad4398d30e0b14))
+* improve mcp tools UX ([0d3683e](https://github.com/Sintexer/jvmsrc/commit/0d3683e8fa67368b4a18f7f4509f8bc844ca30f2))
 
 
 ### Bug Fixes
 
-* fix duplicated modifiers in class structure output ([9548d08](https://github.com/Sintexer/jvm-source-lens/commit/9548d081ea9b11a26fa25b8624e884d754461447))
-* fix flaky ci tests for jdk roots ([6bc0400](https://github.com/Sintexer/jvm-source-lens/commit/6bc04001f4fce5b35fa32ebf92f762a341442d1a))
-* fix mcp returns full decompiled jar instead of single class ([fd1a371](https://github.com/Sintexer/jvm-source-lens/commit/fd1a371980e52ef1e8425a13c2426d0714ad6f3e))
+* fix duplicated modifiers in class structure output ([9548d08](https://github.com/Sintexer/jvmsrc/commit/9548d081ea9b11a26fa25b8624e884d754461447))
+* fix flaky ci tests for jdk roots ([6bc0400](https://github.com/Sintexer/jvmsrc/commit/6bc04001f4fce5b35fa32ebf92f762a341442d1a))
+* fix mcp returns full decompiled jar instead of single class ([fd1a371](https://github.com/Sintexer/jvmsrc/commit/fd1a371980e52ef1e8425a13c2426d0714ad6f3e))
 
-## [1.15.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.14.0...v1.15.0) (2026-08-04)
-
-
-### Features
-
-* enhance class not found messages with hints ([3fcaea8](https://github.com/Sintexer/jvm-source-lens/commit/3fcaea8c062555637c3f23d42f2ab593aee78425))
-
-## [1.14.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.13.1...v1.14.0) (2026-08-04)
+## [1.15.0](https://github.com/Sintexer/jvmsrc/compare/v1.14.0...v1.15.0) (2026-08-04)
 
 
 ### Features
 
-* add meaningful error message on failed gradle deps repo access ([1acdc1b](https://github.com/Sintexer/jvm-source-lens/commit/1acdc1bcde32263e1cb60b5e1662c414ccdd94b8))
+* enhance class not found messages with hints ([3fcaea8](https://github.com/Sintexer/jvmsrc/commit/3fcaea8c062555637c3f23d42f2ab593aee78425))
 
-## [1.13.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.13.0...v1.13.1) (2026-06-11)
+## [1.14.0](https://github.com/Sintexer/jvmsrc/compare/v1.13.1...v1.14.0) (2026-08-04)
+
+
+### Features
+
+* add meaningful error message on failed gradle deps repo access ([1acdc1b](https://github.com/Sintexer/jvmsrc/commit/1acdc1bcde32263e1cb60b5e1662c414ccdd94b8))
+
+## [1.13.1](https://github.com/Sintexer/jvmsrc/compare/v1.13.0...v1.13.1) (2026-06-11)
 
 
 ### Bug Fixes
 
-* fix tsc error ([1ae6e06](https://github.com/Sintexer/jvm-source-lens/commit/1ae6e0608c006ecd50c369891a56dc7ed607d24b))
+* fix tsc error ([1ae6e06](https://github.com/Sintexer/jvmsrc/commit/1ae6e0608c006ecd50c369891a56dc7ed607d24b))
 
-## [1.13.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.12.1...v1.13.0) (2026-06-11)
+## [1.13.0](https://github.com/Sintexer/jvmsrc/compare/v1.12.1...v1.13.0) (2026-06-11)
 
 
 ### Features
 
-* implement jdk-dirs config ([dc4f12c](https://github.com/Sintexer/jvm-source-lens/commit/dc4f12c807e5c1c278a8c7e68e6f292a49f77332))
+* implement jdk-dirs config ([dc4f12c](https://github.com/Sintexer/jvmsrc/commit/dc4f12c807e5c1c278a8c7e68e6f292a49f77332))
 
-## [1.12.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.12.0...v1.12.1) (2026-06-09)
+## [1.12.1](https://github.com/Sintexer/jvmsrc/compare/v1.12.0...v1.12.1) (2026-06-09)
 
 
 ### Bug Fixes
 
-* fix jdk resolution when multiple jdk available ([8e89e27](https://github.com/Sintexer/jvm-source-lens/commit/8e89e278955c700dbd6a1387487417ed2b135e61))
+* fix jdk resolution when multiple jdk available ([8e89e27](https://github.com/Sintexer/jvmsrc/commit/8e89e278955c700dbd6a1387487417ed2b135e61))
 
-## [1.12.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.11.1...v1.12.0) (2026-06-08)
+## [1.12.0](https://github.com/Sintexer/jvmsrc/compare/v1.11.1...v1.12.0) (2026-06-08)
 
 
 ### Features
 
-* add .jdks as a possible jdk location ([ad658fe](https://github.com/Sintexer/jvm-source-lens/commit/ad658fea3aa02710162846032ff1837c63de5a9e))
+* add .jdks as a possible jdk location ([ad658fe](https://github.com/Sintexer/jvmsrc/commit/ad658fea3aa02710162846032ff1837c63de5a9e))
 
-## [1.11.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.11.0...v1.11.1) (2026-06-05)
+## [1.11.1](https://github.com/Sintexer/jvmsrc/compare/v1.11.0...v1.11.1) (2026-06-05)
 
 
 ### Bug Fixes
 
-* fix cache not updated on gradle.properties change ([a125ef0](https://github.com/Sintexer/jvm-source-lens/commit/a125ef01bdd1ee4407d8f77fe8184c56e6a87ef8))
+* fix cache not updated on gradle.properties change ([a125ef0](https://github.com/Sintexer/jvmsrc/commit/a125ef01bdd1ee4407d8f77fe8184c56e6a87ef8))
 
-## [1.11.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.10.0...v1.11.0) (2026-06-04)
+## [1.11.0](https://github.com/Sintexer/jvmsrc/compare/v1.10.0...v1.11.0) (2026-06-04)
 
 
 ### Features
 
-* implement search in artifact tool and add new env var ([bbc4386](https://github.com/Sintexer/jvm-source-lens/commit/bbc438633d4670410493dec548fdcdcb28c76659))
-* smartly resolve appropriate jdk version per project ([b77f461](https://github.com/Sintexer/jvm-source-lens/commit/b77f461b9847b372a2f2e93be1da7a18c8bfec9f))
+* implement search in artifact tool and add new env var ([bbc4386](https://github.com/Sintexer/jvmsrc/commit/bbc438633d4670410493dec548fdcdcb28c76659))
+* smartly resolve appropriate jdk version per project ([b77f461](https://github.com/Sintexer/jvmsrc/commit/b77f461b9847b372a2f2e93be1da7a18c8bfec9f))
 
 
 ### Bug Fixes
 
-* fix tsc errors ([cbeaf9d](https://github.com/Sintexer/jvm-source-lens/commit/cbeaf9d4596907ce5920c7db5ce652ff4c201ce6))
+* fix tsc errors ([cbeaf9d](https://github.com/Sintexer/jvmsrc/commit/cbeaf9d4596907ce5920c7db5ce652ff4c201ce6))
 
-## [1.10.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.9.0...v1.10.0) (2026-05-29)
-
-
-### Features
-
-* make tools outputs concise by default ([3bbfb40](https://github.com/Sintexer/jvm-source-lens/commit/3bbfb401f1785ef0333562feef0b9ec14abf28ac))
-
-## [1.9.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.8.1...v1.9.0) (2026-05-29)
+## [1.10.0](https://github.com/Sintexer/jvmsrc/compare/v1.9.0...v1.10.0) (2026-05-29)
 
 
 ### Features
 
-* make search_classes default output as concise as possible ([759c06c](https://github.com/Sintexer/jvm-source-lens/commit/759c06c7857d6a7ebe91ea896d61192dcac5b1be))
-* reactor and enhance mcp instructions and tool descriptions ([c5bd9de](https://github.com/Sintexer/jvm-source-lens/commit/c5bd9ded30227a7874d3aba98e2ab692f85f56c6))
+* make tools outputs concise by default ([3bbfb40](https://github.com/Sintexer/jvmsrc/commit/3bbfb401f1785ef0333562feef0b9ec14abf28ac))
+
+## [1.9.0](https://github.com/Sintexer/jvmsrc/compare/v1.8.1...v1.9.0) (2026-05-29)
+
+
+### Features
+
+* make search_classes default output as concise as possible ([759c06c](https://github.com/Sintexer/jvmsrc/commit/759c06c7857d6a7ebe91ea896d61192dcac5b1be))
+* reactor and enhance mcp instructions and tool descriptions ([c5bd9de](https://github.com/Sintexer/jvmsrc/commit/c5bd9ded30227a7874d3aba98e2ab692f85f56c6))
 
 
 ### Bug Fixes
 
-* fix unstructured error on missing gradlew jar ([6ddf869](https://github.com/Sintexer/jvm-source-lens/commit/6ddf869cc955e4bbd254508c067cb9dfa9559bb1))
+* fix unstructured error on missing gradlew jar ([6ddf869](https://github.com/Sintexer/jvmsrc/commit/6ddf869cc955e4bbd254508c067cb9dfa9559bb1))
 
-## [1.8.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.8.0...v1.8.1) (2026-05-28)
-
-
-### Bug Fixes
-
-* fix failing tests ([25aa31c](https://github.com/Sintexer/jvm-source-lens/commit/25aa31cb1c0ee3e98dba5c22d7e866ab0d5f2bbf))
-* fix qs dependency version with vulnerability ([1ddb4bd](https://github.com/Sintexer/jvm-source-lens/commit/1ddb4bde2145c673c35510dc8b1ee4c8834f2305))
-
-## [1.8.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.7.0...v1.8.0) (2026-05-27)
-
-
-### Features
-
-* extend error and empty mcp result description ([86d4cd3](https://github.com/Sintexer/jvm-source-lens/commit/86d4cd3e2a558f8f4b9a482011ad3e667da70207))
-* refactor MCP description ([e3b2cf8](https://github.com/Sintexer/jvm-source-lens/commit/e3b2cf87f1f122d7d3f664270301094ebd13ad66))
-* remove SKILL.md as mcp description is good enough on its own ([f181908](https://github.com/Sintexer/jvm-source-lens/commit/f1819085cb495f2c9e9cf1428f758b07e763a54f))
-* update core deps versions ([ef0c4ed](https://github.com/Sintexer/jvm-source-lens/commit/ef0c4edb4c951a27b49072dc4f3f2549d686a9eb))
-
-## [1.7.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.6.0...v1.7.0) (2026-05-22)
-
-
-### Features
-
-* support concise formats by default ([1dc449a](https://github.com/Sintexer/jvm-source-lens/commit/1dc449a38dbb2455c96f3772a374aac3fb8b0f8f))
+## [1.8.1](https://github.com/Sintexer/jvmsrc/compare/v1.8.0...v1.8.1) (2026-05-28)
 
 
 ### Bug Fixes
 
-* cover test class path resolution ([659fec5](https://github.com/Sintexer/jvm-source-lens/commit/659fec54909376f5e2165c39b227491b3c6d1474))
-* fix linter error in tests ([1c15228](https://github.com/Sintexer/jvm-source-lens/commit/1c15228d0f78a4cc21d143c2657c81a823874430))
+* fix failing tests ([25aa31c](https://github.com/Sintexer/jvmsrc/commit/25aa31cb1c0ee3e98dba5c22d7e866ab0d5f2bbf))
+* fix qs dependency version with vulnerability ([1ddb4bd](https://github.com/Sintexer/jvmsrc/commit/1ddb4bde2145c673c35510dc8b1ee4c8834f2305))
+
+## [1.8.0](https://github.com/Sintexer/jvmsrc/compare/v1.7.0...v1.8.0) (2026-05-27)
+
+
+### Features
+
+* extend error and empty mcp result description ([86d4cd3](https://github.com/Sintexer/jvmsrc/commit/86d4cd3e2a558f8f4b9a482011ad3e667da70207))
+* refactor MCP description ([e3b2cf8](https://github.com/Sintexer/jvmsrc/commit/e3b2cf87f1f122d7d3f664270301094ebd13ad66))
+* remove SKILL.md as mcp description is good enough on its own ([f181908](https://github.com/Sintexer/jvmsrc/commit/f1819085cb495f2c9e9cf1428f758b07e763a54f))
+* update core deps versions ([ef0c4ed](https://github.com/Sintexer/jvmsrc/commit/ef0c4edb4c951a27b49072dc4f3f2549d686a9eb))
+
+## [1.7.0](https://github.com/Sintexer/jvmsrc/compare/v1.6.0...v1.7.0) (2026-05-22)
+
+
+### Features
+
+* support concise formats by default ([1dc449a](https://github.com/Sintexer/jvmsrc/commit/1dc449a38dbb2455c96f3772a374aac3fb8b0f8f))
+
+
+### Bug Fixes
+
+* cover test class path resolution ([659fec5](https://github.com/Sintexer/jvmsrc/commit/659fec54909376f5e2165c39b227491b3c6d1474))
+* fix linter error in tests ([1c15228](https://github.com/Sintexer/jvmsrc/commit/1c15228d0f78a4cc21d143c2657c81a823874430))
 
 ### Breaking changes (documented after release)
 
@@ -245,277 +245,277 @@ This file is updated by **[Release Please](https://github.com/googleapis/release
 - MCP optional **`full`** and **`get_class_structure`** optional **`scope`** on all inspection tools.
 - **`src/guided-response/`:** centralized agent recovery copy for CLASS_NOT_FOUND, empty search, decompiled source warnings, and related outcomes.
 
-## [1.6.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.5.0...v1.6.0) (2026-05-19)
+## [1.6.0](https://github.com/Sintexer/jvmsrc/compare/v1.5.0...v1.6.0) (2026-05-19)
 
 
 ### Features
 
-* add class inspect with optional sources download ([e91fa1b](https://github.com/Sintexer/jvm-source-lens/commit/e91fa1b0c2831c535530f9471631b9a01dcfb3e6))
-* add failure diagnostics logs ([2cec4cd](https://github.com/Sintexer/jvm-source-lens/commit/2cec4cd0a71f25cb61e96f961e8ac076518cddac))
-* add fin_in_class_source tool ([27b2a00](https://github.com/Sintexer/jvm-source-lens/commit/27b2a00a60b411c9ce7a410626c0a13b6104f30c))
-* add find substr to roadmap ([5953ace](https://github.com/Sintexer/jvm-source-lens/commit/5953acea297ed6d6c10ee285db897d3d68a46b7c))
-* add get_class_structure include ([06ae710](https://github.com/Sintexer/jvm-source-lens/commit/06ae710efcc1d659e00f86f176057d73db5d07ba))
-* add get_class_structure tool ([d7bd7bc](https://github.com/Sintexer/jvm-source-lens/commit/d7bd7bcb9e362b7bedae7176b1e045021e0b560f))
-* add get-method-signature tool ([bfd2d75](https://github.com/Sintexer/jvm-source-lens/commit/bfd2d75a4a7d6d8f9ea8d8b400b8633cf24cd1b4))
-* add list_modules tool ([6ee5767](https://github.com/Sintexer/jvm-source-lens/commit/6ee57675f251fd05e6c33394da6c4e79ebf7dcab))
-* add mcp server.json ([a29b0bd](https://github.com/Sintexer/jvm-source-lens/commit/a29b0bdc6310c361dc94c9a868ed62f34b1f2c25))
-* add optional method names parameters for tools, add SKILL.md ([7cf2a61](https://github.com/Sintexer/jvm-source-lens/commit/7cf2a61c80f2435a39f21bad97c5f3823fe6aadf))
-* add seach_classes tool ([2642e36](https://github.com/Sintexer/jvm-source-lens/commit/2642e36cfab33795a662cb3a18465a8a88254b32))
-* add skill installation ([359f7b0](https://github.com/Sintexer/jvm-source-lens/commit/359f7b0460b03ce884dca540e2d50d309339b482))
-* add skill installation ([65642c6](https://github.com/Sintexer/jvm-source-lens/commit/65642c6995906e8841a1aa9b2fa38e312aa135e5))
-* convert POC to real implementation ([3f86084](https://github.com/Sintexer/jvm-source-lens/commit/3f8608476c371ae881d5b18bd769c6542c4cca6c))
-* cover gradle timeout, add smoke tests ([c6f2f34](https://github.com/Sintexer/jvm-source-lens/commit/c6f2f3431a02b85fa42892726730e4c377beb7ad))
-* cover security gaps ([3debaa9](https://github.com/Sintexer/jvm-source-lens/commit/3debaa93b63798b7427f92266a3d7135d00387e9))
-* finish mvp ([27ccb74](https://github.com/Sintexer/jvm-source-lens/commit/27ccb74e847f476bbeebf1679fd8ba8fe18c32f9))
-* implement cache ([cce56fe](https://github.com/Sintexer/jvm-source-lens/commit/cce56fe373bd3d93ecde5112d9f05834549b130f))
-* implement class decompilation ([fcb163c](https://github.com/Sintexer/jvm-source-lens/commit/fcb163c3f6b1cd919267dfd47886963dea20ddb2))
-* implement class method meta extraction ([5c43c0e](https://github.com/Sintexer/jvm-source-lens/commit/5c43c0ece8a45efcf8608bcd21afaf8993b3ec99))
-* implement full text serach ([f01016c](https://github.com/Sintexer/jvm-source-lens/commit/f01016cec8811a25001cf95629f4368f5dbb86ea))
-* implement get --json flag ([eb60390](https://github.com/Sintexer/jvm-source-lens/commit/eb60390bb7a1a4719a726550c7c7e7562cad80f0))
-* implement get class source ([ae22640](https://github.com/Sintexer/jvm-source-lens/commit/ae2264012df4a9259bf3a67a45875bd2b264096b))
-* implement inspect method through bytecode ([365599c](https://github.com/Sintexer/jvm-source-lens/commit/365599ca7c9ea8c384c1199c36a55631df80e31a))
-* implement progress indicator ([d132d73](https://github.com/Sintexer/jvm-source-lens/commit/d132d73de4030ad380ab55411f7e2fdbcff169f9))
-* implement release pipeline ([3d9592b](https://github.com/Sintexer/jvm-source-lens/commit/3d9592b3c8fd7d4d98ec71965bb1989991f2d7d1))
-* implement release pipeline ([980d61e](https://github.com/Sintexer/jvm-source-lens/commit/980d61e1df1d2a972c7559e10b36d048f0cc36fc))
-* implemnt mcp get class function ([4b98f97](https://github.com/Sintexer/jvm-source-lens/commit/4b98f979a23ee1cca607551af3bc4c391f94b347))
-* init cli tool ([c535d65](https://github.com/Sintexer/jvm-source-lens/commit/c535d650c93851687b21203e5f2b4798d41b20e9))
-* merge mcp tools together ([85c0aac](https://github.com/Sintexer/jvm-source-lens/commit/85c0aace727700b599cc420e3b259e100a8878e1))
-* POC ([3cb1d92](https://github.com/Sintexer/jvm-source-lens/commit/3cb1d92d9fcacca3c7dc43c67089bef5dcd96137))
-* pre-release polish ([131d8a7](https://github.com/Sintexer/jvm-source-lens/commit/131d8a7c2a147cc4abe48c2826f9b50c415456cc))
-* support mcp resolve_dependencies ([7d443a3](https://github.com/Sintexer/jvm-source-lens/commit/7d443a3c48176fdfd3cb5c1e81b049a51836cde0))
-* support node &gt;=20 ([2e3bb17](https://github.com/Sintexer/jvm-source-lens/commit/2e3bb17a278964a902364b70196c7ae5af3e6764))
-* support npm release ([9beb305](https://github.com/Sintexer/jvm-source-lens/commit/9beb305404ccd7141abef1cfa80c7f5b912ffced))
-* support npm release ([f1f89d0](https://github.com/Sintexer/jvm-source-lens/commit/f1f89d077669ccf2ddf1103b22fcb1669f1aed5f))
-* switch to default master branch, no develop ([203b475](https://github.com/Sintexer/jvm-source-lens/commit/203b4754dfa6d27fab4f357737fac468991115a8))
-* update node to 24 ([fe978ed](https://github.com/Sintexer/jvm-source-lens/commit/fe978ed33a3d7e3fcb9a7eef8cdc350e424f944a))
-* update node to 24 ([909dd6a](https://github.com/Sintexer/jvm-source-lens/commit/909dd6a7fa120c64d8812a4a60381fb8321f7c83))
-* update README preface ([9dd9c02](https://github.com/Sintexer/jvm-source-lens/commit/9dd9c02e0cc88ab2b0f977de6c4c35b1867e2b87))
-* update roadmap with future mcp features ([3b01d44](https://github.com/Sintexer/jvm-source-lens/commit/3b01d44d8c8366d91bb53b6ca31bba97813ff50e))
-* update spec, add caching details ([81c4578](https://github.com/Sintexer/jvm-source-lens/commit/81c45782e73c999e0ad699b9ed0b5544d816ff6a))
+* add class inspect with optional sources download ([e91fa1b](https://github.com/Sintexer/jvmsrc/commit/e91fa1b0c2831c535530f9471631b9a01dcfb3e6))
+* add failure diagnostics logs ([2cec4cd](https://github.com/Sintexer/jvmsrc/commit/2cec4cd0a71f25cb61e96f961e8ac076518cddac))
+* add fin_in_class_source tool ([27b2a00](https://github.com/Sintexer/jvmsrc/commit/27b2a00a60b411c9ce7a410626c0a13b6104f30c))
+* add find substr to roadmap ([5953ace](https://github.com/Sintexer/jvmsrc/commit/5953acea297ed6d6c10ee285db897d3d68a46b7c))
+* add get_class_structure include ([06ae710](https://github.com/Sintexer/jvmsrc/commit/06ae710efcc1d659e00f86f176057d73db5d07ba))
+* add get_class_structure tool ([d7bd7bc](https://github.com/Sintexer/jvmsrc/commit/d7bd7bcb9e362b7bedae7176b1e045021e0b560f))
+* add get-method-signature tool ([bfd2d75](https://github.com/Sintexer/jvmsrc/commit/bfd2d75a4a7d6d8f9ea8d8b400b8633cf24cd1b4))
+* add list_modules tool ([6ee5767](https://github.com/Sintexer/jvmsrc/commit/6ee57675f251fd05e6c33394da6c4e79ebf7dcab))
+* add mcp server.json ([a29b0bd](https://github.com/Sintexer/jvmsrc/commit/a29b0bdc6310c361dc94c9a868ed62f34b1f2c25))
+* add optional method names parameters for tools, add SKILL.md ([7cf2a61](https://github.com/Sintexer/jvmsrc/commit/7cf2a61c80f2435a39f21bad97c5f3823fe6aadf))
+* add seach_classes tool ([2642e36](https://github.com/Sintexer/jvmsrc/commit/2642e36cfab33795a662cb3a18465a8a88254b32))
+* add skill installation ([359f7b0](https://github.com/Sintexer/jvmsrc/commit/359f7b0460b03ce884dca540e2d50d309339b482))
+* add skill installation ([65642c6](https://github.com/Sintexer/jvmsrc/commit/65642c6995906e8841a1aa9b2fa38e312aa135e5))
+* convert POC to real implementation ([3f86084](https://github.com/Sintexer/jvmsrc/commit/3f8608476c371ae881d5b18bd769c6542c4cca6c))
+* cover gradle timeout, add smoke tests ([c6f2f34](https://github.com/Sintexer/jvmsrc/commit/c6f2f3431a02b85fa42892726730e4c377beb7ad))
+* cover security gaps ([3debaa9](https://github.com/Sintexer/jvmsrc/commit/3debaa93b63798b7427f92266a3d7135d00387e9))
+* finish mvp ([27ccb74](https://github.com/Sintexer/jvmsrc/commit/27ccb74e847f476bbeebf1679fd8ba8fe18c32f9))
+* implement cache ([cce56fe](https://github.com/Sintexer/jvmsrc/commit/cce56fe373bd3d93ecde5112d9f05834549b130f))
+* implement class decompilation ([fcb163c](https://github.com/Sintexer/jvmsrc/commit/fcb163c3f6b1cd919267dfd47886963dea20ddb2))
+* implement class method meta extraction ([5c43c0e](https://github.com/Sintexer/jvmsrc/commit/5c43c0ece8a45efcf8608bcd21afaf8993b3ec99))
+* implement full text serach ([f01016c](https://github.com/Sintexer/jvmsrc/commit/f01016cec8811a25001cf95629f4368f5dbb86ea))
+* implement get --json flag ([eb60390](https://github.com/Sintexer/jvmsrc/commit/eb60390bb7a1a4719a726550c7c7e7562cad80f0))
+* implement get class source ([ae22640](https://github.com/Sintexer/jvmsrc/commit/ae2264012df4a9259bf3a67a45875bd2b264096b))
+* implement inspect method through bytecode ([365599c](https://github.com/Sintexer/jvmsrc/commit/365599ca7c9ea8c384c1199c36a55631df80e31a))
+* implement progress indicator ([d132d73](https://github.com/Sintexer/jvmsrc/commit/d132d73de4030ad380ab55411f7e2fdbcff169f9))
+* implement release pipeline ([3d9592b](https://github.com/Sintexer/jvmsrc/commit/3d9592b3c8fd7d4d98ec71965bb1989991f2d7d1))
+* implement release pipeline ([980d61e](https://github.com/Sintexer/jvmsrc/commit/980d61e1df1d2a972c7559e10b36d048f0cc36fc))
+* implemnt mcp get class function ([4b98f97](https://github.com/Sintexer/jvmsrc/commit/4b98f979a23ee1cca607551af3bc4c391f94b347))
+* init cli tool ([c535d65](https://github.com/Sintexer/jvmsrc/commit/c535d650c93851687b21203e5f2b4798d41b20e9))
+* merge mcp tools together ([85c0aac](https://github.com/Sintexer/jvmsrc/commit/85c0aace727700b599cc420e3b259e100a8878e1))
+* POC ([3cb1d92](https://github.com/Sintexer/jvmsrc/commit/3cb1d92d9fcacca3c7dc43c67089bef5dcd96137))
+* pre-release polish ([131d8a7](https://github.com/Sintexer/jvmsrc/commit/131d8a7c2a147cc4abe48c2826f9b50c415456cc))
+* support mcp resolve_dependencies ([7d443a3](https://github.com/Sintexer/jvmsrc/commit/7d443a3c48176fdfd3cb5c1e81b049a51836cde0))
+* support node &gt;=20 ([2e3bb17](https://github.com/Sintexer/jvmsrc/commit/2e3bb17a278964a902364b70196c7ae5af3e6764))
+* support npm release ([9beb305](https://github.com/Sintexer/jvmsrc/commit/9beb305404ccd7141abef1cfa80c7f5b912ffced))
+* support npm release ([f1f89d0](https://github.com/Sintexer/jvmsrc/commit/f1f89d077669ccf2ddf1103b22fcb1669f1aed5f))
+* switch to default master branch, no develop ([203b475](https://github.com/Sintexer/jvmsrc/commit/203b4754dfa6d27fab4f357737fac468991115a8))
+* update node to 24 ([fe978ed](https://github.com/Sintexer/jvmsrc/commit/fe978ed33a3d7e3fcb9a7eef8cdc350e424f944a))
+* update node to 24 ([909dd6a](https://github.com/Sintexer/jvmsrc/commit/909dd6a7fa120c64d8812a4a60381fb8321f7c83))
+* update README preface ([9dd9c02](https://github.com/Sintexer/jvmsrc/commit/9dd9c02e0cc88ab2b0f977de6c4c35b1867e2b87))
+* update roadmap with future mcp features ([3b01d44](https://github.com/Sintexer/jvmsrc/commit/3b01d44d8c8366d91bb53b6ca31bba97813ff50e))
+* update spec, add caching details ([81c4578](https://github.com/Sintexer/jvmsrc/commit/81c45782e73c999e0ad699b9ed0b5544d816ff6a))
 
 
 ### Bug Fixes
 
-* add mcp-publisher auto ci ([5692a4f](https://github.com/Sintexer/jvm-source-lens/commit/5692a4f89cbe2f8ee75927406165bccb132987d4))
-* add write outside home dir guard ([de6187a](https://github.com/Sintexer/jvm-source-lens/commit/de6187a2cb304fdb715c2d2af7b5e16ceacb04d0))
-* avoid skipping the npm publish ([dd51fa8](https://github.com/Sintexer/jvm-source-lens/commit/dd51fa82dd592cd093355998d8ae007a82836d1a))
-* fix building with plain node ([2ef8315](https://github.com/Sintexer/jvm-source-lens/commit/2ef83157052fb8ec303a2919746cecf4fc936ca0))
-* fix prod build issues ([d8741f2](https://github.com/Sintexer/jvm-source-lens/commit/d8741f24d5b56dfe0e3b0fccd65f6a2146369c6c))
-* fix release tag name ([b305696](https://github.com/Sintexer/jvm-source-lens/commit/b305696f459f874bd5230880293f7741f3df6d33))
-* fix release-please ([dc049dc](https://github.com/Sintexer/jvm-source-lens/commit/dc049dcc2524a67f3ad6b67d03aead67e717f1cc))
-* fix server.json not updated on release ([785c10d](https://github.com/Sintexer/jvm-source-lens/commit/785c10d295557518bd61a89017393c32f963cfd7))
-* fix tests after access refactoring ([07fe089](https://github.com/Sintexer/jvm-source-lens/commit/07fe0890de616a9eb68430ae7d1963ab0c0f756a))
-* fix the npm publish problem ([cf6beae](https://github.com/Sintexer/jvm-source-lens/commit/cf6beaeedfeeb455aa842343e2aac804e563eca9))
-* fix the npm release ([0903321](https://github.com/Sintexer/jvm-source-lens/commit/090332135bfae76cff15cca0c7c721b97f7a317c))
-* fix timeout in tests ([0818369](https://github.com/Sintexer/jvm-source-lens/commit/08183698c8df956b83049695daec9340e02f7ebb))
-* fix windows compatibility ([5d0cfb1](https://github.com/Sintexer/jvm-source-lens/commit/5d0cfb143a1d62de562958c7d133185ed7608c1b))
-* improve windows compatibility ([5cfe0db](https://github.com/Sintexer/jvm-source-lens/commit/5cfe0db2c55fc9bfa8367c84743cad959ff85a24))
-* remove package.lock, switch to bun only ([215ae8f](https://github.com/Sintexer/jvm-source-lens/commit/215ae8ff9c3ef6cb5ea6f19d2f9cee4e9fd08b42))
-* strip env when spawning gradle subprocess ([59d95fb](https://github.com/Sintexer/jvm-source-lens/commit/59d95fb35755212020c8cc1d7b47a0ceb93e0fc2))
-* switch to trusted publisher npm publication ([c99d4b4](https://github.com/Sintexer/jvm-source-lens/commit/c99d4b428b4b42464ecc479408200d58c169e94f))
+* add mcp-publisher auto ci ([5692a4f](https://github.com/Sintexer/jvmsrc/commit/5692a4f89cbe2f8ee75927406165bccb132987d4))
+* add write outside home dir guard ([de6187a](https://github.com/Sintexer/jvmsrc/commit/de6187a2cb304fdb715c2d2af7b5e16ceacb04d0))
+* avoid skipping the npm publish ([dd51fa8](https://github.com/Sintexer/jvmsrc/commit/dd51fa82dd592cd093355998d8ae007a82836d1a))
+* fix building with plain node ([2ef8315](https://github.com/Sintexer/jvmsrc/commit/2ef83157052fb8ec303a2919746cecf4fc936ca0))
+* fix prod build issues ([d8741f2](https://github.com/Sintexer/jvmsrc/commit/d8741f24d5b56dfe0e3b0fccd65f6a2146369c6c))
+* fix release tag name ([b305696](https://github.com/Sintexer/jvmsrc/commit/b305696f459f874bd5230880293f7741f3df6d33))
+* fix release-please ([dc049dc](https://github.com/Sintexer/jvmsrc/commit/dc049dcc2524a67f3ad6b67d03aead67e717f1cc))
+* fix server.json not updated on release ([785c10d](https://github.com/Sintexer/jvmsrc/commit/785c10d295557518bd61a89017393c32f963cfd7))
+* fix tests after access refactoring ([07fe089](https://github.com/Sintexer/jvmsrc/commit/07fe0890de616a9eb68430ae7d1963ab0c0f756a))
+* fix the npm publish problem ([cf6beae](https://github.com/Sintexer/jvmsrc/commit/cf6beaeedfeeb455aa842343e2aac804e563eca9))
+* fix the npm release ([0903321](https://github.com/Sintexer/jvmsrc/commit/090332135bfae76cff15cca0c7c721b97f7a317c))
+* fix timeout in tests ([0818369](https://github.com/Sintexer/jvmsrc/commit/08183698c8df956b83049695daec9340e02f7ebb))
+* fix windows compatibility ([5d0cfb1](https://github.com/Sintexer/jvmsrc/commit/5d0cfb143a1d62de562958c7d133185ed7608c1b))
+* improve windows compatibility ([5cfe0db](https://github.com/Sintexer/jvmsrc/commit/5cfe0db2c55fc9bfa8367c84743cad959ff85a24))
+* remove package.lock, switch to bun only ([215ae8f](https://github.com/Sintexer/jvmsrc/commit/215ae8ff9c3ef6cb5ea6f19d2f9cee4e9fd08b42))
+* strip env when spawning gradle subprocess ([59d95fb](https://github.com/Sintexer/jvmsrc/commit/59d95fb35755212020c8cc1d7b47a0ceb93e0fc2))
+* switch to trusted publisher npm publication ([c99d4b4](https://github.com/Sintexer/jvmsrc/commit/c99d4b428b4b42464ecc479408200d58c169e94f))
 
-## [1.5.0](https://github.com/Sintexer/jvm-source-lens/compare/jvmsrc-v1.4.1...jvmsrc-v1.5.0) (2026-05-19)
+## [1.5.0](https://github.com/Sintexer/jvmsrc/compare/jvmsrc-v1.4.1...jvmsrc-v1.5.0) (2026-05-19)
 
 
 ### Features
 
-* add class inspect with optional sources download ([e91fa1b](https://github.com/Sintexer/jvm-source-lens/commit/e91fa1b0c2831c535530f9471631b9a01dcfb3e6))
-* add failure diagnostics logs ([2cec4cd](https://github.com/Sintexer/jvm-source-lens/commit/2cec4cd0a71f25cb61e96f961e8ac076518cddac))
-* add fin_in_class_source tool ([27b2a00](https://github.com/Sintexer/jvm-source-lens/commit/27b2a00a60b411c9ce7a410626c0a13b6104f30c))
-* add find substr to roadmap ([5953ace](https://github.com/Sintexer/jvm-source-lens/commit/5953acea297ed6d6c10ee285db897d3d68a46b7c))
-* add get_class_structure include ([06ae710](https://github.com/Sintexer/jvm-source-lens/commit/06ae710efcc1d659e00f86f176057d73db5d07ba))
-* add get_class_structure tool ([d7bd7bc](https://github.com/Sintexer/jvm-source-lens/commit/d7bd7bcb9e362b7bedae7176b1e045021e0b560f))
-* add get-method-signature tool ([bfd2d75](https://github.com/Sintexer/jvm-source-lens/commit/bfd2d75a4a7d6d8f9ea8d8b400b8633cf24cd1b4))
-* add list_modules tool ([6ee5767](https://github.com/Sintexer/jvm-source-lens/commit/6ee57675f251fd05e6c33394da6c4e79ebf7dcab))
-* add mcp server.json ([a29b0bd](https://github.com/Sintexer/jvm-source-lens/commit/a29b0bdc6310c361dc94c9a868ed62f34b1f2c25))
-* add optional method names parameters for tools, add SKILL.md ([7cf2a61](https://github.com/Sintexer/jvm-source-lens/commit/7cf2a61c80f2435a39f21bad97c5f3823fe6aadf))
-* add seach_classes tool ([2642e36](https://github.com/Sintexer/jvm-source-lens/commit/2642e36cfab33795a662cb3a18465a8a88254b32))
-* add skill installation ([359f7b0](https://github.com/Sintexer/jvm-source-lens/commit/359f7b0460b03ce884dca540e2d50d309339b482))
-* add skill installation ([65642c6](https://github.com/Sintexer/jvm-source-lens/commit/65642c6995906e8841a1aa9b2fa38e312aa135e5))
-* convert POC to real implementation ([3f86084](https://github.com/Sintexer/jvm-source-lens/commit/3f8608476c371ae881d5b18bd769c6542c4cca6c))
-* cover gradle timeout, add smoke tests ([c6f2f34](https://github.com/Sintexer/jvm-source-lens/commit/c6f2f3431a02b85fa42892726730e4c377beb7ad))
-* cover security gaps ([3debaa9](https://github.com/Sintexer/jvm-source-lens/commit/3debaa93b63798b7427f92266a3d7135d00387e9))
-* finish mvp ([27ccb74](https://github.com/Sintexer/jvm-source-lens/commit/27ccb74e847f476bbeebf1679fd8ba8fe18c32f9))
-* implement cache ([cce56fe](https://github.com/Sintexer/jvm-source-lens/commit/cce56fe373bd3d93ecde5112d9f05834549b130f))
-* implement class decompilation ([fcb163c](https://github.com/Sintexer/jvm-source-lens/commit/fcb163c3f6b1cd919267dfd47886963dea20ddb2))
-* implement class method meta extraction ([5c43c0e](https://github.com/Sintexer/jvm-source-lens/commit/5c43c0ece8a45efcf8608bcd21afaf8993b3ec99))
-* implement full text serach ([f01016c](https://github.com/Sintexer/jvm-source-lens/commit/f01016cec8811a25001cf95629f4368f5dbb86ea))
-* implement get --json flag ([eb60390](https://github.com/Sintexer/jvm-source-lens/commit/eb60390bb7a1a4719a726550c7c7e7562cad80f0))
-* implement get class source ([ae22640](https://github.com/Sintexer/jvm-source-lens/commit/ae2264012df4a9259bf3a67a45875bd2b264096b))
-* implement inspect method through bytecode ([365599c](https://github.com/Sintexer/jvm-source-lens/commit/365599ca7c9ea8c384c1199c36a55631df80e31a))
-* implement progress indicator ([d132d73](https://github.com/Sintexer/jvm-source-lens/commit/d132d73de4030ad380ab55411f7e2fdbcff169f9))
-* implement release pipeline ([3d9592b](https://github.com/Sintexer/jvm-source-lens/commit/3d9592b3c8fd7d4d98ec71965bb1989991f2d7d1))
-* implement release pipeline ([980d61e](https://github.com/Sintexer/jvm-source-lens/commit/980d61e1df1d2a972c7559e10b36d048f0cc36fc))
-* implemnt mcp get class function ([4b98f97](https://github.com/Sintexer/jvm-source-lens/commit/4b98f979a23ee1cca607551af3bc4c391f94b347))
-* init cli tool ([c535d65](https://github.com/Sintexer/jvm-source-lens/commit/c535d650c93851687b21203e5f2b4798d41b20e9))
-* merge mcp tools together ([85c0aac](https://github.com/Sintexer/jvm-source-lens/commit/85c0aace727700b599cc420e3b259e100a8878e1))
-* POC ([3cb1d92](https://github.com/Sintexer/jvm-source-lens/commit/3cb1d92d9fcacca3c7dc43c67089bef5dcd96137))
-* pre-release polish ([131d8a7](https://github.com/Sintexer/jvm-source-lens/commit/131d8a7c2a147cc4abe48c2826f9b50c415456cc))
-* support mcp resolve_dependencies ([7d443a3](https://github.com/Sintexer/jvm-source-lens/commit/7d443a3c48176fdfd3cb5c1e81b049a51836cde0))
-* support node &gt;=20 ([2e3bb17](https://github.com/Sintexer/jvm-source-lens/commit/2e3bb17a278964a902364b70196c7ae5af3e6764))
-* support npm release ([9beb305](https://github.com/Sintexer/jvm-source-lens/commit/9beb305404ccd7141abef1cfa80c7f5b912ffced))
-* support npm release ([f1f89d0](https://github.com/Sintexer/jvm-source-lens/commit/f1f89d077669ccf2ddf1103b22fcb1669f1aed5f))
-* switch to default master branch, no develop ([203b475](https://github.com/Sintexer/jvm-source-lens/commit/203b4754dfa6d27fab4f357737fac468991115a8))
-* update node to 24 ([fe978ed](https://github.com/Sintexer/jvm-source-lens/commit/fe978ed33a3d7e3fcb9a7eef8cdc350e424f944a))
-* update node to 24 ([909dd6a](https://github.com/Sintexer/jvm-source-lens/commit/909dd6a7fa120c64d8812a4a60381fb8321f7c83))
-* update README preface ([9dd9c02](https://github.com/Sintexer/jvm-source-lens/commit/9dd9c02e0cc88ab2b0f977de6c4c35b1867e2b87))
-* update roadmap with future mcp features ([3b01d44](https://github.com/Sintexer/jvm-source-lens/commit/3b01d44d8c8366d91bb53b6ca31bba97813ff50e))
-* update spec, add caching details ([81c4578](https://github.com/Sintexer/jvm-source-lens/commit/81c45782e73c999e0ad699b9ed0b5544d816ff6a))
+* add class inspect with optional sources download ([e91fa1b](https://github.com/Sintexer/jvmsrc/commit/e91fa1b0c2831c535530f9471631b9a01dcfb3e6))
+* add failure diagnostics logs ([2cec4cd](https://github.com/Sintexer/jvmsrc/commit/2cec4cd0a71f25cb61e96f961e8ac076518cddac))
+* add fin_in_class_source tool ([27b2a00](https://github.com/Sintexer/jvmsrc/commit/27b2a00a60b411c9ce7a410626c0a13b6104f30c))
+* add find substr to roadmap ([5953ace](https://github.com/Sintexer/jvmsrc/commit/5953acea297ed6d6c10ee285db897d3d68a46b7c))
+* add get_class_structure include ([06ae710](https://github.com/Sintexer/jvmsrc/commit/06ae710efcc1d659e00f86f176057d73db5d07ba))
+* add get_class_structure tool ([d7bd7bc](https://github.com/Sintexer/jvmsrc/commit/d7bd7bcb9e362b7bedae7176b1e045021e0b560f))
+* add get-method-signature tool ([bfd2d75](https://github.com/Sintexer/jvmsrc/commit/bfd2d75a4a7d6d8f9ea8d8b400b8633cf24cd1b4))
+* add list_modules tool ([6ee5767](https://github.com/Sintexer/jvmsrc/commit/6ee57675f251fd05e6c33394da6c4e79ebf7dcab))
+* add mcp server.json ([a29b0bd](https://github.com/Sintexer/jvmsrc/commit/a29b0bdc6310c361dc94c9a868ed62f34b1f2c25))
+* add optional method names parameters for tools, add SKILL.md ([7cf2a61](https://github.com/Sintexer/jvmsrc/commit/7cf2a61c80f2435a39f21bad97c5f3823fe6aadf))
+* add seach_classes tool ([2642e36](https://github.com/Sintexer/jvmsrc/commit/2642e36cfab33795a662cb3a18465a8a88254b32))
+* add skill installation ([359f7b0](https://github.com/Sintexer/jvmsrc/commit/359f7b0460b03ce884dca540e2d50d309339b482))
+* add skill installation ([65642c6](https://github.com/Sintexer/jvmsrc/commit/65642c6995906e8841a1aa9b2fa38e312aa135e5))
+* convert POC to real implementation ([3f86084](https://github.com/Sintexer/jvmsrc/commit/3f8608476c371ae881d5b18bd769c6542c4cca6c))
+* cover gradle timeout, add smoke tests ([c6f2f34](https://github.com/Sintexer/jvmsrc/commit/c6f2f3431a02b85fa42892726730e4c377beb7ad))
+* cover security gaps ([3debaa9](https://github.com/Sintexer/jvmsrc/commit/3debaa93b63798b7427f92266a3d7135d00387e9))
+* finish mvp ([27ccb74](https://github.com/Sintexer/jvmsrc/commit/27ccb74e847f476bbeebf1679fd8ba8fe18c32f9))
+* implement cache ([cce56fe](https://github.com/Sintexer/jvmsrc/commit/cce56fe373bd3d93ecde5112d9f05834549b130f))
+* implement class decompilation ([fcb163c](https://github.com/Sintexer/jvmsrc/commit/fcb163c3f6b1cd919267dfd47886963dea20ddb2))
+* implement class method meta extraction ([5c43c0e](https://github.com/Sintexer/jvmsrc/commit/5c43c0ece8a45efcf8608bcd21afaf8993b3ec99))
+* implement full text serach ([f01016c](https://github.com/Sintexer/jvmsrc/commit/f01016cec8811a25001cf95629f4368f5dbb86ea))
+* implement get --json flag ([eb60390](https://github.com/Sintexer/jvmsrc/commit/eb60390bb7a1a4719a726550c7c7e7562cad80f0))
+* implement get class source ([ae22640](https://github.com/Sintexer/jvmsrc/commit/ae2264012df4a9259bf3a67a45875bd2b264096b))
+* implement inspect method through bytecode ([365599c](https://github.com/Sintexer/jvmsrc/commit/365599ca7c9ea8c384c1199c36a55631df80e31a))
+* implement progress indicator ([d132d73](https://github.com/Sintexer/jvmsrc/commit/d132d73de4030ad380ab55411f7e2fdbcff169f9))
+* implement release pipeline ([3d9592b](https://github.com/Sintexer/jvmsrc/commit/3d9592b3c8fd7d4d98ec71965bb1989991f2d7d1))
+* implement release pipeline ([980d61e](https://github.com/Sintexer/jvmsrc/commit/980d61e1df1d2a972c7559e10b36d048f0cc36fc))
+* implemnt mcp get class function ([4b98f97](https://github.com/Sintexer/jvmsrc/commit/4b98f979a23ee1cca607551af3bc4c391f94b347))
+* init cli tool ([c535d65](https://github.com/Sintexer/jvmsrc/commit/c535d650c93851687b21203e5f2b4798d41b20e9))
+* merge mcp tools together ([85c0aac](https://github.com/Sintexer/jvmsrc/commit/85c0aace727700b599cc420e3b259e100a8878e1))
+* POC ([3cb1d92](https://github.com/Sintexer/jvmsrc/commit/3cb1d92d9fcacca3c7dc43c67089bef5dcd96137))
+* pre-release polish ([131d8a7](https://github.com/Sintexer/jvmsrc/commit/131d8a7c2a147cc4abe48c2826f9b50c415456cc))
+* support mcp resolve_dependencies ([7d443a3](https://github.com/Sintexer/jvmsrc/commit/7d443a3c48176fdfd3cb5c1e81b049a51836cde0))
+* support node &gt;=20 ([2e3bb17](https://github.com/Sintexer/jvmsrc/commit/2e3bb17a278964a902364b70196c7ae5af3e6764))
+* support npm release ([9beb305](https://github.com/Sintexer/jvmsrc/commit/9beb305404ccd7141abef1cfa80c7f5b912ffced))
+* support npm release ([f1f89d0](https://github.com/Sintexer/jvmsrc/commit/f1f89d077669ccf2ddf1103b22fcb1669f1aed5f))
+* switch to default master branch, no develop ([203b475](https://github.com/Sintexer/jvmsrc/commit/203b4754dfa6d27fab4f357737fac468991115a8))
+* update node to 24 ([fe978ed](https://github.com/Sintexer/jvmsrc/commit/fe978ed33a3d7e3fcb9a7eef8cdc350e424f944a))
+* update node to 24 ([909dd6a](https://github.com/Sintexer/jvmsrc/commit/909dd6a7fa120c64d8812a4a60381fb8321f7c83))
+* update README preface ([9dd9c02](https://github.com/Sintexer/jvmsrc/commit/9dd9c02e0cc88ab2b0f977de6c4c35b1867e2b87))
+* update roadmap with future mcp features ([3b01d44](https://github.com/Sintexer/jvmsrc/commit/3b01d44d8c8366d91bb53b6ca31bba97813ff50e))
+* update spec, add caching details ([81c4578](https://github.com/Sintexer/jvmsrc/commit/81c45782e73c999e0ad699b9ed0b5544d816ff6a))
 
 
 ### Bug Fixes
 
-* add mcp-publisher auto ci ([5692a4f](https://github.com/Sintexer/jvm-source-lens/commit/5692a4f89cbe2f8ee75927406165bccb132987d4))
-* add write outside home dir guard ([de6187a](https://github.com/Sintexer/jvm-source-lens/commit/de6187a2cb304fdb715c2d2af7b5e16ceacb04d0))
-* avoid skipping the npm publish ([dd51fa8](https://github.com/Sintexer/jvm-source-lens/commit/dd51fa82dd592cd093355998d8ae007a82836d1a))
-* fix building with plain node ([2ef8315](https://github.com/Sintexer/jvm-source-lens/commit/2ef83157052fb8ec303a2919746cecf4fc936ca0))
-* fix prod build issues ([d8741f2](https://github.com/Sintexer/jvm-source-lens/commit/d8741f24d5b56dfe0e3b0fccd65f6a2146369c6c))
-* fix release-please ([dc049dc](https://github.com/Sintexer/jvm-source-lens/commit/dc049dcc2524a67f3ad6b67d03aead67e717f1cc))
-* fix server.json not updated on release ([785c10d](https://github.com/Sintexer/jvm-source-lens/commit/785c10d295557518bd61a89017393c32f963cfd7))
-* fix tests after access refactoring ([07fe089](https://github.com/Sintexer/jvm-source-lens/commit/07fe0890de616a9eb68430ae7d1963ab0c0f756a))
-* fix the npm publish problem ([cf6beae](https://github.com/Sintexer/jvm-source-lens/commit/cf6beaeedfeeb455aa842343e2aac804e563eca9))
-* fix the npm release ([0903321](https://github.com/Sintexer/jvm-source-lens/commit/090332135bfae76cff15cca0c7c721b97f7a317c))
-* fix timeout in tests ([0818369](https://github.com/Sintexer/jvm-source-lens/commit/08183698c8df956b83049695daec9340e02f7ebb))
-* fix windows compatibility ([5d0cfb1](https://github.com/Sintexer/jvm-source-lens/commit/5d0cfb143a1d62de562958c7d133185ed7608c1b))
-* improve windows compatibility ([5cfe0db](https://github.com/Sintexer/jvm-source-lens/commit/5cfe0db2c55fc9bfa8367c84743cad959ff85a24))
-* remove package.lock, switch to bun only ([215ae8f](https://github.com/Sintexer/jvm-source-lens/commit/215ae8ff9c3ef6cb5ea6f19d2f9cee4e9fd08b42))
-* strip env when spawning gradle subprocess ([59d95fb](https://github.com/Sintexer/jvm-source-lens/commit/59d95fb35755212020c8cc1d7b47a0ceb93e0fc2))
-* switch to trusted publisher npm publication ([c99d4b4](https://github.com/Sintexer/jvm-source-lens/commit/c99d4b428b4b42464ecc479408200d58c169e94f))
+* add mcp-publisher auto ci ([5692a4f](https://github.com/Sintexer/jvmsrc/commit/5692a4f89cbe2f8ee75927406165bccb132987d4))
+* add write outside home dir guard ([de6187a](https://github.com/Sintexer/jvmsrc/commit/de6187a2cb304fdb715c2d2af7b5e16ceacb04d0))
+* avoid skipping the npm publish ([dd51fa8](https://github.com/Sintexer/jvmsrc/commit/dd51fa82dd592cd093355998d8ae007a82836d1a))
+* fix building with plain node ([2ef8315](https://github.com/Sintexer/jvmsrc/commit/2ef83157052fb8ec303a2919746cecf4fc936ca0))
+* fix prod build issues ([d8741f2](https://github.com/Sintexer/jvmsrc/commit/d8741f24d5b56dfe0e3b0fccd65f6a2146369c6c))
+* fix release-please ([dc049dc](https://github.com/Sintexer/jvmsrc/commit/dc049dcc2524a67f3ad6b67d03aead67e717f1cc))
+* fix server.json not updated on release ([785c10d](https://github.com/Sintexer/jvmsrc/commit/785c10d295557518bd61a89017393c32f963cfd7))
+* fix tests after access refactoring ([07fe089](https://github.com/Sintexer/jvmsrc/commit/07fe0890de616a9eb68430ae7d1963ab0c0f756a))
+* fix the npm publish problem ([cf6beae](https://github.com/Sintexer/jvmsrc/commit/cf6beaeedfeeb455aa842343e2aac804e563eca9))
+* fix the npm release ([0903321](https://github.com/Sintexer/jvmsrc/commit/090332135bfae76cff15cca0c7c721b97f7a317c))
+* fix timeout in tests ([0818369](https://github.com/Sintexer/jvmsrc/commit/08183698c8df956b83049695daec9340e02f7ebb))
+* fix windows compatibility ([5d0cfb1](https://github.com/Sintexer/jvmsrc/commit/5d0cfb143a1d62de562958c7d133185ed7608c1b))
+* improve windows compatibility ([5cfe0db](https://github.com/Sintexer/jvmsrc/commit/5cfe0db2c55fc9bfa8367c84743cad959ff85a24))
+* remove package.lock, switch to bun only ([215ae8f](https://github.com/Sintexer/jvmsrc/commit/215ae8ff9c3ef6cb5ea6f19d2f9cee4e9fd08b42))
+* strip env when spawning gradle subprocess ([59d95fb](https://github.com/Sintexer/jvmsrc/commit/59d95fb35755212020c8cc1d7b47a0ceb93e0fc2))
+* switch to trusted publisher npm publication ([c99d4b4](https://github.com/Sintexer/jvmsrc/commit/c99d4b428b4b42464ecc479408200d58c169e94f))
 
-## [1.4.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.4.0...v1.4.1) (2026-05-19)
+## [1.4.1](https://github.com/Sintexer/jvmsrc/compare/v1.4.0...v1.4.1) (2026-05-19)
 
 
 ### Bug Fixes
 
-* add mcp-publisher auto ci ([5692a4f](https://github.com/Sintexer/jvm-source-lens/commit/5692a4f89cbe2f8ee75927406165bccb132987d4))
+* add mcp-publisher auto ci ([5692a4f](https://github.com/Sintexer/jvmsrc/commit/5692a4f89cbe2f8ee75927406165bccb132987d4))
 
-## [1.4.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.3.5...v1.4.0) (2026-05-19)
+## [1.4.0](https://github.com/Sintexer/jvmsrc/compare/v1.3.5...v1.4.0) (2026-05-19)
 
 
 ### Features
 
-* add mcp server.json ([a29b0bd](https://github.com/Sintexer/jvm-source-lens/commit/a29b0bdc6310c361dc94c9a868ed62f34b1f2c25))
+* add mcp server.json ([a29b0bd](https://github.com/Sintexer/jvmsrc/commit/a29b0bdc6310c361dc94c9a868ed62f34b1f2c25))
 
-## [1.3.5](https://github.com/Sintexer/jvm-source-lens/compare/v1.3.4...v1.3.5) (2026-05-19)
-
-
-### Bug Fixes
-
-* avoid skipping the npm publish ([dd51fa8](https://github.com/Sintexer/jvm-source-lens/commit/dd51fa82dd592cd093355998d8ae007a82836d1a))
-
-## [1.3.4](https://github.com/Sintexer/jvm-source-lens/compare/v1.3.3...v1.3.4) (2026-05-19)
+## [1.3.5](https://github.com/Sintexer/jvmsrc/compare/v1.3.4...v1.3.5) (2026-05-19)
 
 
 ### Bug Fixes
 
-* fix the npm publish problem ([cf6beae](https://github.com/Sintexer/jvm-source-lens/commit/cf6beaeedfeeb455aa842343e2aac804e563eca9))
+* avoid skipping the npm publish ([dd51fa8](https://github.com/Sintexer/jvmsrc/commit/dd51fa82dd592cd093355998d8ae007a82836d1a))
 
-## [1.3.3](https://github.com/Sintexer/jvm-source-lens/compare/v1.3.2...v1.3.3) (2026-05-19)
-
-
-### Bug Fixes
-
-* strip env when spawning gradle subprocess ([59d95fb](https://github.com/Sintexer/jvm-source-lens/commit/59d95fb35755212020c8cc1d7b47a0ceb93e0fc2))
-
-## [1.3.2](https://github.com/Sintexer/jvm-source-lens/compare/v1.3.1...v1.3.2) (2026-05-19)
+## [1.3.4](https://github.com/Sintexer/jvmsrc/compare/v1.3.3...v1.3.4) (2026-05-19)
 
 
 ### Bug Fixes
 
-* add write outside home dir guard ([de6187a](https://github.com/Sintexer/jvm-source-lens/commit/de6187a2cb304fdb715c2d2af7b5e16ceacb04d0))
-* fix tests after access refactoring ([07fe089](https://github.com/Sintexer/jvm-source-lens/commit/07fe0890de616a9eb68430ae7d1963ab0c0f756a))
+* fix the npm publish problem ([cf6beae](https://github.com/Sintexer/jvmsrc/commit/cf6beaeedfeeb455aa842343e2aac804e563eca9))
 
-## [1.3.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.3.0...v1.3.1) (2026-05-19)
+## [1.3.3](https://github.com/Sintexer/jvmsrc/compare/v1.3.2...v1.3.3) (2026-05-19)
 
 
 ### Bug Fixes
 
-* fix the npm release ([0903321](https://github.com/Sintexer/jvm-source-lens/commit/090332135bfae76cff15cca0c7c721b97f7a317c))
+* strip env when spawning gradle subprocess ([59d95fb](https://github.com/Sintexer/jvmsrc/commit/59d95fb35755212020c8cc1d7b47a0ceb93e0fc2))
 
-## [1.3.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.2.1...v1.3.0) (2026-05-19)
+## [1.3.2](https://github.com/Sintexer/jvmsrc/compare/v1.3.1...v1.3.2) (2026-05-19)
+
+
+### Bug Fixes
+
+* add write outside home dir guard ([de6187a](https://github.com/Sintexer/jvmsrc/commit/de6187a2cb304fdb715c2d2af7b5e16ceacb04d0))
+* fix tests after access refactoring ([07fe089](https://github.com/Sintexer/jvmsrc/commit/07fe0890de616a9eb68430ae7d1963ab0c0f756a))
+
+## [1.3.1](https://github.com/Sintexer/jvmsrc/compare/v1.3.0...v1.3.1) (2026-05-19)
+
+
+### Bug Fixes
+
+* fix the npm release ([0903321](https://github.com/Sintexer/jvmsrc/commit/090332135bfae76cff15cca0c7c721b97f7a317c))
+
+## [1.3.0](https://github.com/Sintexer/jvmsrc/compare/v1.2.1...v1.3.0) (2026-05-19)
 
 
 ### Features
 
-* cover security gaps ([3debaa9](https://github.com/Sintexer/jvm-source-lens/commit/3debaa93b63798b7427f92266a3d7135d00387e9))
+* cover security gaps ([3debaa9](https://github.com/Sintexer/jvmsrc/commit/3debaa93b63798b7427f92266a3d7135d00387e9))
 
-## [1.2.1](https://github.com/Sintexer/jvm-source-lens/compare/v1.2.0...v1.2.1) (2026-05-19)
-
-
-### Bug Fixes
-
-* switch to trusted publisher npm publication ([c99d4b4](https://github.com/Sintexer/jvm-source-lens/commit/c99d4b428b4b42464ecc479408200d58c169e94f))
-
-## [1.2.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.1.0...v1.2.0) (2026-05-19)
-
-
-### Features
-
-* support node &gt;=20 ([2e3bb17](https://github.com/Sintexer/jvm-source-lens/commit/2e3bb17a278964a902364b70196c7ae5af3e6764))
-
-## [1.1.0](https://github.com/Sintexer/jvm-source-lens/compare/v1.0.0...v1.1.0) (2026-05-19)
-
-
-### Features
-
-* add skill installation ([359f7b0](https://github.com/Sintexer/jvm-source-lens/commit/359f7b0460b03ce884dca540e2d50d309339b482))
-* add skill installation ([65642c6](https://github.com/Sintexer/jvm-source-lens/commit/65642c6995906e8841a1aa9b2fa38e312aa135e5))
-* switch to default master branch, no develop ([203b475](https://github.com/Sintexer/jvm-source-lens/commit/203b4754dfa6d27fab4f357737fac468991115a8))
+## [1.2.1](https://github.com/Sintexer/jvmsrc/compare/v1.2.0...v1.2.1) (2026-05-19)
 
 
 ### Bug Fixes
 
-* fix release-please ([dc049dc](https://github.com/Sintexer/jvm-source-lens/commit/dc049dcc2524a67f3ad6b67d03aead67e717f1cc))
+* switch to trusted publisher npm publication ([c99d4b4](https://github.com/Sintexer/jvmsrc/commit/c99d4b428b4b42464ecc479408200d58c169e94f))
+
+## [1.2.0](https://github.com/Sintexer/jvmsrc/compare/v1.1.0...v1.2.0) (2026-05-19)
+
+
+### Features
+
+* support node &gt;=20 ([2e3bb17](https://github.com/Sintexer/jvmsrc/commit/2e3bb17a278964a902364b70196c7ae5af3e6764))
+
+## [1.1.0](https://github.com/Sintexer/jvmsrc/compare/v1.0.0...v1.1.0) (2026-05-19)
+
+
+### Features
+
+* add skill installation ([359f7b0](https://github.com/Sintexer/jvmsrc/commit/359f7b0460b03ce884dca540e2d50d309339b482))
+* add skill installation ([65642c6](https://github.com/Sintexer/jvmsrc/commit/65642c6995906e8841a1aa9b2fa38e312aa135e5))
+* switch to default master branch, no develop ([203b475](https://github.com/Sintexer/jvmsrc/commit/203b4754dfa6d27fab4f357737fac468991115a8))
+
+
+### Bug Fixes
+
+* fix release-please ([dc049dc](https://github.com/Sintexer/jvmsrc/commit/dc049dcc2524a67f3ad6b67d03aead67e717f1cc))
 
 ## 1.0.0 (2026-05-19)
 
 
 ### Features
 
-* add class inspect with optional sources download ([e91fa1b](https://github.com/Sintexer/jvm-source-lens/commit/e91fa1b0c2831c535530f9471631b9a01dcfb3e6))
-* add failure diagnostics logs ([2cec4cd](https://github.com/Sintexer/jvm-source-lens/commit/2cec4cd0a71f25cb61e96f961e8ac076518cddac))
-* add fin_in_class_source tool ([27b2a00](https://github.com/Sintexer/jvm-source-lens/commit/27b2a00a60b411c9ce7a410626c0a13b6104f30c))
-* add find substr to roadmap ([5953ace](https://github.com/Sintexer/jvm-source-lens/commit/5953acea297ed6d6c10ee285db897d3d68a46b7c))
-* add get_class_structure include ([06ae710](https://github.com/Sintexer/jvm-source-lens/commit/06ae710efcc1d659e00f86f176057d73db5d07ba))
-* add get_class_structure tool ([d7bd7bc](https://github.com/Sintexer/jvm-source-lens/commit/d7bd7bcb9e362b7bedae7176b1e045021e0b560f))
-* add get-method-signature tool ([bfd2d75](https://github.com/Sintexer/jvm-source-lens/commit/bfd2d75a4a7d6d8f9ea8d8b400b8633cf24cd1b4))
-* add list_modules tool ([6ee5767](https://github.com/Sintexer/jvm-source-lens/commit/6ee57675f251fd05e6c33394da6c4e79ebf7dcab))
-* add optional method names parameters for tools, add SKILL.md ([7cf2a61](https://github.com/Sintexer/jvm-source-lens/commit/7cf2a61c80f2435a39f21bad97c5f3823fe6aadf))
-* add seach_classes tool ([2642e36](https://github.com/Sintexer/jvm-source-lens/commit/2642e36cfab33795a662cb3a18465a8a88254b32))
-* convert POC to real implementation ([3f86084](https://github.com/Sintexer/jvm-source-lens/commit/3f8608476c371ae881d5b18bd769c6542c4cca6c))
-* cover gradle timeout, add smoke tests ([c6f2f34](https://github.com/Sintexer/jvm-source-lens/commit/c6f2f3431a02b85fa42892726730e4c377beb7ad))
-* finish mvp ([27ccb74](https://github.com/Sintexer/jvm-source-lens/commit/27ccb74e847f476bbeebf1679fd8ba8fe18c32f9))
-* implement cache ([cce56fe](https://github.com/Sintexer/jvm-source-lens/commit/cce56fe373bd3d93ecde5112d9f05834549b130f))
-* implement class decompilation ([fcb163c](https://github.com/Sintexer/jvm-source-lens/commit/fcb163c3f6b1cd919267dfd47886963dea20ddb2))
-* implement class method meta extraction ([5c43c0e](https://github.com/Sintexer/jvm-source-lens/commit/5c43c0ece8a45efcf8608bcd21afaf8993b3ec99))
-* implement full text serach ([f01016c](https://github.com/Sintexer/jvm-source-lens/commit/f01016cec8811a25001cf95629f4368f5dbb86ea))
-* implement get --json flag ([eb60390](https://github.com/Sintexer/jvm-source-lens/commit/eb60390bb7a1a4719a726550c7c7e7562cad80f0))
-* implement get class source ([ae22640](https://github.com/Sintexer/jvm-source-lens/commit/ae2264012df4a9259bf3a67a45875bd2b264096b))
-* implement inspect method through bytecode ([365599c](https://github.com/Sintexer/jvm-source-lens/commit/365599ca7c9ea8c384c1199c36a55631df80e31a))
-* implement progress indicator ([d132d73](https://github.com/Sintexer/jvm-source-lens/commit/d132d73de4030ad380ab55411f7e2fdbcff169f9))
-* implement release pipeline ([3d9592b](https://github.com/Sintexer/jvm-source-lens/commit/3d9592b3c8fd7d4d98ec71965bb1989991f2d7d1))
-* implement release pipeline ([980d61e](https://github.com/Sintexer/jvm-source-lens/commit/980d61e1df1d2a972c7559e10b36d048f0cc36fc))
-* implemnt mcp get class function ([4b98f97](https://github.com/Sintexer/jvm-source-lens/commit/4b98f979a23ee1cca607551af3bc4c391f94b347))
-* init cli tool ([c535d65](https://github.com/Sintexer/jvm-source-lens/commit/c535d650c93851687b21203e5f2b4798d41b20e9))
-* merge mcp tools together ([85c0aac](https://github.com/Sintexer/jvm-source-lens/commit/85c0aace727700b599cc420e3b259e100a8878e1))
-* POC ([3cb1d92](https://github.com/Sintexer/jvm-source-lens/commit/3cb1d92d9fcacca3c7dc43c67089bef5dcd96137))
-* pre-release polish ([131d8a7](https://github.com/Sintexer/jvm-source-lens/commit/131d8a7c2a147cc4abe48c2826f9b50c415456cc))
-* support mcp resolve_dependencies ([7d443a3](https://github.com/Sintexer/jvm-source-lens/commit/7d443a3c48176fdfd3cb5c1e81b049a51836cde0))
-* update README preface ([9dd9c02](https://github.com/Sintexer/jvm-source-lens/commit/9dd9c02e0cc88ab2b0f977de6c4c35b1867e2b87))
-* update roadmap with future mcp features ([3b01d44](https://github.com/Sintexer/jvm-source-lens/commit/3b01d44d8c8366d91bb53b6ca31bba97813ff50e))
-* update spec, add caching details ([81c4578](https://github.com/Sintexer/jvm-source-lens/commit/81c45782e73c999e0ad699b9ed0b5544d816ff6a))
+* add class inspect with optional sources download ([e91fa1b](https://github.com/Sintexer/jvmsrc/commit/e91fa1b0c2831c535530f9471631b9a01dcfb3e6))
+* add failure diagnostics logs ([2cec4cd](https://github.com/Sintexer/jvmsrc/commit/2cec4cd0a71f25cb61e96f961e8ac076518cddac))
+* add fin_in_class_source tool ([27b2a00](https://github.com/Sintexer/jvmsrc/commit/27b2a00a60b411c9ce7a410626c0a13b6104f30c))
+* add find substr to roadmap ([5953ace](https://github.com/Sintexer/jvmsrc/commit/5953acea297ed6d6c10ee285db897d3d68a46b7c))
+* add get_class_structure include ([06ae710](https://github.com/Sintexer/jvmsrc/commit/06ae710efcc1d659e00f86f176057d73db5d07ba))
+* add get_class_structure tool ([d7bd7bc](https://github.com/Sintexer/jvmsrc/commit/d7bd7bcb9e362b7bedae7176b1e045021e0b560f))
+* add get-method-signature tool ([bfd2d75](https://github.com/Sintexer/jvmsrc/commit/bfd2d75a4a7d6d8f9ea8d8b400b8633cf24cd1b4))
+* add list_modules tool ([6ee5767](https://github.com/Sintexer/jvmsrc/commit/6ee57675f251fd05e6c33394da6c4e79ebf7dcab))
+* add optional method names parameters for tools, add SKILL.md ([7cf2a61](https://github.com/Sintexer/jvmsrc/commit/7cf2a61c80f2435a39f21bad97c5f3823fe6aadf))
+* add seach_classes tool ([2642e36](https://github.com/Sintexer/jvmsrc/commit/2642e36cfab33795a662cb3a18465a8a88254b32))
+* convert POC to real implementation ([3f86084](https://github.com/Sintexer/jvmsrc/commit/3f8608476c371ae881d5b18bd769c6542c4cca6c))
+* cover gradle timeout, add smoke tests ([c6f2f34](https://github.com/Sintexer/jvmsrc/commit/c6f2f3431a02b85fa42892726730e4c377beb7ad))
+* finish mvp ([27ccb74](https://github.com/Sintexer/jvmsrc/commit/27ccb74e847f476bbeebf1679fd8ba8fe18c32f9))
+* implement cache ([cce56fe](https://github.com/Sintexer/jvmsrc/commit/cce56fe373bd3d93ecde5112d9f05834549b130f))
+* implement class decompilation ([fcb163c](https://github.com/Sintexer/jvmsrc/commit/fcb163c3f6b1cd919267dfd47886963dea20ddb2))
+* implement class method meta extraction ([5c43c0e](https://github.com/Sintexer/jvmsrc/commit/5c43c0ece8a45efcf8608bcd21afaf8993b3ec99))
+* implement full text serach ([f01016c](https://github.com/Sintexer/jvmsrc/commit/f01016cec8811a25001cf95629f4368f5dbb86ea))
+* implement get --json flag ([eb60390](https://github.com/Sintexer/jvmsrc/commit/eb60390bb7a1a4719a726550c7c7e7562cad80f0))
+* implement get class source ([ae22640](https://github.com/Sintexer/jvmsrc/commit/ae2264012df4a9259bf3a67a45875bd2b264096b))
+* implement inspect method through bytecode ([365599c](https://github.com/Sintexer/jvmsrc/commit/365599ca7c9ea8c384c1199c36a55631df80e31a))
+* implement progress indicator ([d132d73](https://github.com/Sintexer/jvmsrc/commit/d132d73de4030ad380ab55411f7e2fdbcff169f9))
+* implement release pipeline ([3d9592b](https://github.com/Sintexer/jvmsrc/commit/3d9592b3c8fd7d4d98ec71965bb1989991f2d7d1))
+* implement release pipeline ([980d61e](https://github.com/Sintexer/jvmsrc/commit/980d61e1df1d2a972c7559e10b36d048f0cc36fc))
+* implemnt mcp get class function ([4b98f97](https://github.com/Sintexer/jvmsrc/commit/4b98f979a23ee1cca607551af3bc4c391f94b347))
+* init cli tool ([c535d65](https://github.com/Sintexer/jvmsrc/commit/c535d650c93851687b21203e5f2b4798d41b20e9))
+* merge mcp tools together ([85c0aac](https://github.com/Sintexer/jvmsrc/commit/85c0aace727700b599cc420e3b259e100a8878e1))
+* POC ([3cb1d92](https://github.com/Sintexer/jvmsrc/commit/3cb1d92d9fcacca3c7dc43c67089bef5dcd96137))
+* pre-release polish ([131d8a7](https://github.com/Sintexer/jvmsrc/commit/131d8a7c2a147cc4abe48c2826f9b50c415456cc))
+* support mcp resolve_dependencies ([7d443a3](https://github.com/Sintexer/jvmsrc/commit/7d443a3c48176fdfd3cb5c1e81b049a51836cde0))
+* update README preface ([9dd9c02](https://github.com/Sintexer/jvmsrc/commit/9dd9c02e0cc88ab2b0f977de6c4c35b1867e2b87))
+* update roadmap with future mcp features ([3b01d44](https://github.com/Sintexer/jvmsrc/commit/3b01d44d8c8366d91bb53b6ca31bba97813ff50e))
+* update spec, add caching details ([81c4578](https://github.com/Sintexer/jvmsrc/commit/81c45782e73c999e0ad699b9ed0b5544d816ff6a))
 
 
 ### Bug Fixes
 
-* fix building with plain node ([2ef8315](https://github.com/Sintexer/jvm-source-lens/commit/2ef83157052fb8ec303a2919746cecf4fc936ca0))
-* fix prod build issues ([d8741f2](https://github.com/Sintexer/jvm-source-lens/commit/d8741f24d5b56dfe0e3b0fccd65f6a2146369c6c))
-* fix timeout in tests ([0818369](https://github.com/Sintexer/jvm-source-lens/commit/08183698c8df956b83049695daec9340e02f7ebb))
-* fix windows compatibility ([5d0cfb1](https://github.com/Sintexer/jvm-source-lens/commit/5d0cfb143a1d62de562958c7d133185ed7608c1b))
-* improve windows compatibility ([5cfe0db](https://github.com/Sintexer/jvm-source-lens/commit/5cfe0db2c55fc9bfa8367c84743cad959ff85a24))
-* remove package.lock, switch to bun only ([215ae8f](https://github.com/Sintexer/jvm-source-lens/commit/215ae8ff9c3ef6cb5ea6f19d2f9cee4e9fd08b42))
+* fix building with plain node ([2ef8315](https://github.com/Sintexer/jvmsrc/commit/2ef83157052fb8ec303a2919746cecf4fc936ca0))
+* fix prod build issues ([d8741f2](https://github.com/Sintexer/jvmsrc/commit/d8741f24d5b56dfe0e3b0fccd65f6a2146369c6c))
+* fix timeout in tests ([0818369](https://github.com/Sintexer/jvmsrc/commit/08183698c8df956b83049695daec9340e02f7ebb))
+* fix windows compatibility ([5d0cfb1](https://github.com/Sintexer/jvmsrc/commit/5d0cfb143a1d62de562958c7d133185ed7608c1b))
+* improve windows compatibility ([5cfe0db](https://github.com/Sintexer/jvmsrc/commit/5cfe0db2c55fc9bfa8367c84743cad959ff85a24))
+* remove package.lock, switch to bun only ([215ae8f](https://github.com/Sintexer/jvmsrc/commit/215ae8ff9c3ef6cb5ea6f19d2f9cee4e9fd08b42))
 
-## [0.1.0](https://github.com/Sintexer/jvm-source-lens/releases/tag/v0.1.0) (2026-05-19)
+## [0.1.0](https://github.com/Sintexer/jvmsrc/releases/tag/v0.1.0) (2026-05-19)
 
 ### Features
 

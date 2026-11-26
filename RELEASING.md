@@ -16,7 +16,7 @@
 
 **Tags / changelog:** Manifest mode defaults to `jvmsrc-v1.x.x` tags unless `include-component-in-tag: false` in [release-please-config.json](release-please-config.json). Use **`v1.x.x`** only so Release Please finds prior tags and keeps incremental changelog diffs. If a bad `jvmsrc-v*` tag or release PR exists, delete the tag and close that PR, merge the config fix, then re-run the workflow.
 
-**npm CI:** [Trusted publishing](https://docs.npmjs.com/trusted-publishers) on package **jvmsrc** — repo `Sintexer/jvm-source-lens`, workflow `release-please.yml`, no `NPM_TOKEN` on publish. `package.json` `repository.url` must be `https://github.com/Sintexer/jvm-source-lens.git`.
+**npm CI:** [Trusted publishing](https://docs.npmjs.com/trusted-publishers) on package **jvmsrc** — repo `Sintexer/jvmsrc`, workflow `release-please.yml`, no `NPM_TOKEN` on publish. `package.json` `repository.url` must be `https://github.com/Sintexer/jvmsrc.git`.
 
 **MCP Registry CI:** Job `publish-mcp` runs after `publish-npm`. It uses [`mcp-publisher`](https://github.com/modelcontextprotocol/registry) (`login github-oidc` → `publish`) with [server.json](server.json). It needs `id-token: write`. `package.json` `mcpName` must match `server.json` `name` (`io.github.Sintexer/jvmsrc`). No extra secrets for OIDC. npm takes a few minutes to show a new version, so the job retries for about 5 minutes. A re-run of `publish-npm` skips `npm publish` when that version is already public.
 
@@ -26,4 +26,4 @@
 
 **Manual publish:** `npm publish --access public` (`.npmrc` sets `provenance=false`; use `NPM_CONFIG_PROVENANCE=false` if needed). Prefer CI.
 
-**Stuck?** No Release PR → conventional titles on `master`? Re-run workflow. Publish `E404` after provenance → npm trusted publisher must match `Sintexer/jvm-source-lens` + `release-please.yml` (Environment **empty**); CI uses `env -u NODE_AUTH_TOKEN npm publish` and `npm@11.6.2`. Publish `EOTP` → don’t use `NPM_TOKEN` with 2FA in CI.
+**Stuck?** No Release PR → conventional titles on `master`? Re-run workflow. Publish `E404` after provenance → npm trusted publisher must match `Sintexer/jvmsrc` + `release-please.yml` (Environment **empty**); CI uses `env -u NODE_AUTH_TOKEN npm publish` and `npm@11.6.2`. Publish `EOTP` → don’t use `NPM_TOKEN` with 2FA in CI.

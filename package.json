@@ -7,11 +7,11 @@
   "author": "Ilya Buglakov",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Sintexer/jvm-source-lens.git"
+    "url": "https://github.com/Sintexer/jvmsrc.git"
   },
-  "homepage": "https://github.com/Sintexer/jvm-source-lens#readme",
+  "homepage": "https://github.com/Sintexer/jvmsrc#readme",
   "bugs": {
-    "url": "https://github.com/Sintexer/jvm-source-lens/issues"
+    "url": "https://github.com/Sintexer/jvmsrc/issues"
   },
   "keywords": [
     "gradle",
@@ -51,6 +51,7 @@
     "dev:cli": "bun run src/cli.ts",
     "dev:mcp": "bun run src/mcp.ts",
     "eval": "bun test/evals/run-evals.ts",
+    "tour": "bun test/evals/tour/run-tour.ts",
     "eval:maven": "bun test/evals/run-evals.ts --project test/evals/maven-project --prompts test/evals/maven-prompts.json",
     "measure:tokens": "bun scripts/measure-eager-tokens.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",

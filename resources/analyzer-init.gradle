@@ -147,20 +147,26 @@ gradle.projectsLoaded { g ->
             }
 
             def sourcesPath = null
-            try {
-                def result = root.dependencies.createArtifactResolutionQuery()
-                    .forModule(group.toString(), name.toString(), version.toString())
-                    .withArtifacts(JvmLibrary, SourcesArtifact)
-                    .execute()
-                result.resolvedComponents.each { component ->
-                    component.getArtifacts(SourcesArtifact).each { artifact ->
-                        if (artifact instanceof ResolvedArtifactResult) {
-                            sourcesPath = artifact.file.absolutePath
+            // Repositories are often declared in submodules only; the root project may have none.
+            // Query the root first, then every project that declares repositories.
+            def candidates = [root] + root.allprojects.findAll { it != root && !it.repositories.isEmpty() }
+            for (def candidate : candidates) {
+                if (sourcesPath != null) break
+                try {
+                    def result = candidate.dependencies.createArtifactResolutionQuery()
+                        .forModule(group.toString(), name.toString(), version.toString())
+                        .withArtifacts(JvmLibrary, SourcesArtifact)
+                        .execute()
+                    result.resolvedComponents.each { component ->
+                        component.getArtifacts(SourcesArtifact).each { artifact ->
+                            if (artifact instanceof ResolvedArtifactResult) {
+                                sourcesPath = artifact.file.absolutePath
+                            }
                         }
                     }
+                } catch (Exception ignored) {
+                    // This project has no repository with a sources variant; try the next one.
                 }
-            } catch (Exception ignored) {
-                // Module has no published sources variant.
             }
             println new JsonBuilder([sourcesJarPath: sourcesPath]).toString()
         }

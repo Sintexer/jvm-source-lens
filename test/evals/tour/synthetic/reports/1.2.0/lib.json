@@ -1,0 +1,1 @@
+{ "sources": true, "deps": ["acme:ledger:2.0.0"] }
